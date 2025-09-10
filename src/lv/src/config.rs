@@ -39,6 +39,7 @@ pub struct Config {
     pub keys: KeysConfig,
     pub ui: UiConfig,
     pub commands: Vec<(String, CommandSpec)>,
+    pub shell_cmds: Vec<ShellCmd>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,9 +57,13 @@ pub struct UiConfig {
 }
 
 impl Default for UiConfig {
-    fn default() -> Self {
-        Self { panes: None, show_hidden: false, preview_lines: 100, max_list_items: 5000 }
-    }
+    fn default() -> Self { Self { panes: None, show_hidden: false, preview_lines: 100, max_list_items: 5000 } }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ShellCmd {
+    pub cmd: String,
+    pub description: Option<String>,
 }
 
 /// LuaEngine creates a sandboxed Lua runtime for lv configuration.
@@ -186,6 +191,7 @@ fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyM
 
     // lv.config(table)
     let cfg_clone = Rc::clone(&cfg);
+    let maps_for_config = Rc::clone(&maps);
     let config_fn = lua.create_function(move |_, tbl: Table| {
         let mut cfg_mut = cfg_clone.borrow_mut();
         if let Ok(v) = tbl.get::<u32>("config_version") { cfg_mut.config_version = v; }
@@ -218,24 +224,48 @@ fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyM
         }
         if let Ok(cmds_tbl) = tbl.get::<Table>("commands") {
             let mut cmds = Vec::new();
-            for pair in cmds_tbl.pairs::<String, Value>() {
-                let (name, v) = pair?;
-                if let Value::Table(t) = v {
-                    let mut spec = CommandSpec::default();
-                    if let Ok(arr) = t.get::<Vec<String>>("cmd") { spec.cmd = arr; }
-                    else if let Ok(s) = t.get::<String>("cmd") { spec.cmd = vec![s]; }
-                    if let Ok(arr) = t.get::<Vec<String>>("args") { spec.args = arr; }
-                    if let Ok(s) = t.get::<String>("when") { spec.when = Some(s); }
-                    if let Ok(s) = t.get::<String>("cwd") { spec.cwd = Some(s); }
-                    if let Ok(b) = t.get::<bool>("interactive") { spec.interactive = b; }
-                    if let Ok(env_tbl) = t.get::<Table>("env") {
-                        for kv in env_tbl.pairs::<String, String>() { let (k, v) = kv?; spec.env.push((k, v)); }
+            let mut seq_keymaps: Vec<(String, String, Option<String>)> = Vec::new();
+            for pair in cmds_tbl.pairs::<Value, Value>() {
+                let (k, v) = pair?;
+                if let Value::String(sname) = k {
+                    if let Value::Table(t) = v {
+                        let name = sname.to_str()?.to_string();
+                        let mut spec = CommandSpec::default();
+                        if let Ok(arr) = t.get::<Vec<String>>("cmd") { spec.cmd = arr; }
+                        else if let Ok(s) = t.get::<String>("cmd") { spec.cmd = vec![s]; }
+                        if let Ok(arr) = t.get::<Vec<String>>("args") { spec.args = arr; }
+                        if let Ok(s) = t.get::<String>("when") { spec.when = Some(s); }
+                        if let Ok(s) = t.get::<String>("cwd") { spec.cwd = Some(s); }
+                        if let Ok(b) = t.get::<bool>("interactive") { spec.interactive = b; }
+                        if let Ok(env_tbl) = t.get::<Table>("env") {
+                            for kv in env_tbl.pairs::<String, String>() { let (ek, ev) = kv?; spec.env.push((ek, ev)); }
+                        }
+                        if let Ok(s) = t.get::<String>("confirm") { spec.confirm = Some(s); }
+                        cmds.push((name, spec));
                     }
-                    if let Ok(s) = t.get::<String>("confirm") { spec.confirm = Some(s); }
-                    cmds.push((name, spec));
+                } else if let Value::Integer(_) = k {
+                    if let Value::Table(t) = v {
+                        if let Ok(cmd_str) = t.get::<String>("cmd") {
+                            let desc = t.get::<String>("description").ok();
+                            let keymap = t.get::<String>("keymap").ok();
+                            let idx = cfg_mut.shell_cmds.len();
+                            cfg_mut.shell_cmds.push(ShellCmd { cmd: cmd_str.clone(), description: desc.clone() });
+                            if let Some(kseq) = keymap { seq_keymaps.push((kseq, format!("run_shell:{}", idx), desc)); }
+                        }
+                    }
                 }
             }
             cfg_mut.commands = cmds;
+            // Also support array-style entries: list of tables with cmd, description, keymap
+            // seq_keymaps already collected in the loop above
+            drop(cfg_mut);
+            // Push accumulated keymaps in one borrow to satisfy borrow checker
+            {
+                let mut km = maps_for_config.borrow_mut();
+                for (seq, action, desc) in seq_keymaps.into_iter() {
+                    km.push(KeyMapping { sequence: seq, action, description: desc });
+                }
+            }
         }
         Ok(true)
     })?;

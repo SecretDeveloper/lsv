@@ -58,13 +58,13 @@
   - `sequence_timeout_ms`: integer (default 600). If a prefix is waiting, run only when a full sequence matches or timeout elapses.
 - `lv.mapkey(sequence, action, description?)`
   - Register a key or sequence to an action with an optional human-readable description used by which‑key overlays and `:help`.
-  - Actions: `up, down, page_up, page_down, enter_dir, parent_dir, quit, reload, command_mode, run_command:<name>, sort:name, sort:size, sort:created`, etc.
+  - Actions: `up, down, page_up, page_down, enter_dir, parent_dir, quit, reload, command_mode, execute_command:<name>, sort:name, sort:size, sort:created`, etc.
   - Sequence grammar: single keys (`"k"`, `"Enter"`, `"Left"`), modifiers (`"<C-r>"`, `"<A-x>"`), or composites like `"ss"`, `"sn"`, `"sc"`.
   - Key names: `"Up","Down","Left","Right","Enter","Backspace","Esc","Tab"`, letters (`"a".."z"`), digits, and modifiers in angle brackets.
   - Command mode: map `":"` to `command_mode` to open the `:` prompt.
   - If `description` is omitted, the action name is shown; you can also override via `which_key.labels`.
 - `lv.commands`
-  - Named external commands bound to selection.
+  - Named external commands bound to selection. Used by `execute_command:<name>` actions.
   - Command spec: `{ cmd, args, cwd, when, interactive, env, confirm }`.
     - `cmd`: string or array; `args`: array or string.
     - `when`: `"file" | "dir" | "any"`.
@@ -73,12 +73,20 @@
     - `env`: table of env vars; supports templating.
     - `confirm`: string prompt before run.
   - Templates in `cmd/args/env`: `{path}`, `{name}`, `{dir}`, `{cwd}`, `{home}`.
+  - Inline list form (convenience): you may also set `commands` to a list of tables:
+    - `{ cmd = "<shell string>", keymap = "E", description = "..." }`.
+    - The `cmd` runs via `sh -lc`. Supported placeholders: `{path}`, `{dir}`, `{name}`. Also provided env vars: `LV_PATH`, `LV_DIR`, `LV_NAME`.
+    - For compatibility, `$f` within the string is replaced with the shell-escaped path.
+    - When `keymap` is present, a binding is created automatically. Example: `{ cmd = "&tmux split-window -h $EDITOR {path}", keymap = "E" }`.
+  - Execution behavior:
+    - Interactive tools (e.g., editors, pagers) run by suspending/resuming the TUI, then lv fully redraws on exit.
+    - Non-interactive commands spawn in the background and lv refreshes the UI.
 
 ## Command Mode (`:`)
 - Purpose: run configured commands interactively by name with tab completion.
 - Enter: press the key bound to `command_mode` (commonly `":"`). A prompt appears at the bottom: `:`.
 - Syntax:
-  - `run <name>` executes the configured command `lv.commands.<name>` on the current selection.
+  - `exec <name>` executes the configured command `lv.commands.<name>` on the current selection.
   - Abbreviation: if no ambiguity, you may type `<name>` directly (e.g., `open_with_editor`).
 - Completion: Tab cycles through command names from `lv.commands` (respects `when = file|dir|any` for the current selection). Shift-Tab reverses.
 - Execution:
@@ -136,8 +144,8 @@ lv.mapkey("Left", "parent_dir", "Go to parent directory")
 lv.mapkey("Right", "enter_dir", "Enter directory")
 lv.mapkey(":", "command_mode", "Open command mode")
 lv.mapkey("<C-r>", "reload", "Reload configuration")
-lv.mapkey("e", "run_command:open_with_editor", "Open with editor")
-lv.mapkey("o", "run_command:open_in_finder", "Reveal in Finder")
+lv.mapkey("e", "execute_command:open_with_editor", "Open with editor")
+lv.mapkey("o", "execute_command:open_in_finder", "Reveal in Finder")
 -- Composite sort sequences
 lv.mapkey("ss", "sort:size")
 lv.mapkey("sn", "sort:name")

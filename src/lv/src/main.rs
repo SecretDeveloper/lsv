@@ -14,6 +14,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Terminal;
+use std::process::{Command, Stdio};
 
 mod config;
 
@@ -40,6 +41,9 @@ struct App {
     config_paths: Option<config::ConfigPaths>,
     config: config::Config,
     keymaps: Vec<config::KeyMapping>,
+    keymap_lookup: std::collections::HashMap<String, String>,
+    force_full_redraw: bool,
+    status_error: Option<String>,
 }
 
 impl App {
@@ -64,6 +68,9 @@ impl App {
             config_paths: None,
             config: config::Config::default(),
             keymaps: Vec::new(),
+            keymap_lookup: std::collections::HashMap::new(),
+            force_full_redraw: false,
+            status_error: None,
         };
         // Discover configuration paths (entry not executed yet)
         if let Ok(paths) = crate::config::discover_config_paths() {
@@ -72,10 +79,13 @@ impl App {
                     app.config_paths = Some(paths);
                     app.config = cfg;
                     app.keymaps = maps;
+                    app.rebuild_keymap_lookup();
+                    app.status_error = None;
                 }
                 Err(e) => {
                     eprintln!("lv: config load error: {}", e);
                     app.config_paths = Some(paths);
+                    app.status_error = Some(format!("Config error: {}", e));
                 }
             }
         }
@@ -188,6 +198,10 @@ fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let res: Result<(), Box<dyn std::error::Error>> = {
         let mut result: Result<(), Box<dyn std::error::Error>> = Ok(());
         loop {
+            if app.force_full_redraw {
+                let _ = terminal.clear();
+                app.force_full_redraw = false;
+            }
             if let Err(e) = terminal.draw(|f| ui(f, app)) {
                 result = Err(e.into());
                 break;
@@ -223,6 +237,28 @@ fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent) -> io::Result<bool> {
+    // First, try dynamic key mappings (single key only for now)
+    if let KeyCode::Char(ch) = key.code {
+        // Allow plain or SHIFT-modified letters; ignore Ctrl/Alt/Super
+        let disallowed = key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::ALT)
+            || key.modifiers.contains(KeyModifiers::SUPER);
+        if !disallowed {
+            let mut tried = std::collections::HashSet::new();
+            for k in [
+                ch.to_string(),
+                ch.to_ascii_lowercase().to_string(),
+                ch.to_ascii_uppercase().to_string(),
+            ] {
+                if !tried.insert(k.clone()) { continue; }
+                if let Some(action) = app.keymap_lookup.get(&k).cloned() {
+                    if dispatch_action(app, &action).unwrap_or(false) {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+    }
     match (key.code, key.modifiers) {
         (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => return Ok(true),
         (KeyCode::Up, _) | (KeyCode::Char('k'), _) => {
@@ -272,6 +308,109 @@ fn handle_key(app: &mut App, key: KeyEvent) -> io::Result<bool> {
     Ok(false)
 }
 
+fn dispatch_action(app: &mut App, action: &str) -> io::Result<bool> {
+    if let Some(rest) = action.strip_prefix("run_shell:") {
+        if let Ok(idx) = rest.parse::<usize>() {
+            if idx < app.config.shell_cmds.len() {
+                let sc = app.config.shell_cmds[idx].clone();
+                run_shell_command(app, &sc);
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn run_shell_command(app: &mut App, sc: &config::ShellCmd) {
+    let selection_path = app.selected_entry().map(|e| e.path.clone()).unwrap_or_else(|| app.cwd.clone());
+    let cwd = app.cwd.clone();
+
+    let mut cmd_str = sc.cmd.clone();
+    // Simple template replacements: {path}
+    let path_str = selection_path.to_string_lossy().to_string();
+    let dir_str = selection_path.parent().unwrap_or(&cwd).to_string_lossy().to_string();
+    let name_str = selection_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    cmd_str = cmd_str.replace("{path}", &shell_escape(&path_str));
+    cmd_str = cmd_str.replace("{dir}", &shell_escape(&dir_str));
+    cmd_str = cmd_str.replace("{name}", &shell_escape(&name_str));
+    // Also support $f shorthand from sample: replace $f with shell-escaped path
+    cmd_str = cmd_str.replace("$f", &shell_escape(&path_str));
+    // Trim leading '&' (treated as hint)
+    let cmd_trimmed = cmd_str.trim_start_matches('&').to_string();
+
+    let is_interactive = looks_interactive(&sc.cmd);
+    // in_preview removed: commands are handled via suspend or background spawn
+
+    // If command appears interactive, suspend TUI and run attached to terminal
+    if is_interactive {
+        // Suspend TUI and run interactive command attached to the terminal
+        let _ = disable_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        let status = Command::new("sh")
+            .arg("-lc")
+            .arg(&cmd_trimmed)
+            .current_dir(&cwd)
+            .env("LV_PATH", &path_str)
+            .env("LV_DIR", &dir_str)
+            .env("LV_NAME", &name_str)
+            .status();
+        let _ = enable_raw_mode();
+        let mut stdout2 = io::stdout();
+        let _ = execute!(stdout2, EnterAlternateScreen, EnableMouseCapture);
+        app.refresh_lists();
+        app.refresh_preview();
+        app.force_full_redraw = true;
+        let _ = status;
+        return;
+    }
+
+    // Default: spawn asynchronously (background)
+    let _ = Command::new("sh")
+        .arg("-lc")
+        .arg(&cmd_trimmed)
+        .current_dir(&cwd)
+        .env("LV_PATH", &path_str)
+        .env("LV_DIR", &dir_str)
+        .env("LV_NAME", &name_str)
+        .spawn();
+    app.refresh_lists();
+    app.refresh_preview();
+}
+
+fn looks_interactive(cmd: &str) -> bool {
+    // Heuristic detection for full-screen / interactive tools that require a TTY
+    // Heuristic for interactive commands; no explicit hide_preview flag anymore.
+    let lower = cmd.to_ascii_lowercase();
+    let needles = [
+        "nvim", "vim", "vi ", "nano", "emacs", "tmux", "less", "more", "ssh ", "top", "htop",
+    ];
+    needles.iter().any(|n| lower.contains(n))
+}
+
+fn shell_escape(s: &str) -> String {
+    if s.is_empty() { "''".to_string() } else {
+        let mut out = String::from("'");
+        for ch in s.chars() {
+            if ch == '\'' { out.push_str("'\\''"); } else { out.push(ch); }
+        }
+        out.push('\'');
+        out
+    }
+}
+
+impl App {
+    fn rebuild_keymap_lookup(&mut self) {
+        self.keymap_lookup.clear();
+        for m in &self.keymaps {
+            // Only support single-key for now
+            if m.sequence.chars().count() == 1 {
+                self.keymap_lookup.insert(m.sequence.clone(), m.action.clone());
+            }
+        }
+    }
+}
+
 fn panel_title<'a>(label: &'a str, path: Option<&Path>) -> Line<'a> {
     let path_str = path.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| String::from("<root>"));
     Line::from(vec![
@@ -291,25 +430,28 @@ fn ui(f: &mut ratatui::Frame, app: &mut App) {
     draw_parent_panel(f, chunks[0], app);
     draw_current_panel(f, chunks[1], app);
     draw_preview_panel(f, chunks[2], app);
+
+    if let Some(msg) = &app.status_error {
+        draw_error_bar(f, f.area(), msg);
+    }
 }
 
 fn pane_constraints(app: &App) -> [Constraint; 3] {
     // Defaults
     let (mut p, mut c, mut r) = (30u16, 40u16, 30u16);
     if let Some(panes) = app.config.ui.panes.as_ref() {
-            p = panes.parent;
-            c = panes.current;
-            r = panes.preview;
+        p = panes.parent;
+        c = panes.current;
+        r = panes.preview;
     }
     let total = p.saturating_add(c).saturating_add(r);
     if total == 0 {
         return [Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)];
     }
-    // Normalize so they sum to 100 and avoid rounding drift
     let p_norm = (p as u32 * 100 / total as u32) as u16;
     let c_norm = (c as u32 * 100 / total as u32) as u16;
     let r_norm = 100u16.saturating_sub(p_norm).saturating_sub(c_norm);
-    [Constraint::Percentage(p_norm), Constraint::Percentage(c_norm), Constraint::Percentage(r_norm)]
+    return [Constraint::Percentage(p_norm), Constraint::Percentage(c_norm), Constraint::Percentage(r_norm)];
 }
 
 fn draw_parent_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
@@ -370,6 +512,21 @@ fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
 
     let para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
     f.render_widget(para, area);
+}
+
+fn draw_error_bar(f: &mut ratatui::Frame, area: Rect, msg: &str) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(area);
+    let bar = layout[1];
+    let text = Line::from(Span::styled(
+        msg.to_string(),
+        Style::default().fg(Color::Black).bg(Color::Red).add_modifier(Modifier::BOLD),
+    ));
+    let para = Paragraph::new(text);
+    f.render_widget(Clear, bar);
+    f.render_widget(para, bar);
 }
 
 fn sanitize_line(s: &str) -> String {
