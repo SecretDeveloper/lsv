@@ -92,7 +92,8 @@
 local theme = require("theme")
 local keys = require("config.keymaps")
 local extra_cmds = require("plugins.open_with")
-return lv.config({
+-- Apply settings
+lv.config({
   config_version = 1,
   theme = theme or {
     primary = "cyan",
@@ -167,7 +168,7 @@ return {
 ### Example bindings
 ```lua
 -- in ~/.config/lv/lua/init.lua
-return lv.config({
+lv.config({
   keys = { sequence_timeout_ms = 600 },
   which_key = {
     enabled = true,
@@ -187,8 +188,8 @@ lv.mapkey("sc", "sort:created", "Sort by Created date")
 - Unknown sequences do nothing and show a brief hint.
 
 ## Implementation Checklist
-- [ ] Lua runtime: `mlua` sandboxed, `lv.config` API
-- [ ] Config discovery (XDG → ~/.config), error handling
+- [X] Lua runtime: `mlua` sandboxed, `lv.config` API
+- [X] Config discovery 
 - [ ] Schema + defaults (theme, ui, behavior, keys, commands)
 - [ ] Validation + color parsing (names, hex, rgb)
 - [ ] Key binding parser → action dispatch

@@ -12,8 +12,10 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Terminal;
+
+mod config;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new()?;
@@ -35,7 +37,9 @@ struct App {
     list_state: ListState,
     preview_lines: Vec<String>,
     preview_title: String,
-    preview_lines_limit: usize,
+    config_paths: Option<config::ConfigPaths>,
+    config: config::Config,
+    keymaps: Vec<config::KeyMapping>,
 }
 
 impl App {
@@ -49,11 +53,6 @@ impl App {
         if !current_entries.is_empty() {
             list_state.select(Some(0));
         }
-        let preview_lines_limit = env::var("LV_PREVIEW_LINES")
-            .ok()
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(100);
-
         let mut app = Self {
             cwd,
             parent,
@@ -62,8 +61,24 @@ impl App {
             list_state,
             preview_lines: Vec::new(),
             preview_title: String::new(),
-            preview_lines_limit,
+            config_paths: None,
+            config: config::Config::default(),
+            keymaps: Vec::new(),
         };
+        // Discover configuration paths (entry not executed yet)
+        if let Ok(paths) = crate::config::discover_config_paths() {
+            match crate::config::load_config(&paths) {
+                Ok((cfg, maps)) => {
+                    app.config_paths = Some(paths);
+                    app.config = cfg;
+                    app.keymaps = maps;
+                }
+                Err(e) => {
+                    eprintln!("lv: config load error: {}", e);
+                    app.config_paths = Some(paths);
+                }
+            }
+        }
         app.refresh_preview();
         Ok(app)
     }
@@ -75,7 +90,13 @@ impl App {
     fn refresh_lists(&mut self) {
         self.parent = self.cwd.parent().map(|p| p.to_path_buf());
         self.current_entries = read_dir_sorted(&self.cwd).unwrap_or_default();
+        if self.current_entries.len() > self.config.ui.max_list_items {
+            self.current_entries.truncate(self.config.ui.max_list_items);
+        }
         self.parent_entries = if let Some(ref p) = self.parent { read_dir_sorted(p).unwrap_or_default() } else { Vec::new() };
+        if self.parent_entries.len() > self.config.ui.max_list_items {
+            self.parent_entries.truncate(self.config.ui.max_list_items);
+        }
         // Clamp selection
         let max_idx = self.current_entries.len().saturating_sub(1);
         if let Some(sel) = self.list_state.selected() {
@@ -96,14 +117,16 @@ impl App {
             }
         };
 
+        let preview_limit = self.config.ui.preview_lines;
         if is_dir {
             self.preview_title = format!("dir: {}", path.display());
             match read_dir_sorted(&path) {
                 Ok(list) => {
                     let mut lines = Vec::new();
-                    for e in list.into_iter().take(self.preview_lines_limit) {
+                    for e in list.into_iter().take(preview_limit) {
                         let marker = if e.is_dir { "/" } else { "" };
-                        lines.push(format!("{}{}", e.name, marker));
+                        let formatted = format!("{}{}", e.name, marker);
+                        lines.push(sanitize_line(&formatted));
                     }
                     self.preview_lines = lines;
                 }
@@ -113,7 +136,8 @@ impl App {
             }
         } else {
             self.preview_title = format!("file: {}", path.display());
-            self.preview_lines = read_file_head(&path, self.preview_lines_limit)
+            self.preview_lines = read_file_head(&path, preview_limit)
+                .map(|v| v.into_iter().map(|s| sanitize_line(&s)).collect())
                 .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
         }
     }
@@ -224,8 +248,22 @@ fn handle_key(app: &mut App, key: KeyEvent) -> io::Result<bool> {
         }
         (KeyCode::Backspace, _) | (KeyCode::Left, _) | (KeyCode::Char('h'), KeyModifiers::NONE) => {
             if let Some(parent) = app.cwd.parent() {
+                // Remember the directory name we are leaving so we can reselect it
+                let just_left = app
+                    .cwd
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string());
                 app.cwd = parent.to_path_buf();
                 app.refresh_lists();
+                if let Some(name) = just_left {
+                    if let Some(idx) = app
+                        .current_entries
+                        .iter()
+                        .position(|e| e.name == name)
+                    {
+                        app.list_state.select(Some(idx));
+                    }
+                }
                 app.refresh_preview();
             }
         }
@@ -244,13 +282,10 @@ fn panel_title<'a>(label: &'a str, path: Option<&Path>) -> Line<'a> {
 }
 
 fn ui(f: &mut ratatui::Frame, app: &mut App) {
+    let constraints = pane_constraints(app);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-        ])
+        .constraints(constraints)
         .split(f.area());
 
     draw_parent_panel(f, chunks[0], app);
@@ -258,7 +293,28 @@ fn ui(f: &mut ratatui::Frame, app: &mut App) {
     draw_preview_panel(f, chunks[2], app);
 }
 
+fn pane_constraints(app: &App) -> [Constraint; 3] {
+    // Defaults
+    let (mut p, mut c, mut r) = (30u16, 40u16, 30u16);
+    if let Some(panes) = app.config.ui.panes.as_ref() {
+            p = panes.parent;
+            c = panes.current;
+            r = panes.preview;
+    }
+    let total = p.saturating_add(c).saturating_add(r);
+    if total == 0 {
+        return [Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)];
+    }
+    // Normalize so they sum to 100 and avoid rounding drift
+    let p_norm = (p as u32 * 100 / total as u32) as u16;
+    let c_norm = (c as u32 * 100 / total as u32) as u16;
+    let r_norm = 100u16.saturating_sub(p_norm).saturating_sub(c_norm);
+    [Constraint::Percentage(p_norm), Constraint::Percentage(c_norm), Constraint::Percentage(r_norm)]
+}
+
 fn draw_parent_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
+    // Clear area to prevent artifacts when content shrinks
+    f.render_widget(Clear, area);
     let title = panel_title("Parent", app.parent.as_deref());
     let block = Block::default().borders(Borders::ALL).title(title);
     let items: Vec<ListItem> = app
@@ -274,6 +330,8 @@ fn draw_parent_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
 }
 
 fn draw_current_panel(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
+    // Clear area to prevent artifacts when content shrinks
+    f.render_widget(Clear, area);
     let title = panel_title("Current", Some(&app.cwd));
     let block = Block::default().borders(Borders::ALL).title(title);
     let items: Vec<ListItem> = app
@@ -294,6 +352,8 @@ fn draw_current_panel(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
 }
 
 fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
+    // Clear area to prevent artifacts when content shrinks or lines are shorter
+    f.render_widget(Clear, area);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(Line::from(vec![
@@ -308,6 +368,19 @@ fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
         app.preview_lines.iter().map(|l| Line::from(l.clone())).collect()
     };
 
-    let para = Paragraph::new(text).block(block).wrap(Wrap { trim: false });
+    let para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
     f.render_widget(para, area);
+}
+
+fn sanitize_line(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\t' => out.push_str("    "),
+            '\r' => {},
+            c if c.is_control() => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
 }
