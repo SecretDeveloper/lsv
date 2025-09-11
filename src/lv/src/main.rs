@@ -14,7 +14,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Terminal;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 mod config;
 
@@ -145,10 +145,15 @@ impl App {
                 }
             }
         } else {
-            self.preview_title = format!("file: {}", path.display());
-            self.preview_lines = read_file_head(&path, preview_limit)
-                .map(|v| v.into_iter().map(|s| sanitize_line(&s)).collect())
-                .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
+            if let Some(lines) = run_previewer(self, &path, preview_limit) {
+                self.preview_title = format!("preview: {}", path.display());
+                self.preview_lines = lines;
+            } else {
+                self.preview_title = format!("file: {}", path.display());
+                self.preview_lines = read_file_head(&path, preview_limit)
+                    .map(|v| v.into_iter().map(|s| sanitize_line(&s)).collect())
+                    .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
+            }
         }
     }
 }
@@ -189,7 +194,7 @@ fn read_file_head(path: &Path, n: usize) -> io::Result<Vec<String>> {
 fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -226,11 +231,7 @@ fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
     res
@@ -346,7 +347,7 @@ fn run_shell_command(app: &mut App, sc: &config::ShellCmd) {
         // Suspend TUI and run interactive command attached to the terminal
         let _ = disable_raw_mode();
         let mut stdout = io::stdout();
-        let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        let _ = execute!(stdout, LeaveAlternateScreen);
         let status = Command::new("sh")
             .arg("-lc")
             .arg(&cmd_trimmed)
@@ -357,7 +358,7 @@ fn run_shell_command(app: &mut App, sc: &config::ShellCmd) {
             .status();
         let _ = enable_raw_mode();
         let mut stdout2 = io::stdout();
-        let _ = execute!(stdout2, EnterAlternateScreen, EnableMouseCapture);
+        let _ = execute!(stdout2, EnterAlternateScreen);
         app.refresh_lists();
         app.refresh_preview();
         app.force_full_redraw = true;
@@ -507,7 +508,7 @@ fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
     let text: Vec<Line> = if app.preview_lines.is_empty() {
         vec![Line::from(Span::styled("<no selection>", Style::default().fg(Color::DarkGray)))]
     } else {
-        app.preview_lines.iter().map(|l| Line::from(l.clone())).collect()
+        app.preview_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
     };
 
     let para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
@@ -540,4 +541,188 @@ fn sanitize_line(s: &str) -> String {
         }
     }
     out
+}
+
+fn run_previewer(app: &App, path: &Path, limit: usize) -> Option<Vec<String>> {
+    use globset::{Glob, GlobMatcher};
+    let filename = path.file_name()?.to_string_lossy();
+    let mut selected_cmd: Option<String> = None;
+    for p in &app.config.previewers {
+        if let Some(pat) = &p.pattern {
+            if let Ok(glob) = Glob::new(pat) {
+                let matcher: GlobMatcher = glob.compile_matcher();
+                if matcher.is_match(&*filename) || matcher.is_match(path) {
+                    selected_cmd = Some(p.cmd.clone());
+                    break;
+                }
+            }
+        } else if p.mime.is_some() {
+            continue; // future: mime detection
+        }
+    }
+    let cmd_str = selected_cmd?;
+    let mut cmd = cmd_str.clone();
+    let path_str = path.to_string_lossy().to_string();
+    let dir_str = path.parent().unwrap_or_else(|| Path::new(".")).to_string_lossy().to_string();
+    let name_str = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    cmd = cmd.replace("{path}", &shell_escape(&path_str));
+    cmd = cmd.replace("{dir}", &shell_escape(&dir_str));
+    cmd = cmd.replace("{name}", &shell_escape(&name_str));
+    cmd = cmd.replace("$f", &shell_escape(&path_str));
+
+    match Command::new("sh")
+        .arg("-lc")
+        .arg(&cmd)
+        .current_dir(&dir_str)
+        .env("LV_PATH", &path_str)
+        .env("LV_DIR", &dir_str)
+        .env("LV_NAME", &name_str)
+        // Encourage color output from common tools when stdout is not a TTY
+        .env("FORCE_COLOR", "1")
+        .env("CLICOLOR_FORCE", "1")
+        .output() {
+        Ok(out) => {
+            let mut buf = Vec::new();
+            buf.extend_from_slice(&out.stdout);
+            if !out.stderr.is_empty() { buf.push(b'\n'); buf.extend_from_slice(&out.stderr); }
+            let text = String::from_utf8_lossy(&buf).replace('\r', "");
+            let mut lines: Vec<String> = Vec::new();
+            for l in text.lines() {
+                lines.push(l.to_string());
+                if lines.len() >= limit { break; }
+            }
+            Some(lines)
+        }
+        Err(_) => None,
+    }
+}
+
+fn ansi_spans(s: &str) -> Vec<Span<'_>> {
+    let bytes = s.as_bytes();
+    let mut spans: Vec<Span> = Vec::new();
+    let mut style = Style::default();
+    let mut i: usize = 0;
+    let mut seg_start: usize = 0; // byte index of current plain segment
+    while i < bytes.len() {
+        if bytes[i] == 0x1B && i + 1 < bytes.len() {
+            // flush plain UTF-8 substring before escape
+            if seg_start < i {
+                if let Some(seg) = s.get(seg_start..i) {
+                    spans.push(Span::styled(seg.to_string(), style));
+                }
+            }
+            // parse escape sequence
+            match bytes[i + 1] {
+                b'[' => {
+                    // CSI: ESC [ ... final (0x40-0x7E)
+                    i += 2;
+                    let start = i;
+                    while i < bytes.len() && !(bytes[i] >= 0x40 && bytes[i] <= 0x7E) { i += 1; }
+                    if i >= bytes.len() { break; }
+                    let finalb = bytes[i];
+                    let params = &s[start..i];
+                    if finalb == b'm' { apply_sgr_seq(params, &mut style); }
+                    i += 1; // consume final
+                    seg_start = i;
+                }
+                b']' => {
+                    // OSC: ESC ] ... BEL or ESC \
+                    i += 2;
+                    loop {
+                        if i >= bytes.len() { break; }
+                        if bytes[i] == 0x07 { i += 1; break; }
+                        if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'\\' { i += 2; break; }
+                        i += 1;
+                    }
+                    seg_start = i;
+                }
+                b'(' | b')' | b'*' | b'+' => {
+                    // Charset selection (3-byte sequence)
+                    i += 3;
+                    seg_start = i;
+                }
+                _ => {
+                    // Unknown escape; skip ESC and next byte
+                    i += 2;
+                    seg_start = i;
+                }
+            }
+        } else if bytes[i] == b'\r' {
+            // Carriage return: treat as line start; drop preceding segment
+            i += 1;
+            seg_start = i;
+        } else {
+            i += 1;
+        }
+    }
+    // flush trailing segment
+    if seg_start < bytes.len() {
+        if let Some(seg) = s.get(seg_start..bytes.len()) {
+            spans.push(Span::styled(seg.to_string(), style));
+        }
+    }
+    spans
+}
+
+fn apply_sgr_seq(seq: &str, style: &mut Style) {
+    let nums: Vec<i32> = seq.split(';').filter_map(|t| t.parse::<i32>().ok()).collect();
+    if nums.is_empty() { *style = Style::default(); return; }
+    let mut i = 0;
+    while i < nums.len() {
+        match nums[i] {
+            0 => { *style = Style::default(); },
+            1 => { *style = style.add_modifier(Modifier::BOLD); },
+            3 => { *style = style.add_modifier(Modifier::ITALIC); },
+            4 => { *style = style.add_modifier(Modifier::UNDERLINED); },
+            22 => { *style = style.remove_modifier(Modifier::BOLD); },
+            23 => { *style = style.remove_modifier(Modifier::ITALIC); },
+            24 => { *style = style.remove_modifier(Modifier::UNDERLINED); },
+            30..=37 => { style.fg = Some(basic_color((nums[i]-30) as u8, false)); },
+            90..=97 => { style.fg = Some(basic_color((nums[i]-90) as u8, true)); },
+            40..=47 => { style.bg = Some(basic_color((nums[i]-40) as u8, false)); },
+            100..=107 => { style.bg = Some(basic_color((nums[i]-100) as u8, true)); },
+            38 => {
+                if i+1 < nums.len() {
+                    match nums[i+1] {
+                        5 => { if i+2 < nums.len() { style.fg = Some(Color::Indexed(nums[i+2] as u8)); i += 2; } },
+                        2 => { if i+4 < nums.len() { style.fg = Some(Color::Rgb(nums[i+2] as u8, nums[i+3] as u8, nums[i+4] as u8)); i += 4; } },
+                        _ => {}
+                    }
+                }
+            }
+            48 => {
+                if i+1 < nums.len() {
+                    match nums[i+1] {
+                        5 => { if i+2 < nums.len() { style.bg = Some(Color::Indexed(nums[i+2] as u8)); i += 2; } },
+                        2 => { if i+4 < nums.len() { style.bg = Some(Color::Rgb(nums[i+2] as u8, nums[i+3] as u8, nums[i+4] as u8)); i += 4; } },
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+}
+
+fn basic_color(code: u8, bright: bool) -> Color {
+    match (code, bright) {
+        (0, false) => Color::Black,
+        (1, false) => Color::Red,
+        (2, false) => Color::Green,
+        (3, false) => Color::Yellow,
+        (4, false) => Color::Blue,
+        (5, false) => Color::Magenta,
+        (6, false) => Color::Cyan,
+        (7, false) => Color::Gray,
+        (0, true) => Color::DarkGray,
+        (1, true) => Color::LightRed,
+        (2, true) => Color::LightGreen,
+        (3, true) => Color::LightYellow,
+        (4, true) => Color::LightBlue,
+        (5, true) => Color::LightMagenta,
+        (6, true) => Color::LightCyan,
+        (7, true) => Color::White,
+        _ => Color::White,
+    }
 }

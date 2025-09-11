@@ -40,6 +40,7 @@ pub struct Config {
     pub ui: UiConfig,
     pub commands: Vec<(String, CommandSpec)>,
     pub shell_cmds: Vec<ShellCmd>,
+    pub previewers: Vec<Previewer>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,13 @@ impl Default for UiConfig {
 pub struct ShellCmd {
     pub cmd: String,
     pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Previewer {
+    pub pattern: Option<String>,
+    pub mime: Option<String>,
+    pub cmd: String,
 }
 
 /// LuaEngine creates a sandboxed Lua runtime for lv configuration.
@@ -211,7 +219,7 @@ fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyM
         if let Ok(ui_tbl) = tbl.get::<Table>("ui") {
             let mut ui = UiConfig::default();
             if let Ok(panes_tbl) = ui_tbl.get::<Table>("panes") {
-                let mut panes = UiPanes { parent: 30, current: 40, preview: 30 };
+                let mut panes = UiPanes { parent: 20, current: 30, preview: 50 };
                 if let Ok(v) = panes_tbl.get::<u16>("parent") { panes.parent = v; }
                 if let Ok(v) = panes_tbl.get::<u16>("current") { panes.current = v; }
                 if let Ok(v) = panes_tbl.get::<u16>("preview") { panes.preview = v; }
@@ -221,6 +229,19 @@ fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyM
             if let Ok(n) = ui_tbl.get::<u64>("preview_lines") { ui.preview_lines = n as usize; }
             if let Ok(n) = ui_tbl.get::<u64>("max_list_items") { ui.max_list_items = n as usize; }
             cfg_mut.ui = ui;
+            // Optional previewers: array of { pattern?, mime?, cmd }
+            if let Ok(prev_tbl) = ui_tbl.get::<Table>("previewer") {
+                let mut list = Vec::new();
+                for entry in prev_tbl.sequence_values::<Table>() {
+                    let t = entry?;
+                    if let Ok(cmd) = t.get::<String>("cmd") {
+                        let pattern = t.get::<String>("pattern").ok();
+                        let mime = t.get::<String>("mime").ok();
+                        list.push(Previewer { pattern, mime, cmd });
+                    }
+                }
+                cfg_mut.previewers = list;
+            }
         }
         if let Ok(cmds_tbl) = tbl.get::<Table>("commands") {
             let mut cmds = Vec::new();
