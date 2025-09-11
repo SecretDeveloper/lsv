@@ -3,5 +3,4 @@ members = [
     "src/lv",
 ]
 
-# Use the edition 2021 dependency resolver
-resolver = "2"
+  resolver="3"
