@@ -1,4 +1,4 @@
-use mlua::{Lua, LuaOptions, Result as LuaResult, StdLib, Table, Value, Error as LuaError};
+use mlua::{Lua, LuaOptions, Result as LuaResult, StdLib, Table, Value, Error as LuaError, RegistryKey, Function};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -160,9 +160,9 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths> {
 }
 
 /// Load and parse configuration using a restricted Lua runtime.
-pub fn load_config(paths: &ConfigPaths) -> std::io::Result<(Config, Vec<KeyMapping>)> {
+pub fn load_config(paths: &ConfigPaths) -> std::io::Result<(Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey)>)> {
     if !paths.exists {
-        return Ok((Config::default(), Vec::new()));
+        return Ok((Config::default(), Vec::new(), None));
     }
 
     let engine = LuaEngine::new().map_err(|e| io_err(format!("lua init failed: {e}")))?;
@@ -171,7 +171,8 @@ pub fn load_config(paths: &ConfigPaths) -> std::io::Result<(Config, Vec<KeyMappi
     let config_acc = Rc::new(RefCell::new(Config::default()));
     let keymaps_acc: Rc<RefCell<Vec<KeyMapping>>> = Rc::new(RefCell::new(Vec::new()));
 
-    install_lv_api(lua, Rc::clone(&config_acc), Rc::clone(&keymaps_acc))
+    let previewer_key_acc: Rc<RefCell<Option<RegistryKey>>> = Rc::new(RefCell::new(None));
+    install_lv_api(lua, Rc::clone(&config_acc), Rc::clone(&keymaps_acc), Rc::clone(&previewer_key_acc))
         .map_err(|e| io_err(format!("lv api install failed: {e}")))?;
     install_require(lua, &paths.root.join("lua"))
         .map_err(|e| io_err(format!("require install failed: {e}")))?;
@@ -185,12 +186,14 @@ pub fn load_config(paths: &ConfigPaths) -> std::io::Result<(Config, Vec<KeyMappi
 
     let cfg = config_acc.borrow().clone();
     let maps = keymaps_acc.borrow().clone();
-    Ok((cfg, maps))
+    let key_opt = previewer_key_acc.borrow_mut().take();
+    let engine_opt = key_opt.map(|key| (engine, key));
+    Ok((cfg, maps, engine_opt))
 }
 
 fn io_err(msg: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, msg) }
 
-fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyMapping>>>) -> mlua::Result<()> {
+fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyMapping>>>, previewer_key_out: Rc<RefCell<Option<RegistryKey>>>) -> mlua::Result<()> {
     let globals = lua.globals();
     let lv: Table = match globals.get::<Value>("lv") {
         Ok(Value::Table(t)) => t,
@@ -298,8 +301,17 @@ fn install_lv_api(lua: &Lua, cfg: Rc<RefCell<Config>>, maps: Rc<RefCell<Vec<KeyM
         Ok(true)
     })?;
 
+    // lv.set_previewer(function(path, mime) -> string|nil)
+    let prev_out = Rc::clone(&previewer_key_out);
+    let set_previewer_fn = lua.create_function(move |lua, func: Function| {
+        let key = lua.create_registry_value(func)?;
+        *prev_out.borrow_mut() = Some(key);
+        Ok(true)
+    })?;
+
     lv.set("config", config_fn)?;
     lv.set("mapkey", mapkey_fn)?;
+    lv.set("set_previewer", set_previewer_fn)?;
     globals.set("lv", lv)?;
     Ok(())
 }

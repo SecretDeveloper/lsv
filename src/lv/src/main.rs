@@ -1,11 +1,12 @@
 use std::cmp::min;
 use std::env;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::CrosstermBackend;
@@ -14,6 +15,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Terminal;
+use mlua::{Function as LuaFunction, RegistryKey};
 use std::process::Command;
 
 mod config;
@@ -44,6 +46,8 @@ struct App {
     keymap_lookup: std::collections::HashMap<String, String>,
     force_full_redraw: bool,
     status_error: Option<String>,
+    lua_engine: Option<config::LuaEngine>,
+    previewer_fn: Option<RegistryKey>,
 }
 
 impl App {
@@ -71,16 +75,25 @@ impl App {
             keymap_lookup: std::collections::HashMap::new(),
             force_full_redraw: false,
             status_error: None,
+            lua_engine: None,
+            previewer_fn: None,
         };
         // Discover configuration paths (entry not executed yet)
         if let Ok(paths) = crate::config::discover_config_paths() {
             match crate::config::load_config(&paths) {
-                Ok((cfg, maps)) => {
+                Ok((cfg, maps, engine_opt)) => {
                     app.config_paths = Some(paths);
                     app.config = cfg;
                     app.keymaps = maps;
                     app.rebuild_keymap_lookup();
                     app.status_error = None;
+                    if let Some((eng, key)) = engine_opt {
+                        app.lua_engine = Some(eng);
+                        app.previewer_fn = Some(key);
+                    } else {
+                        app.lua_engine = None;
+                        app.previewer_fn = None;
+                    }
                 }
                 Err(e) => {
                     eprintln!("lv: config load error: {}", e);
@@ -145,15 +158,10 @@ impl App {
                 }
             }
         } else {
-            if let Some(lines) = run_previewer(self, &path, preview_limit) {
-                self.preview_title = format!("preview: {}", path.display());
-                self.preview_lines = lines;
-            } else {
-                self.preview_title = format!("file: {}", path.display());
-                self.preview_lines = read_file_head(&path, preview_limit)
-                    .map(|v| v.into_iter().map(|s| sanitize_line(&s)).collect())
-                    .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
-            }
+            self.preview_title = format!("file: {}", path.display());
+            self.preview_lines = read_file_head(&path, preview_limit)
+                .map(|v| v.into_iter().map(|s| sanitize_line(&s)).collect())
+                .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
         }
     }
 }
@@ -327,13 +335,17 @@ fn run_shell_command(app: &mut App, sc: &config::ShellCmd) {
     let cwd = app.cwd.clone();
 
     let mut cmd_str = sc.cmd.clone();
-    // Simple template replacements: {path}
+    // Template replacements
     let path_str = selection_path.to_string_lossy().to_string();
     let dir_str = selection_path.parent().unwrap_or(&cwd).to_string_lossy().to_string();
     let name_str = selection_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let ext_str = selection_path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+    // Consistent placeholders
     cmd_str = cmd_str.replace("{path}", &shell_escape(&path_str));
+    cmd_str = cmd_str.replace("{directory}", &shell_escape(&dir_str));
     cmd_str = cmd_str.replace("{dir}", &shell_escape(&dir_str));
     cmd_str = cmd_str.replace("{name}", &shell_escape(&name_str));
+    cmd_str = cmd_str.replace("{extension}", &shell_escape(&ext_str));
     // Also support $f shorthand from sample: replace $f with shell-escaped path
     cmd_str = cmd_str.replace("$f", &shell_escape(&path_str));
     // Trim leading '&' (treated as hint)
@@ -342,6 +354,8 @@ fn run_shell_command(app: &mut App, sc: &config::ShellCmd) {
     let is_interactive = looks_interactive(&sc.cmd);
     // in_preview removed: commands are handled via suspend or background spawn
 
+    // Trace command intent
+    trace_log(format!("[cmd] built cmd='{}' cwd='{}' file='{}'", cmd_trimmed, cwd.display(), path_str));
     // If command appears interactive, suspend TUI and run attached to terminal
     if is_interactive {
         // Suspend TUI and run interactive command attached to the terminal
@@ -362,19 +376,23 @@ fn run_shell_command(app: &mut App, sc: &config::ShellCmd) {
         app.refresh_lists();
         app.refresh_preview();
         app.force_full_redraw = true;
+        trace_log(format!("[cmd] interactive exit={:?}", status.as_ref().ok().and_then(|s| s.code())));
         let _ = status;
         return;
     }
 
     // Default: spawn asynchronously (background)
-    let _ = Command::new("sh")
+    match Command::new("sh")
         .arg("-lc")
         .arg(&cmd_trimmed)
         .current_dir(&cwd)
         .env("LV_PATH", &path_str)
         .env("LV_DIR", &dir_str)
         .env("LV_NAME", &name_str)
-        .spawn();
+        .spawn() {
+        Ok(child) => trace_log(format!("[cmd] spawned pid={}", child.id())),
+        Err(e) => trace_log(format!("[cmd] spawn error: {}", e)),
+    }
     app.refresh_lists();
     app.refresh_preview();
 }
@@ -497,6 +515,13 @@ fn draw_current_panel(f: &mut ratatui::Frame, area: Rect, app: &mut App) {
 fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
     // Clear area to prevent artifacts when content shrinks or lines are shorter
     f.render_widget(Clear, area);
+    // Try dynamic preview via Lua previewer or rule-based previewers
+    let mut dynamic_lines: Option<Vec<String>> = None;
+    if let Some(sel) = app.selected_entry() {
+        if !sel.is_dir {
+            dynamic_lines = run_previewer(app, &sel.path, area, app.config.ui.preview_lines);
+        }
+    }
     let block = Block::default()
         .borders(Borders::ALL)
         .title(Line::from(vec![
@@ -505,7 +530,13 @@ fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &App) {
             Span::styled(&app.preview_title, Style::default().fg(Color::Gray)),
         ]));
 
-    let text: Vec<Line> = if app.preview_lines.is_empty() {
+    let text: Vec<Line> = if let Some(lines) = dynamic_lines.as_ref() {
+        if lines.is_empty() {
+            vec![Line::from(Span::styled("<no selection>", Style::default().fg(Color::DarkGray)))]
+        } else {
+            lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+        }
+    } else if app.preview_lines.is_empty() {
         vec![Line::from(Span::styled("<no selection>", Style::default().fg(Color::DarkGray)))]
     } else {
         app.preview_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
@@ -543,7 +574,43 @@ fn sanitize_line(s: &str) -> String {
     out
 }
 
-fn run_previewer(app: &App, path: &Path, limit: usize) -> Option<Vec<String>> {
+fn run_previewer(app: &App, path: &Path, area: Rect, limit: usize) -> Option<Vec<String>> {
+    // 1) Lua previewer function (if configured)
+    if let (Some(engine), Some(key)) = (app.lua_engine.as_ref(), app.previewer_fn.as_ref()) {
+        let lua = engine.lua();
+        if let Ok(func) = lua.registry_value::<LuaFunction>(key) {
+            let path_str = path.to_string_lossy().to_string();
+            let dir_str = path.parent().unwrap_or_else(|| Path::new(".")).to_string_lossy().to_string();
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            let is_binary = file_is_binary(path);
+            if let Ok(ctx) = lua.create_table() {
+                let _ = ctx.set("path", path_str.clone());
+                let _ = ctx.set("directory", dir_str.clone());
+                let _ = ctx.set("extension", ext);
+                let _ = ctx.set("is_binary", is_binary);
+                let _ = ctx.set("height", area.height as i64 -5);
+                let _ = ctx.set("width", area.width as i64 -5);
+                let _ = ctx.set("preview_x", area.x as i64);
+                let _ = ctx.set("preview_y", area.y as i64);
+                if let Ok(ret) = func.call::<Option<String>>(ctx) {
+                    if let Some(mut cmd) = ret {
+                        let name_str = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        let ext_str = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                        cmd = cmd.replace("{path}", &shell_escape(&path_str));
+                        cmd = cmd.replace("{directory}", &shell_escape(&dir_str));
+                        cmd = cmd.replace("{dir}", &shell_escape(&dir_str));
+                        cmd = cmd.replace("{name}", &shell_escape(&name_str));
+                        cmd = cmd.replace("{extension}", &shell_escape(&ext_str));
+                        cmd = cmd.replace("{width}", &area.width.to_string());
+                        cmd = cmd.replace("{height}", &area.height.to_string());
+                        return run_previewer_command(&cmd, &dir_str, &path_str, &name_str, limit);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2) Legacy rule-based previewers
     use globset::{Glob, GlobMatcher};
     let filename = path.file_name()?.to_string_lossy();
     let mut selected_cmd: Option<String> = None;
@@ -565,19 +632,29 @@ fn run_previewer(app: &App, path: &Path, limit: usize) -> Option<Vec<String>> {
     let path_str = path.to_string_lossy().to_string();
     let dir_str = path.parent().unwrap_or_else(|| Path::new(".")).to_string_lossy().to_string();
     let name_str = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let ext_str = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
     cmd = cmd.replace("{path}", &shell_escape(&path_str));
+    cmd = cmd.replace("{directory}", &shell_escape(&dir_str));
     cmd = cmd.replace("{dir}", &shell_escape(&dir_str));
     cmd = cmd.replace("{name}", &shell_escape(&name_str));
-    cmd = cmd.replace("$f", &shell_escape(&path_str));
+    cmd = cmd.replace("{extension}", &shell_escape(&ext_str));
+    cmd = cmd.replace("{width}", &area.width.to_string());
+    cmd = cmd.replace("{height}", &area.height.to_string());
+    cmd = cmd.replace("{preview_x}", &area.x.to_string());
+    cmd = cmd.replace("{preview_y}", &area.y.to_string());
 
+    run_previewer_command(&cmd, &dir_str, &path_str, &name_str, limit)
+}
+
+fn run_previewer_command(cmd: &str, dir_str: &str, path_str: &str, name_str: &str, limit: usize) -> Option<Vec<String>> {
+    trace_log(format!("[preview] cmd='{}' cwd='{}' file='{}'", cmd, dir_str, path_str));
     match Command::new("sh")
         .arg("-lc")
-        .arg(&cmd)
-        .current_dir(&dir_str)
-        .env("LV_PATH", &path_str)
-        .env("LV_DIR", &dir_str)
-        .env("LV_NAME", &name_str)
-        // Encourage color output from common tools when stdout is not a TTY
+        .arg(cmd)
+        .current_dir(dir_str)
+        .env("LV_PATH", path_str)
+        .env("LV_DIR", dir_str)
+        .env("LV_NAME", name_str)
         .env("FORCE_COLOR", "1")
         .env("CLICOLOR_FORCE", "1")
         .output() {
@@ -586,6 +663,8 @@ fn run_previewer(app: &App, path: &Path, limit: usize) -> Option<Vec<String>> {
             buf.extend_from_slice(&out.stdout);
             if !out.stderr.is_empty() { buf.push(b'\n'); buf.extend_from_slice(&out.stderr); }
             let text = String::from_utf8_lossy(&buf).replace('\r', "");
+            trace_log(format!("[preview] exit_code={:?} bytes_out={}", out.status.code(), text.len()));
+            trace_log_snippet("[preview] output", &text, 8192);
             let mut lines: Vec<String> = Vec::new();
             for l in text.lines() {
                 lines.push(l.to_string());
@@ -593,8 +672,20 @@ fn run_previewer(app: &App, path: &Path, limit: usize) -> Option<Vec<String>> {
             }
             Some(lines)
         }
-        Err(_) => None,
+        Err(e) => { trace_log(format!("[preview] error spawning: {}", e)); None }
     }
+}
+
+fn file_is_binary(path: &Path) -> bool {
+    if let Ok(mut f) = File::open(path) {
+        let mut buf = [0u8; 4096];
+        if let Ok(n) = f.read(&mut buf) {
+            let slice = &buf[..n];
+            if slice.contains(&0) { return true; }
+            if std::str::from_utf8(slice).is_err() { return true; }
+        }
+    }
+    false
 }
 
 fn ansi_spans(s: &str) -> Vec<Span<'_>> {
@@ -725,4 +816,36 @@ fn basic_color(code: u8, bright: bool) -> Color {
         (7, true) => Color::White,
         _ => Color::White,
     }
+}
+
+fn trace_enabled() -> bool {
+    std::env::var("LV_TRACE").map(|v| !v.is_empty() && v != "0").unwrap_or(false)
+}
+
+fn trace_log<S: AsRef<str>>(s: S) {
+    if !trace_enabled() { return; }
+    let line = format!("{} {}\n", now_millis(), s.as_ref());
+    if let Some(path) = trace_file_path() {
+        let _ = OpenOptions::new().create(true).append(true).open(path).and_then(|mut f| {
+            use std::io::Write;
+            f.write_all(line.as_bytes())
+        });
+    }
+}
+
+fn trace_log_snippet(tag: &str, text: &str, max: usize) {
+    if !trace_enabled() { return; }
+    let snippet = if text.len() > max { &text[..max] } else { text };
+    trace_log(format!("{}:\n{}", tag, snippet));
+}
+
+fn trace_file_path() -> Option<std::path::PathBuf> {
+    if let Ok(fp) = std::env::var("LV_TRACE_FILE") { return Some(std::path::PathBuf::from(fp)); }
+    if let Ok(tmp) = std::env::var("TMPDIR") { return Some(std::path::PathBuf::from(tmp).join("lv-trace.log")); }
+    Some(std::path::PathBuf::from("/tmp/lv-trace.log"))
+}
+
+fn now_millis() -> u128 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
 }
