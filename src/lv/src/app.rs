@@ -36,6 +36,7 @@ pub struct App {
   pub(crate) status_error: Option<String>,
   pub(crate) lua_engine: Option<crate::config::LuaEngine>,
   pub(crate) previewer_fn: Option<RegistryKey>,
+  pub(crate) lua_action_fns: Option<Vec<RegistryKey>>,
   // In-memory runtime settings
   pub(crate) sort_key: SortKey,
   pub(crate) sort_reverse: bool,
@@ -124,6 +125,7 @@ impl App {
       status_error: None,
       lua_engine: None,
       previewer_fn: None,
+      lua_action_fns: None,
       sort_key: SortKey::Name,
       sort_reverse: false,
       info_mode: InfoMode::None,
@@ -145,13 +147,33 @@ impl App {
           app.add_default_keymaps();
           app.rebuild_keymap_lookup();
           app.status_error = None;
-          if let Some((eng, key)) = engine_opt {
+          if let Some((eng, key, action_keys)) = engine_opt {
             app.lua_engine = Some(eng);
             app.previewer_fn = Some(key);
+            app.lua_action_fns = Some(action_keys);
           } else {
             app.lua_engine = None;
             app.previewer_fn = None;
+            app.lua_action_fns = None;
           }
+          // Re-apply lists to honor config (e.g., show_hidden)
+          // Also apply optional initial sort/show from config.ui
+          if let Some(ref srt) = app.config.ui.sort {
+            if let Some(k) = crate::enums::sort_key_from_str(srt) {
+              app.sort_key = k;
+            }
+          }
+          if let Some(b) = app.config.ui.sort_reverse {
+            app.sort_reverse = b;
+          }
+          if let Some(ref sh) = app.config.ui.show {
+            if sh.eq_ignore_ascii_case("none") {
+              app.info_mode = crate::app::InfoMode::None;
+            } else if let Some(m) = crate::enums::info_mode_from_str(sh) {
+              app.info_mode = m;
+            }
+          }
+          app.refresh_lists();
           // Apply display_mode from config if present
           if let Some(dm) = app.config.ui.display_mode.as_deref() {
             if let Some(mode) = crate::enums::display_mode_from_str(dm) {
@@ -246,6 +268,9 @@ impl App {
       .filter_map(|e| {
         let path = e.path();
         let name = e.file_name().to_string_lossy().to_string();
+        if !self.config.ui.show_hidden && name.starts_with('.') {
+          return None;
+        }
         match e.file_type() {
           Ok(ft) => {
             let meta = fs::metadata(&path).ok();

@@ -70,6 +70,9 @@ pub struct UiConfig {
   pub date_format: Option<String>,
   pub row: Option<UiRowFormat>,
   pub display_mode: Option<String>,
+  pub sort: Option<String>,
+  pub sort_reverse: Option<bool>,
+  pub show: Option<String>,
 }
 
 impl Default for UiConfig {
@@ -82,6 +85,9 @@ impl Default for UiConfig {
       date_format: None,
       row: None,
       display_mode: None,
+      sort: None,
+      sort_reverse: None,
+      show: None,
     }
   }
 }
@@ -203,7 +209,7 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths> {
 /// Load and parse configuration using a restricted Lua runtime.
 pub fn load_config(
   paths: &ConfigPaths
-) -> std::io::Result<(Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey)>)>
+) -> std::io::Result<(Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>)>
 {
   if !paths.exists {
     return Ok((Config::default(), Vec::new(), None));
@@ -217,13 +223,14 @@ pub fn load_config(
   let keymaps_acc: Rc<RefCell<Vec<KeyMapping>>> =
     Rc::new(RefCell::new(Vec::new()));
 
-  let previewer_key_acc: Rc<RefCell<Option<RegistryKey>>> =
-    Rc::new(RefCell::new(None));
+  let previewer_key_acc: Rc<RefCell<Option<RegistryKey>>> = Rc::new(RefCell::new(None));
+  let lua_action_keys_acc: Rc<RefCell<Vec<RegistryKey>>> = Rc::new(RefCell::new(Vec::new()));
   install_lv_api(
     lua,
     Rc::clone(&config_acc),
     Rc::clone(&keymaps_acc),
     Rc::clone(&previewer_key_acc),
+    Rc::clone(&lua_action_keys_acc),
   )
   .map_err(|e| io_err(format!("lv api install failed: {e}")))?;
   install_require(lua, &paths.root.join("lua"))
@@ -240,7 +247,8 @@ pub fn load_config(
   let cfg = config_acc.borrow().clone();
   let maps = keymaps_acc.borrow().clone();
   let key_opt = previewer_key_acc.borrow_mut().take();
-  let engine_opt = key_opt.map(|key| (engine, key));
+  let action_keys = std::mem::take(&mut *lua_action_keys_acc.borrow_mut());
+  let engine_opt = key_opt.map(|key| (engine, key, action_keys));
   Ok((cfg, maps, engine_opt))
 }
 
@@ -253,6 +261,7 @@ fn install_lv_api(
   cfg: Rc<RefCell<Config>>,
   maps: Rc<RefCell<Vec<KeyMapping>>>,
   previewer_key_out: Rc<RefCell<Option<RegistryKey>>>,
+  lua_action_keys_out: Rc<RefCell<Vec<RegistryKey>>>,
 ) -> mlua::Result<()> {
   let globals = lua.globals();
   let lv: Table = match globals.get::<Value>("lv") {
@@ -263,7 +272,8 @@ fn install_lv_api(
   // lv.config(table)
   let cfg_clone = Rc::clone(&cfg);
   let maps_for_config = Rc::clone(&maps);
-  let config_fn = lua.create_function(move |_, tbl: Table| {
+  let actions_for_config = Rc::clone(&lua_action_keys_out);
+  let config_fn = lua.create_function(move |lua, tbl: Table| {
     let mut cfg_mut = cfg_clone.borrow_mut();
     // Accumulate keymaps (both from commands and actions) and push at the end
     let mut seq_keymaps_acc: Vec<(String, String, Option<String>)> = Vec::new();
@@ -328,6 +338,15 @@ fn install_lv_api(
       }
       if let Ok(s) = ui_tbl.get::<String>("display_mode") {
         ui.display_mode = Some(s);
+      }
+      if let Ok(sort_str) = ui_tbl.get::<String>("sort") {
+        ui.sort = Some(sort_str);
+      }
+      if let Ok(b) = ui_tbl.get::<bool>("sort_reverse") {
+        ui.sort_reverse = Some(b);
+      }
+      if let Ok(show_str) = ui_tbl.get::<String>("show") {
+        ui.show = Some(show_str);
       }
       cfg_mut.ui = ui;
     }
@@ -397,14 +416,27 @@ fn install_lv_api(
 
     // Separate top-level actions table for internal actions
     if let Ok(actions_tbl) = tbl.get::<Table>("actions") {
+      let mut acc = actions_for_config.borrow_mut();
       for pair in actions_tbl.sequence_values::<Value>() {
         if let Value::Table(t) = pair? {
+          // Lua function action: fn = function(lv, config) ... end
+          if let Ok(func) = t.get::<Function>("fn") {
+            let keymap = t.get::<String>("keymap")?;
+            let desc = t.get::<String>("description").ok();
+            let reg = lua.create_registry_value(func)?;
+            let idx = acc.len();
+            acc.push(reg);
+            seq_keymaps_acc.push((keymap, format!("run_lua:{}", idx), desc));
+            continue;
+          }
+          // String action fallback
           if let (Ok(kseq), Ok(action_str)) = (t.get::<String>("keymap"), t.get::<String>("action")) {
             let desc = t.get::<String>("description").ok();
             seq_keymaps_acc.push((kseq, action_str, desc));
           }
         }
       }
+      drop(acc);
     }
 
     // Push accumulated keymaps (from commands and actions) once
@@ -439,9 +471,34 @@ fn install_lv_api(
     Ok(true)
   })?;
 
+  // lv.map_action(keymap, description, fn)
+  let maps_for_actions_outer = Rc::clone(&maps);
+  let actions_acc_outer = Rc::clone(&lua_action_keys_out);
+  let map_action_fn = lua.create_function(move |lua, (keymap, desc, func): (String, String, Function)| {
+    let reg = lua.create_registry_value(func)?;
+    let idx = actions_acc_outer.borrow().len();
+    actions_acc_outer.borrow_mut().push(reg);
+    maps_for_actions_outer.borrow_mut().push(KeyMapping { sequence: keymap, action: format!("run_lua:{}", idx), description: Some(desc) });
+    Ok(true)
+  })?;
+
+  // lv.map_command(keymap, description, cmd_string)
+  let cfg_for_cmds = Rc::clone(&cfg);
+  let maps_for_cmds = Rc::clone(&maps);
+  let map_command_fn = lua.create_function(move |_, (keymap, desc, cmd): (String, String, String)| {
+    let mut cfg_mut = cfg_for_cmds.borrow_mut();
+    let idx = cfg_mut.shell_cmds.len();
+    cfg_mut.shell_cmds.push(ShellCmd { cmd: cmd.clone(), description: Some(desc.clone()) });
+    drop(cfg_mut);
+    maps_for_cmds.borrow_mut().push(KeyMapping { sequence: keymap, action: format!("run_shell:{}", idx), description: Some(desc) });
+    Ok(true)
+  })?;
+
   lv.set("config", config_fn)?;
   lv.set("mapkey", mapkey_fn)?;
   lv.set("set_previewer", set_previewer_fn)?;
+  lv.set("map_action", map_action_fn)?;
+  lv.set("map_command", map_command_fn)?;
   globals.set("lv", lv)?;
   Ok(())
 }
