@@ -20,4 +20,9 @@ pub fn draw(
   if let Some(msg) = &app.status_error {
     panes::draw_error_bar(f, f.area(), msg);
   }
+
+  // which-key overlay (draw last so it appears on top)
+  if app.show_whichkey {
+    panes::draw_whichkey_panel(f, f.area(), app);
+  }
 }

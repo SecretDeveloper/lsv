@@ -113,3 +113,67 @@ pub fn draw_error_bar(
   f.render_widget(Clear, bar);
   f.render_widget(para, bar);
 }
+
+pub fn draw_whichkey_panel(
+  f: &mut ratatui::Frame,
+  area: Rect,
+  app: &crate::App,
+) {
+  // Collect matching keymaps for the current prefix
+  let prefix = &app.whichkey_prefix;
+  let mut entries: Vec<(String, String)> = Vec::new();
+  for km in &app.keymaps {
+    if km.sequence.starts_with(prefix) {
+      let label = km
+        .description
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| km.action.clone());
+      entries.push((km.sequence.clone(), label));
+    }
+  }
+  // If toggled via '?' with empty prefix, just show all entries
+  // Limit number of rows
+  let max_rows: usize = 12;
+  if entries.len() > max_rows {
+    entries.truncate(max_rows);
+  }
+
+  let title_str = if prefix.is_empty() {
+    "Keys".to_string()
+  } else {
+    format!("Keys: prefix '{}'", prefix)
+  };
+  let block = Block::default()
+    .borders(Borders::ALL)
+    .title(Span::styled(
+      title_str,
+      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+    ));
+
+  let items: Vec<ListItem> = entries
+    .into_iter()
+    .map(|(seq, label)| {
+      let line = Line::from(vec![
+        Span::styled(seq, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::styled(label, Style::default().fg(Color::Gray)),
+      ]);
+      ListItem::new(line)
+    })
+    .collect();
+
+  // Panel height: items + borders + one padding row
+  let height = (items.len() as u16).saturating_add(2).max(3).min(area.height);
+
+  // Place at bottom
+  let layout = Layout::default()
+    .direction(Direction::Vertical)
+    .constraints([Constraint::Min(0), Constraint::Length(height)])
+    .split(area);
+  let panel = layout[1];
+
+  f.render_widget(Clear, panel);
+  let list = List::new(items).block(block);
+  f.render_widget(list, panel);
+}
