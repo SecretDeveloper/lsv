@@ -1,5 +1,7 @@
 # lv — A Three‑Pane Terminal File Viewer
 
+![lv screenshot](doc/lv.jpg)
+
 lv is a fast, curses‑based file viewer for the terminal. It presents three panes side by side:
 
 - Parent: shows the contents of the parent directory of your current location.

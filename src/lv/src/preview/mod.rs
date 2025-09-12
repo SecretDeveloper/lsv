@@ -69,11 +69,12 @@ fn run_previewer(app: &crate::App, path: &Path, area: Rect, limit: usize) -> Opt
                         cmd = cmd.replace("{dir}", &crate::shell_escape(&dir_str));
                         cmd = cmd.replace("{name}", &crate::shell_escape(&name_str));
                         cmd = cmd.replace("{extension}", &crate::shell_escape(&ext_str));
-                        cmd = cmd.replace("{width}", &area.width.to_string());
-                        cmd = cmd.replace("{height}", &area.height.to_string());
+                        let w = area.width.saturating_sub(10);
+                        let h = area.height.saturating_sub(10);
+                        cmd = cmd.replace("{width}", &w.to_string());
+                        cmd = cmd.replace("{height}", &h.to_string());
                         cmd = cmd.replace("{preview_x}", &area.x.to_string());
                         cmd = cmd.replace("{preview_y}", &area.y.to_string());
-                        cmd = cmd.replace("$f", &crate::shell_escape(&path_str));
                         return run_previewer_command(&cmd, &dir_str, &path_str, &name_str, limit);
                     }
                 }
@@ -114,7 +115,6 @@ fn run_previewer_command(cmd: &str, dir_str: &str, path_str: &str, name_str: &st
                 out.status.code(),
                 text.len()
             ));
-            crate::trace::log_snippet("[preview] output", &text, 8192);
             let mut lines: Vec<String> = Vec::new();
             for l in text.lines() {
                 lines.push(l.to_string());
