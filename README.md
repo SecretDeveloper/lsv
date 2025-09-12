@@ -42,31 +42,74 @@ Only the new Lua function approach is supported (no legacy config files/lists).
 ### Example (based on test-config/config1/lua/init.lua)
 
 ```lua
+-- Sample lv config -- place in $HOME/.config/lv/lua/init.lua 
 lv.config({
-  config_version = 1,
-  icons = { enabled = true, preset = "nerd", font = "Mononokai Nerd Font" },
-  keys = { sequence_timeout_ms = 500 },
-  commands = {
-    { description = "Open selected in new tmux pane", keymap = "E", cmd = "&tmux split-window -h nvim '{path}'" },
-    { description = "Open selected in editor", keymap = "e", cmd = "nvim '{path}'" },
-    { description = "Open current dir in new tmux window", keymap = "t", cmd = "tmux new-window -c {directory}" },
-  },
-  ui = {
-    panes = { parent = 20, current = 30, preview = 50 },
-    show_hidden = true,
-  },
+	config_version = 1,
+	keys = { sequence_timeout_ms = 500 },
+	commands = {
+		{
+			description = "Open selected item in default editor in new tmux pane",
+			keymap = "E",
+			cmd = "&tmux split-window -h nvim '{path}'",
+		},
+		{
+			description = "Open selected item in default editor",
+			keymap = "e",
+			cmd = "nvim '{path}'",
+		},
+		{
+			description = "Open current directory in new tmux window",
+			keymap = "t",
+			cmd = "tmux new-window -c {directory}",
+		},
+	},
+	ui = {
+		panes = {
+			parent = 20,
+			current = 30,
+			preview = 50,
+		},
+		show_hidden = true,
+	},
 })
 
--- Previewer function: ctx → command or nil (fallback to simple preview)
--- ctx = { path, directory, extension, is_binary, height, width, preview_x, preview_y }
+-- Previewer function (ctx):
+-- ctx = {
+--   path       = absolute file path (string)
+--   directory  = parent directory (string)
+--   extension  = file extension without dot (string, may be empty)
+--   is_binary  = boolean (simple heuristic)
+--   height     = preview pane height in rows (number)
+--   width      = preview pane width in columns (number)
+--   preview_x  = top-left x of preview pane (number)
+--   preview_y  = top-left y of preview pane (number)
+-- }
+-- Return a shell command string (placeholders are expanded: {path},{directory},{name},{extension}), or nil to use default head preview.
 lv.set_previewer(function(ctx)
-  if ctx.extension == "md" or ctx.extension == "markdown" then
-    return "glow --style=dark --width=" .. tostring(ctx.width) .. " {path}"
-  end
-  if not ctx.is_binary then
-    return "bat --color=always --style=plain --paging=never --wrap=never --line-range=:120 {path}"
-  end
-  return nil
+	-- Render Markdown with glow, respecting pane width
+	if ctx.extension == "md" or ctx.extension == "markdown" then
+		-- You can build a command with placeholders:
+		return "glow --style=dark --width=" .. tostring(ctx.width) .. " {path}"
+	end
+
+	if
+		ctx.extension == "jpg"
+		or ctx.extension == "jpeg"
+		or ctx.extension == "png"
+		or ctx.extension == "gif"
+		or ctx.extension == "bmp"
+		or ctx.extension == "tiff"
+	then
+		-- image preview using viu (needs installation)
+		return "viu --width '{width}' --height '{height}' '{path}'"
+	end
+	-- For non-binary, colorize with bat (first 120 lines, no wrapping)
+	if not ctx.is_binary then
+		return "bat --color=always --style=numbers --paging=never --wrap=never --line-range=:120 {path}"
+	end
+
+	-- Fallback to default preview (first N lines)
+	return nil
 end)
 ```
 
