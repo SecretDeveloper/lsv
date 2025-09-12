@@ -13,6 +13,8 @@ pub(crate) enum InternalAction {
   Quit,
   Sort(SortKey),
   ToggleSortReverse,
+  SetInfo(crate::app::InfoMode),
+  SetDisplayMode(crate::app::DisplayMode),
 }
 
 pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
@@ -26,12 +28,21 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
   if low.starts_with("sort:") {
     let parts: Vec<&str> = low.split(':').collect();
     if parts.len() >= 2 {
-      return match parts[1] {
-        "name" => Some(InternalAction::Sort(SortKey::Name)),
-        "size" => Some(InternalAction::Sort(SortKey::Size)),
-        "mtime" | "time" | "date" => Some(InternalAction::Sort(SortKey::MTime)),
-        _ => None,
-      };
+      return crate::enums::sort_key_from_str(parts[1]).map(InternalAction::Sort);
+    }
+  }
+  // Primary: show:* controls info display
+  if low.starts_with("show:") {
+    let parts: Vec<&str> = low.split(':').collect();
+    if parts.len() >= 2 {
+      if parts[1] == "friendly" { return Some(InternalAction::SetDisplayMode(crate::app::DisplayMode::Friendly)); }
+      return crate::enums::info_mode_from_str(parts[1]).map(InternalAction::SetInfo);
+    }
+  }
+  if low.starts_with("display:") {
+    let parts: Vec<&str> = low.split(':').collect();
+    if parts.len() >= 2 {
+      return crate::enums::display_mode_from_str(parts[1]).map(InternalAction::SetDisplayMode);
     }
   }
   None
@@ -73,6 +84,17 @@ pub(crate) fn execute_internal_action(app: &mut crate::App, action: InternalActi
       }
       app.refresh_preview();
     }
+    InternalAction::SetInfo(mode) => {
+      app.info_mode = mode;
+      app.force_full_redraw = true;
+    }
+    InternalAction::SetDisplayMode(style) => {
+      app.display_mode = style;
+      // If no info is selected yet, default to Modified so date becomes visible
+      if matches!(app.info_mode, crate::app::InfoMode::None) {
+        app.info_mode = crate::app::InfoMode::Modified;
+      }
+      app.force_full_redraw = true;
+    }
   }
 }
-

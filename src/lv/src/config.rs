@@ -67,6 +67,9 @@ pub struct UiConfig {
   pub show_hidden: bool,
   pub preview_lines: usize,
   pub max_list_items: usize,
+  pub date_format: Option<String>,
+  pub row: Option<UiRowFormat>,
+  pub display_mode: Option<String>,
 }
 
 impl Default for UiConfig {
@@ -76,6 +79,28 @@ impl Default for UiConfig {
       show_hidden: false,
       preview_lines: 100,
       max_list_items: 5000,
+      date_format: None,
+      row: None,
+      display_mode: None,
+    }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct UiRowFormat {
+  pub icon: String,
+  pub left: String,
+  pub middle: String,
+  pub right: String,
+}
+
+impl Default for UiRowFormat {
+  fn default() -> Self {
+    Self {
+      icon: " ".to_string(),
+      left: "{name}".to_string(),
+      middle: "".to_string(),
+      right: "{info}".to_string(),
     }
   }
 }
@@ -240,6 +265,8 @@ fn install_lv_api(
   let maps_for_config = Rc::clone(&maps);
   let config_fn = lua.create_function(move |_, tbl: Table| {
     let mut cfg_mut = cfg_clone.borrow_mut();
+    // Accumulate keymaps (both from commands and actions) and push at the end
+    let mut seq_keymaps_acc: Vec<(String, String, Option<String>)> = Vec::new();
     if let Ok(v) = tbl.get::<u32>("config_version") {
       cfg_mut.config_version = v;
     }
@@ -288,11 +315,24 @@ fn install_lv_api(
       if let Ok(n) = ui_tbl.get::<u64>("max_list_items") {
         ui.max_list_items = n as usize;
       }
+      if let Ok(s) = ui_tbl.get::<String>("date_format") {
+        ui.date_format = Some(s);
+      }
+      if let Ok(row_tbl) = ui_tbl.get::<Table>("row") {
+        let mut rf = UiRowFormat::default();
+        if let Ok(s) = row_tbl.get::<String>("icon") { rf.icon = s; }
+        if let Ok(s) = row_tbl.get::<String>("left") { rf.left = s; }
+        if let Ok(s) = row_tbl.get::<String>("middle") { rf.middle = s; }
+        if let Ok(s) = row_tbl.get::<String>("right") { rf.right = s; }
+        ui.row = Some(rf);
+      }
+      if let Ok(s) = ui_tbl.get::<String>("display_mode") {
+        ui.display_mode = Some(s);
+      }
       cfg_mut.ui = ui;
     }
     if let Ok(cmds_tbl) = tbl.get::<Table>("commands") {
       let mut cmds = Vec::new();
-      let mut seq_keymaps: Vec<(String, String, Option<String>)> = Vec::new();
       for pair in cmds_tbl.pairs::<Value, Value>() {
         let (k, v) = pair?;
         if let Value::String(sname) = k {
@@ -329,6 +369,7 @@ fn install_lv_api(
           }
         } else if let Value::Integer(_) = k {
           if let Value::Table(t) = v {
+            // External shell command
             if let Ok(cmd_str) = t.get::<String>("cmd") {
               let desc = t.get::<String>("description").ok();
               let keymap = t.get::<String>("keymap").ok();
@@ -338,22 +379,40 @@ fn install_lv_api(
                 description: desc.clone(),
               });
               if let Some(kseq) = keymap {
-                seq_keymaps.push((kseq, format!("run_shell:{}", idx), desc));
+                seq_keymaps_acc.push((kseq, format!("run_shell:{}", idx), desc));
+              }
+            }
+            // Internal action
+            if let Ok(action_str) = t.get::<String>("action") {
+              let desc = t.get::<String>("description").ok();
+              if let Ok(kseq) = t.get::<String>("keymap") {
+                seq_keymaps_acc.push((kseq, action_str, desc));
               }
             }
           }
         }
       }
       cfg_mut.commands = cmds;
-      // Also support array-style entries: list of tables with cmd, description, keymap
-      // seq_keymaps already collected in the loop above
-      drop(cfg_mut);
-      // Push accumulated keymaps in one borrow to satisfy borrow checker
-      {
-        let mut km = maps_for_config.borrow_mut();
-        for (seq, action, desc) in seq_keymaps.into_iter() {
-          km.push(KeyMapping { sequence: seq, action, description: desc });
+    }
+
+    // Separate top-level actions table for internal actions
+    if let Ok(actions_tbl) = tbl.get::<Table>("actions") {
+      for pair in actions_tbl.sequence_values::<Value>() {
+        if let Value::Table(t) = pair? {
+          if let (Ok(kseq), Ok(action_str)) = (t.get::<String>("keymap"), t.get::<String>("action")) {
+            let desc = t.get::<String>("description").ok();
+            seq_keymaps_acc.push((kseq, action_str, desc));
+          }
         }
+      }
+    }
+
+    // Push accumulated keymaps (from commands and actions) once
+    drop(cfg_mut);
+    {
+      let mut km = maps_for_config.borrow_mut();
+      for (seq, action, desc) in seq_keymaps_acc.into_iter() {
+        km.push(KeyMapping { sequence: seq, action, description: desc });
       }
     }
     Ok(true)

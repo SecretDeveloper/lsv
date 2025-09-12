@@ -17,6 +17,7 @@ mod ui;
 mod trace;
 mod actions;
 mod input;
+mod enums;
 mod app;
 
 pub use app::App;
@@ -84,16 +85,29 @@ fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 
-fn dispatch_action(
-  app: &mut App,
-  action: &str,
-) -> io::Result<bool> {
+fn dispatch_action(app: &mut App, action: &str) -> io::Result<bool> {
+  // Support multiple commands separated by ';'
+  let parts: Vec<&str> = action.split(';').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+  if parts.len() > 1 {
+    let mut any = false;
+    for p in parts {
+      if run_single_action(app, p)? {
+        any = true;
+      }
+      if app.should_quit { break; }
+    }
+    return Ok(any);
+  }
+  run_single_action(app, action)
+}
+
+fn run_single_action(app: &mut App, action: &str) -> io::Result<bool> {
   if let Some(rest) = action.strip_prefix("run_shell:") {
     if let Ok(idx) = rest.parse::<usize>() {
       if idx < app.config.shell_cmds.len() {
-                let sc = app.config.shell_cmds[idx].clone();
-                crate::cmd::run_shell_command(app, &sc);
-                return Ok(true);
+        let sc = app.config.shell_cmds[idx].clone();
+        crate::cmd::run_shell_command(app, &sc);
+        return Ok(true);
       }
     }
   }

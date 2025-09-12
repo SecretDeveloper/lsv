@@ -19,12 +19,7 @@ pub fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &crate::App) 
         }
     }
     let block = Block::default()
-        .borders(Borders::ALL)
-        .title(Line::from(vec![
-            Span::styled("Preview", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::raw("  "),
-            Span::styled(&app.preview_title, Style::default().fg(Color::Gray)),
-        ]));
+        .borders(Borders::ALL);
 
     let text: Vec<Line> = if let Some(lines) = dynamic_lines.as_ref() {
         if lines.is_empty() {

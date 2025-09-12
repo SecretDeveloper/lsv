@@ -33,44 +33,52 @@ lv loads a Lua config from the first of:
 
 Top‑level Lua API:
 
-- `lv.config({ ... })`: core settings (icons, ui, keys, commands)
-- `lv.mapkey(sequence, action, description?)`: bind keys/sequences to actions
+- `lv.config({ ... })`: core settings (icons, ui, keys, actions, commands)
 - `lv.set_previewer(function(ctx) ... end)`: return a shell command to render preview
 
-Only the new Lua function approach is supported (no legacy config files/lists).
+Only the new Lua function approach is supported (no legacy config files/lists). Keybindings are defined inside the `actions` and `commands` arrays.
 
 ### Example (based on test-config/config1/lua/init.lua)
 
 ```lua
--- Sample lv config -- place in $HOME/.config/lv/lua/init.lua 
+-- Sample lv config -- place in $HOME/.config/lv/lua/init.lua
 lv.config({
-	config_version = 1,
-	keys = { sequence_timeout_ms = 500 },
-	commands = {
-		{
-			description = "Open selected item in default editor in new tmux pane",
-			keymap = "E",
-			cmd = "&tmux split-window -h nvim '{path}'",
-		},
-		{
-			description = "Open selected item in default editor",
-			keymap = "e",
-			cmd = "nvim '{path}'",
-		},
-		{
-			description = "Open current directory in new tmux window",
-			keymap = "t",
-			cmd = "tmux new-window -c {directory}",
-		},
-	},
-	ui = {
-		panes = {
-			parent = 20,
-			current = 30,
-			preview = 50,
-		},
-		show_hidden = true,
-	},
+  config_version = 1,
+  keys = { sequence_timeout_ms = 500 },
+
+  -- External commands (spawned). keymap binds the entry.
+  commands = {
+    { description = "Open in new tmux pane", keymap = "E", cmd = "&tmux split-window -h nvim '{path}'" },
+    { description = "Edit in nvim",          keymap = "e", cmd = "nvim '{path}'" },
+    { description = "New tmux window",        keymap = "t", cmd = "tmux new-window -c {directory}" },
+  },
+
+  -- Internal actions. keymap binds action strings (see list below).
+  actions = {
+    { keymap = "y",  action = "quit",                 description = "Quit lv" },
+    { keymap = "sn", action = "sort:name",            description = "Sort by name" },
+    { keymap = "ss", action = "sort:size;show:size",  description = "Sort by size + show size" },
+    { keymap = "sr", action = "sort:reverse:toggle",  description = "Toggle reverse sort" },
+    { keymap = "zc", action = "show:created",         description = "Info: created date" },
+    { keymap = "zm", action = "show:modified",        description = "Info: modified date" },
+    { keymap = "za", action = "display:friendly",     description = "Display: friendly" },
+    { keymap = "zf", action = "display:absolute",     description = "Display: absolute" },
+  },
+
+  ui = {
+    panes = { parent = 20, current = 30, preview = 50 },
+    show_hidden = true,
+    date_format = "%Y-%m-%d %H:%M",
+    display_mode = "absolute",   -- or "friendly" (affects both dates and sizes)
+
+    -- Optional row layout: icon/left/middle/right with placeholders
+    row = {
+      icon = "{icon} ",
+      left = "{name}",
+      middle = "",
+      right = "{info}",
+    },
+  },
 })
 
 -- Previewer function (ctx):
@@ -113,6 +121,38 @@ lv.set_previewer(function(ctx)
 end)
 ```
 
+### Keybindings: Internal Actions
+
+Action strings (case‑insensitive):
+
+- Sorting: `sort:name`, `sort:size`, `sort:mtime`, `sort:reverse:toggle`
+- Info field: `show:none`, `show:size`, `show:created`, `show:modified`
+- Display mode: `display:friendly`, `display:absolute` (affects both dates and sizes)
+- Quit: `quit`
+
+Notes:
+- Multiple actions can be chained with `;` in a single binding, e.g. `"sort:size;show:size"`.
+- Legacy `info:*` strings are mapped internally (e.g., `info:date:friendly` → `display:friendly`). Prefer the `show:*` and `display:*` forms.
+
+### Which‑Key Overlay and Sequences
+
+- Type `?` to toggle a bottom overlay listing available keys (uses descriptions).
+- Composite sequences are supported (e.g., `ss`, `zc`). The overlay opens automatically when you type a registered prefix.
+- Timeout is configured by `keys.sequence_timeout_ms`.
+
+### Row Layout (icon/left/middle/right)
+
+Configure row sections under `ui.row`:
+
+- Templates accept placeholders `{icon}`, `{name}`, `{info}`.
+- Alignment: left and icon render first, middle is centered if space permits, right is right‑aligned.
+- Truncation policy: middle is truncated first, then right; right truncation preserves the end (so "3d ago" stays readable).
+
+### Rendering Modes and Formats
+
+- Dates: `display:absolute` uses `ui.date_format` (default `%Y-%m-%d %H:%M`); `display:friendly` uses relative strings (e.g., `3d ago`).
+- Sizes: `display:absolute` shows raw bytes with `B`; `display:friendly` uses human units (KB/MB/...).
+
 ### Placeholders (expanded in preview and commands)
 
 - `{path}`: absolute file path
@@ -122,6 +162,9 @@ end)
 - `{width}`, `{height}`: preview pane size in characters
 - `{preview_x}`, `{preview_y}`: preview pane top‑left coordinates
 - `$f`: shorthand for `{path}`
+
+Environment for external commands:
+- `LV_PATH` (selected file), `LV_DIR` (directory), `LV_NAME` (basename)
 
 ### Preview Notes
 
@@ -137,4 +180,4 @@ end)
 ## Status
 
 - Legacy configuration methods are removed. Use the Lua APIs described above.
-- Planned: which‑key overlay using descriptions, robust MIME detection (optional), async preview.
+- Planned: robust MIME detection (optional), async preview.

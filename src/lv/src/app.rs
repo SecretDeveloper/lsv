@@ -3,6 +3,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use mlua::RegistryKey;
 use ratatui::widgets::ListState;
@@ -15,7 +16,8 @@ pub struct DirEntryInfo {
   pub(crate) path: PathBuf,
   pub(crate) is_dir: bool,
   pub(crate) size: u64,
-  pub(crate) mtime: Option<std::time::SystemTime>,
+  pub(crate) mtime: Option<SystemTime>,
+  pub(crate) ctime: Option<SystemTime>,
 }
 
 pub struct App {
@@ -37,6 +39,8 @@ pub struct App {
   // In-memory runtime settings
   pub(crate) sort_key: SortKey,
   pub(crate) sort_reverse: bool,
+  pub(crate) info_mode: InfoMode,
+  pub(crate) display_mode: DisplayMode,
   // Signal to exit after handling a key/action
   pub(crate) should_quit: bool,
   // Key sequence handling
@@ -64,7 +68,8 @@ impl App {
             let meta = fs::metadata(&path).ok();
             let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             let mtime = meta.as_ref().and_then(|m| m.modified().ok());
-            tmp.push(DirEntryInfo { name, path, is_dir: ft.is_dir(), size, mtime });
+            let ctime = meta.as_ref().and_then(|m| m.created().ok());
+            tmp.push(DirEntryInfo { name, path, is_dir: ft.is_dir(), size, mtime, ctime });
           }
         }
       }
@@ -86,7 +91,8 @@ impl App {
             let meta = fs::metadata(&path).ok();
             let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             let mtime = meta.as_ref().and_then(|m| m.modified().ok());
-            tmp.push(DirEntryInfo { name, path, is_dir: ft.is_dir(), size, mtime });
+            let ctime = meta.as_ref().and_then(|m| m.created().ok());
+            tmp.push(DirEntryInfo { name, path, is_dir: ft.is_dir(), size, mtime, ctime });
           }
         }
       }
@@ -120,6 +126,8 @@ impl App {
       previewer_fn: None,
       sort_key: SortKey::Name,
       sort_reverse: false,
+      info_mode: InfoMode::None,
+      display_mode: DisplayMode::Absolute,
       should_quit: false,
       pending_seq: String::new(),
       last_seq_time: None,
@@ -143,6 +151,12 @@ impl App {
           } else {
             app.lua_engine = None;
             app.previewer_fn = None;
+          }
+          // Apply display_mode from config if present
+          if let Some(dm) = app.config.ui.display_mode.as_deref() {
+            if let Some(mode) = crate::enums::display_mode_from_str(dm) {
+              app.display_mode = mode;
+            }
           }
         }
         Err(e) => {
@@ -239,12 +253,14 @@ impl App {
             let mtime = meta
               .as_ref()
               .and_then(|m| m.modified().ok());
+            let ctime = meta.as_ref().and_then(|m| m.created().ok());
             Some(DirEntryInfo {
               name,
               path,
               is_dir: ft.is_dir(),
               size,
               mtime,
+              ctime,
             })
           }
           Err(_) => None,
@@ -328,6 +344,14 @@ impl App {
       "sort:reverse:toggle",
       "Toggle reverse sort",
     );
+    // Info panel toggles under 'z'
+    ensure(&mut self.keymaps, "zn", "info:none", "Info: none");
+    ensure(&mut self.keymaps, "zs", "info:size", "Info: size");
+    ensure(&mut self.keymaps, "zc", "info:created", "Info: created date");
+    ensure(&mut self.keymaps, "zm", "info:modified", "Info: modified date");
+    // Use 'za' for friendly date style
+    ensure(&mut self.keymaps, "za", "display:friendly", "Display: friendly");
+    ensure(&mut self.keymaps, "zf", "display:absolute", "Display: absolute");
   }
 }
 
@@ -356,4 +380,17 @@ fn sanitize_line(s: &str) -> String {
     }
   }
   out
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InfoMode {
+  None,
+  Size,
+  Created,
+  Modified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DisplayMode {
+  Absolute,
+  Friendly,
 }
