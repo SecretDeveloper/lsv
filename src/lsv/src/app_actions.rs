@@ -144,6 +144,17 @@ fn apply_config_data(app: &mut App, data: &crate::config_data::ConfigData) {
     redraw_only = true;
   }
 
+  // Row widths affect layout only
+  let cur_widths = app.config.ui.row_widths.clone().unwrap_or_default();
+  let new_widths = match data.ui.row_widths.as_ref() {
+    Some(rw) => crate::config::UiRowWidths { icon: rw.icon, left: rw.left, middle: rw.middle, right: rw.right },
+    None => crate::config::UiRowWidths::default(),
+  };
+  if cur_widths != new_widths {
+    app.config.ui.row_widths = Some(new_widths);
+    redraw_only = true;
+  }
+
   // Theme appearance affects render only
   let mut theme_changed = false;
   let cur_theme = app.config.ui.theme.clone().unwrap_or_default();

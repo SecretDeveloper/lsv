@@ -166,66 +166,144 @@ pub fn draw_whichkey_panel(
   area: Rect,
   app: &crate::App,
 ) {
-  // Collect matching keymaps for the current prefix
-  let prefix = &app.whichkey_prefix;
-  let mut entries: Vec<(String, String)> = Vec::new();
+  // Build lookup: last mapping wins for duplicate sequences
+  use std::collections::HashMap;
+  let mut map: HashMap<&str, (&str, &str)> = HashMap::new();
   for km in &app.keymaps {
-    if km.sequence.starts_with(prefix) {
-      let label = km
-        .description
-        .as_ref()
-        .cloned()
-        .unwrap_or_else(|| km.action.clone());
-      entries.push((km.sequence.clone(), label));
+    let label = km.description.as_deref().unwrap_or(km.action.as_str());
+    map.insert(km.sequence.as_str(), (km.sequence.as_str(), label));
+  }
+
+  let prefix = app.whichkey_prefix.as_str();
+  // Bucket by next-prefix (prefix + next char)
+  let mut buckets: HashMap<String, Vec<(&str, &str)>> = HashMap::new();
+  for (seq, (_, label)) in map.into_iter() {
+    if seq.starts_with(prefix) && seq.len() > prefix.len() {
+      let mut np = String::with_capacity(prefix.len() + 1);
+      np.push_str(prefix);
+      if let Some(ch) = seq.chars().nth(prefix.chars().count()) {
+        np.push(ch);
+      } else {
+        continue;
+      }
+      buckets.entry(np).or_default().push((seq, label));
+    } else if seq == prefix {
+      // exact match binding at current prefix (unlikely); treat as its own bucket
+      buckets.entry(seq.to_string()).or_default().push((seq, label));
     }
   }
-  // If toggled via '?' with empty prefix, just show all entries
-  // Limit number of rows
-  let max_rows: usize = 12;
-  if entries.len() > max_rows {
-    entries.truncate(max_rows);
+
+  // Flatten into display entries, sorted alphabetically by key/prefix
+  #[derive(Clone)]
+  struct Entry { left: String, right: String, is_group: bool }
+  let mut entries: Vec<Entry> = Vec::new();
+  let mut keys: Vec<String> = buckets.keys().cloned().collect();
+  keys.sort();
+  for k in keys {
+    let list = buckets.get(&k).unwrap();
+    // Determine if single binding exactly equals this next-prefix
+    let mut exact_only = false;
+    if list.len() == 1 {
+      let (seq, _label) = list[0];
+      if seq == k { exact_only = true; }
+    }
+    if exact_only {
+      let (_seq, label) = list[0];
+      entries.push(Entry { left: k.clone(), right: label.to_string(), is_group: false });
+    } else {
+      let n = list.len();
+      let label = if n == 1 { "(1 binding)".to_string() } else { format!("({} bindings)", n) };
+      entries.push(Entry { left: k.clone(), right: label, is_group: true });
+    }
   }
 
-  let title_str = if prefix.is_empty() {
-    "Keys".to_string()
-  } else {
-    format!("Keys: prefix '{}'", prefix)
+  // If no matches, nothing to draw
+  if entries.is_empty() { return; }
+
+  // Layout: multiple columns as needed
+  let title_str = if prefix.is_empty() { "Keys".to_string() } else { format!("Keys: prefix '{}'", prefix) };
+  let mut block = Block::default().borders(Borders::ALL).title(Span::styled(
+    title_str,
+    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+  ));
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { block = block.style(Style::default().bg(bg)); }
+    if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { block = block.border_style(Style::default().fg(bfg)); }
+  }
+
+  // Compute desired height: 20% of screen by default, expand if columns overflow width
+  let inner_width = area.width.saturating_sub(2) as usize; // account for borders
+  let mut rows = ((area.height as u32 * 20) / 100) as u16;
+  if rows < 3 { rows = 3; }
+  if rows + 2 > area.height { rows = area.height.saturating_sub(2); }
+  if rows == 0 { rows = 1; }
+
+  // Function to compute column widths for a given row count
+  let compute_widths = |row_count: usize| -> (Vec<usize>, usize, usize) {
+    let rows_usize = row_count.max(1);
+    let cols = ((entries.len() + rows_usize - 1) / rows_usize).max(1);
+    let mut col_widths = vec![0usize; cols];
+    for c in 0..cols {
+      let mut w = 0usize;
+      for r in 0..rows_usize {
+        let idx = c * rows_usize + r;
+        if idx >= entries.len() { break; }
+        let e = &entries[idx];
+        let cell = format!("{}  {}", e.left, e.right);
+        let cw = UnicodeWidthStr::width(cell.as_str());
+        if cw > w { w = cw; }
+      }
+      col_widths[c] = w + 2; // inter-column gap
+    }
+    let total: usize = col_widths.iter().sum();
+    (col_widths, total, cols)
   };
-  let block = Block::default()
-    .borders(Borders::ALL)
-    .title(Span::styled(
-      title_str,
-      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-    ));
 
-  let items: Vec<ListItem> = entries
-    .into_iter()
-    .map(|(seq, label)| {
-      let line = Line::from(vec![
-        Span::styled(seq, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::raw("  "),
-        Span::styled(label, Style::default().fg(Color::Gray)),
-      ]);
-      ListItem::new(line)
-    })
-    .collect();
+  let mut rows_usize = rows as usize;
+  let (mut col_widths, mut total_width, mut cols) = compute_widths(rows_usize);
+  while total_width > inner_width && (rows_usize as u16) + 2 < area.height {
+    // Increase rows to reduce columns, then recompute
+    rows_usize += 1;
+    let res = compute_widths(rows_usize);
+    col_widths = res.0; total_width = res.1; cols = res.2;
+  }
 
-  // Panel height: items + borders + one padding row
-  let height = (items.len() as u16).saturating_add(2).max(3).min(area.height);
+  // Build lines row-wise using final rows_usize
+  let mut lines: Vec<Line> = Vec::new();
+  for r in 0..rows_usize {
+    let mut spans: Vec<Span> = Vec::new();
+    let mut consumed_any = false;
+    for c in 0..cols {
+      let idx = c * rows_usize + r;
+      if idx >= entries.len() { continue; }
+      consumed_any = true;
+      let e = &entries[idx];
+      let left_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+      let right_style = if e.is_group { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::Gray) };
+      let cell = format!("{}  {}", e.left, e.right);
+      let cw = UnicodeWidthStr::width(cell.as_str());
+      spans.push(Span::styled(e.left.clone(), left_style));
+      spans.push(Span::raw("  "));
+      spans.push(Span::styled(e.right.clone(), right_style));
+      // pad to column width
+      let pad = col_widths[c].saturating_sub(cw) as usize;
+      if pad > 0 { spans.push(Span::raw(" ".repeat(pad))); }
+    }
+    if consumed_any { lines.push(Line::from(spans)); }
+  }
 
-  // Place at bottom
-  let layout = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([Constraint::Min(0), Constraint::Length(height)])
-    .split(area);
+  // Render at bottom as before
+  let panel_height = (rows_usize as u16).saturating_add(2).min(area.height);
+  let layout = Layout::default().direction(Direction::Vertical).constraints([
+    Constraint::Min(0), Constraint::Length(panel_height)
+  ]).split(area);
   let panel = layout[1];
-
   f.render_widget(Clear, panel);
-  let list = List::new(items).block(block);
-  f.render_widget(list, panel);
+  let para = Paragraph::new(lines).block(block);
+  f.render_widget(para, panel);
 }
 
-fn human_size(bytes: u64) -> String {
+pub(crate) fn human_size(bytes: u64) -> String {
   const UNITS: [&str; 7] = ["B", "KB", "MB", "GB", "TB", "PB", "EB"];
   let mut val = bytes as f64;
   let mut idx = 0usize;
@@ -236,7 +314,7 @@ fn human_size(bytes: u64) -> String {
   if idx == 0 { format!("{} {}", bytes, UNITS[idx]) } else { format!("{:.1} {}", val, UNITS[idx]) }
 }
 
-fn format_time_abs(t: std::time::SystemTime, fmt: &str) -> String {
+pub(crate) fn format_time_abs(t: std::time::SystemTime, fmt: &str) -> String {
   use chrono::{DateTime, Local};
   // Convert to local DateTime
   let dt: DateTime<Local> = DateTime::from(t);
@@ -304,81 +382,51 @@ pub fn build_row_line(
   let perms_val = permissions_string(e);
   let icon_s = replace_placeholders(&fmt.icon, &icon_val, &name_val, &info_val, &perms_val);
   let left_s = replace_placeholders(&fmt.left, &icon_val, &name_val, &info_val, &perms_val);
-  let mid_s = replace_placeholders(&fmt.middle, &icon_val, &name_val, &info_val, &perms_val);
   let right_s = replace_placeholders(&fmt.right, &icon_val, &name_val, &info_val, &perms_val);
-  // Compose with truncation: [icon][left] [middle centered] [right aligned]
+  // Compose: [icon][left] ... [right aligned]
   let mut spans: Vec<Span> = Vec::new();
   let total = inner_width as i32;
+
+  // If fixed widths configured, fit each cell into its box
+  if let Some(rw) = app.config.ui.row_widths.as_ref() {
+    let iw = rw.icon as usize;
+    let lw = rw.left as usize;
+    let rw_w = rw.right as usize;
+    if iw + lw + rw_w > 0 && (iw + lw + rw_w) as i32 <= total {
+      let icon_cell = fit_cell(&icon_s, iw, false);
+      let left_cell = fit_cell(&left_s, lw, false);
+      let right_cell = fit_cell(&right_s, rw_w, true);
+      if iw > 0 { spans.push(Span::styled(icon_cell, base_style)); }
+      if lw > 0 { spans.push(Span::styled(left_cell, base_style)); }
+      if rw_w > 0 {
+        let mut s = Style::default().fg(Color::Gray);
+        if let Some(th) = app.config.ui.theme.as_ref() {
+          if let Some(fg) = th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v)) { s = s.fg(fg); }
+        }
+        spans.push(Span::styled(right_cell, s));
+      }
+      return Line::from(spans);
+    }
+  }
+
+  // Auto layout fallback
   let icon_w = UnicodeWidthStr::width(icon_s.as_str()) as i32;
   let left_w = UnicodeWidthStr::width(left_s.as_str()) as i32;
   let mut current_w = 0i32;
+  if !icon_s.is_empty() { spans.push(Span::styled(icon_s.clone(), base_style)); current_w += icon_w; }
+  if !left_s.is_empty() { spans.push(Span::styled(left_s.clone(), base_style)); current_w += left_w; }
 
-  if !icon_s.is_empty() {
-    spans.push(Span::styled(icon_s.clone(), base_style));
-    current_w += icon_w;
-  }
-  if !left_s.is_empty() {
-    spans.push(Span::styled(left_s.clone(), base_style));
-    current_w += left_w;
-  }
+  let right_txt = right_s.clone();
+  let right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
+  let space = (total - current_w).max(0);
 
-  // Compute available space for middle + gap + right
-  let mut right_txt = right_s.clone();
-  let mut right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
-  let mut mid_txt = mid_s.clone();
-  let mut mid_w = UnicodeWidthStr::width(mid_txt.as_str()) as i32;
-
-  let space_for_mid_and_gap_and_right = (total - current_w).max(0);
-  // Reserve at least 1 space before right if any content
-  if right_w > 0 && space_for_mid_and_gap_and_right > 0 {
-    // First, try to fit right; if not, truncate right after dropping mid
-    // Step 1: drop or truncate middle if needed
-    let middle_space = space_for_mid_and_gap_and_right.saturating_sub(1);
-    if mid_w > middle_space {
-      // truncate middle to available space (can be zero)
-      mid_txt = truncate_to_width(&mid_txt, middle_space as usize);
-      mid_w = UnicodeWidthStr::width(mid_txt.as_str()) as i32;
-    }
-    // Recompute remaining for right (with 1 space)
-    let remaining_for_right = space_for_mid_and_gap_and_right - mid_w - 1;
-    if remaining_for_right < right_w {
-      right_txt = truncate_tail_to_width(&right_txt, remaining_for_right.max(0) as usize);
-      right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
-    }
-
-    // After truncation, if still no room for right, drop middle entirely
-    let mut remaining = space_for_mid_and_gap_and_right - mid_w - 1;
-    if remaining < right_w {
-      mid_txt.clear();
-      mid_w = 0;
-      remaining = space_for_mid_and_gap_and_right - 1;
-      if remaining < right_w {
-        right_txt = truncate_tail_to_width(&right_txt, remaining.max(0) as usize);
-        right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
-      }
-    }
-
-    // Now place middle centered within middle_space and pad to right
-    let middle_space = space_for_mid_and_gap_and_right - 1 - right_w;
-    if mid_w > 0 && middle_space > 0 {
-      let mut mid_start = current_w + (middle_space - mid_w) / 2;
-      if mid_start < current_w { mid_start = current_w; }
-      let pad_before_mid = (mid_start - current_w) as usize;
-      if pad_before_mid > 0 { spans.push(Span::styled(" ".repeat(pad_before_mid), base_style)); }
-      spans.push(Span::styled(mid_txt.clone(), base_style));
-      current_w = mid_start + mid_w;
-    }
-
-    // Pad up to where right should start; allow zero gap if exact fit
-    let pad_before_right = (total - right_w - current_w).max(0) as usize;
+  if space > 0 {
+    // Right-align info text in remaining space
+    let pad_before_right = space.saturating_sub(right_w) as usize;
     if pad_before_right > 0 { spans.push(Span::styled(" ".repeat(pad_before_right), base_style)); }
     if right_w > 0 {
       let mut s = Style::default().fg(Color::Gray);
-      if let Some(th) = app.config.ui.theme.as_ref() {
-        if let Some(fg) = th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v)) {
-          s = s.fg(fg);
-        }
-      }
+      if let Some(th) = app.config.ui.theme.as_ref() { if let Some(fg) = th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v)) { s = s.fg(fg); } }
       spans.push(Span::styled(right_txt, s));
     }
   }
@@ -399,38 +447,55 @@ fn compute_icon(_app: &crate::App, _e: &crate::app::DirEntryInfo) -> String {
   " ".to_string()
 }
 
-fn permissions_string(e: &crate::app::DirEntryInfo) -> String {
+pub(crate) fn permissions_string(e: &crate::app::DirEntryInfo) -> String {
   #[cfg(unix)]
   {
     use std::os::unix::fs::PermissionsExt;
     let mut s = String::new();
-    s.push(if e.is_dir { 'd' } else { '-' });
-    if let Ok(meta) = std::fs::metadata(&e.path) {
-      let mode = meta.permissions().mode();
-      let classes = [(mode >> 6) & 0o7, (mode >> 3) & 0o7, mode & 0o7];
-      for c in classes { s.push_str(rwx(c as u8)); }
+    let (type_ch, mode) = if let Ok(meta) = std::fs::metadata(&e.path) {
+      let ft = meta.file_type();
+      let t = if e.is_dir || ft.is_dir() { 'd' } else { '-' };
+      (t, meta.permissions().mode())
     } else {
+      ('?', 0)
+    };
+    s.push(type_ch);
+    if mode == 0 {
       s.push_str("?????????");
+      return s;
     }
+    // user
+    s.push(if mode & 0o400 != 0 { 'r' } else { '-' });
+    s.push(if mode & 0o200 != 0 { 'w' } else { '-' });
+    s.push(match (mode & 0o100 != 0, mode & 0o4000 != 0) {
+      (true, true) => 's',
+      (false, true) => 'S',
+      (true, false) => 'x',
+      (false, false) => '-',
+    });
+    // group
+    s.push(if mode & 0o040 != 0 { 'r' } else { '-' });
+    s.push(if mode & 0o020 != 0 { 'w' } else { '-' });
+    s.push(match (mode & 0o010 != 0, mode & 0o2000 != 0) {
+      (true, true) => 's',
+      (false, true) => 'S',
+      (true, false) => 'x',
+      (false, false) => '-',
+    });
+    // other
+    s.push(if mode & 0o004 != 0 { 'r' } else { '-' });
+    s.push(if mode & 0o002 != 0 { 'w' } else { '-' });
+    s.push(match (mode & 0o001 != 0, mode & 0o1000 != 0) {
+      (true, true) => 't',
+      (false, true) => 'T',
+      (true, false) => 'x',
+      (false, false) => '-',
+    });
     s
   }
   #[cfg(not(unix))]
   {
     String::new()
-  }
-}
-
-#[cfg(unix)]
-fn rwx(bits: u8) -> &'static str {
-  match bits & 0o7 {
-    0o0 => "---",
-    0o1 => "--x",
-    0o2 => "-w-",
-    0o3 => "-wx",
-    0o4 => "r--",
-    0o5 => "r-x",
-    0o6 => "rw-",
-    _ => "rwx",
   }
 }
 
@@ -458,6 +523,17 @@ fn truncate_tail_to_width(s: &str, max_w: usize) -> String {
     w += cw;
   }
   out_rev.into_iter().rev().collect()
+}
+
+fn fit_cell(text: &str, width: usize, align_right: bool) -> String {
+  if width == 0 { return String::new(); }
+  let w = UnicodeWidthStr::width(text);
+  if w == width { return text.to_string(); }
+  if w < width {
+    let pad = " ".repeat(width - w);
+    return if align_right { format!("{}{}", pad, text) } else { format!("{}{}", text, pad) };
+  }
+  if align_right { truncate_tail_to_width(text, width) } else { truncate_to_width(text, width) }
 }
 
 fn build_row_item(

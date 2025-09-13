@@ -71,6 +71,7 @@ pub struct UiConfig {
   pub max_list_items: usize,
   pub date_format: Option<String>,
   pub row: Option<UiRowFormat>,
+  pub row_widths: Option<UiRowWidths>,
   pub display_mode: Option<String>,
   pub sort: Option<String>,
   pub sort_reverse: Option<bool>,
@@ -87,6 +88,7 @@ impl Default for UiConfig {
       max_list_items: 5000,
       date_format: None,
       row: None,
+      row_widths: None,
       display_mode: None,
       sort: None,
       sort_reverse: None,
@@ -113,6 +115,14 @@ impl Default for UiRowFormat {
       right: "{info}".to_string(),
     }
   }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UiRowWidths {
+  pub icon: u16,
+  pub left: u16,
+  pub middle: u16,
+  pub right: u16,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -331,44 +341,37 @@ fn install_lsv_api(
       }
       cfg_mut.keys = keys;
     }
-    // ui
+    // ui (merge overlay: only provided fields overwrite existing)
     if let Ok(ui_tbl) = tbl.get::<Table>("ui") {
-      let mut ui = UiConfig::default();
       if let Ok(panes_tbl) = ui_tbl.get::<Table>("panes") {
-        let mut panes = UiPanes { parent: 20, current: 30, preview: 50 };
-        if let Ok(v) = panes_tbl.get::<u16>("parent") {
-          panes.parent = v;
-        }
-        if let Ok(v) = panes_tbl.get::<u16>("current") {
-          panes.current = v;
-        }
-        if let Ok(v) = panes_tbl.get::<u16>("preview") {
-          panes.preview = v;
-        }
-        ui.panes = Some(panes);
+        let mut panes = cfg_mut.ui.panes.clone().unwrap_or(UiPanes { parent: 30, current: 40, preview: 30 });
+        if let Ok(v) = panes_tbl.get::<u16>("parent") { panes.parent = v; }
+        if let Ok(v) = panes_tbl.get::<u16>("current") { panes.current = v; }
+        if let Ok(v) = panes_tbl.get::<u16>("preview") { panes.preview = v; }
+        cfg_mut.ui.panes = Some(panes);
       }
-      if let Ok(b) = ui_tbl.get::<bool>("show_hidden") {
-        ui.show_hidden = b;
-      }
-      if let Ok(n) = ui_tbl.get::<u64>("preview_lines") {
-        ui.preview_lines = n as usize;
-      }
-      if let Ok(n) = ui_tbl.get::<u64>("max_list_items") {
-        ui.max_list_items = n as usize;
-      }
-      if let Ok(s) = ui_tbl.get::<String>("date_format") {
-        ui.date_format = Some(s);
-      }
+      if let Ok(b) = ui_tbl.get::<bool>("show_hidden") { cfg_mut.ui.show_hidden = b; }
+      if let Ok(n) = ui_tbl.get::<u64>("preview_lines") { cfg_mut.ui.preview_lines = n as usize; }
+      if let Ok(n) = ui_tbl.get::<u64>("max_list_items") { cfg_mut.ui.max_list_items = n as usize; }
+      if let Ok(s) = ui_tbl.get::<String>("date_format") { cfg_mut.ui.date_format = Some(s); }
       if let Ok(row_tbl) = ui_tbl.get::<Table>("row") {
-        let mut rf = UiRowFormat::default();
+        let mut rf = cfg_mut.ui.row.clone().unwrap_or_default();
         if let Ok(s) = row_tbl.get::<String>("icon") { rf.icon = s; }
         if let Ok(s) = row_tbl.get::<String>("left") { rf.left = s; }
         if let Ok(s) = row_tbl.get::<String>("middle") { rf.middle = s; }
         if let Ok(s) = row_tbl.get::<String>("right") { rf.right = s; }
-        ui.row = Some(rf);
+        cfg_mut.ui.row = Some(rf);
+      }
+      if let Ok(widths_tbl) = ui_tbl.get::<Table>("row_widths") {
+        let mut rw = cfg_mut.ui.row_widths.clone().unwrap_or_default();
+        if let Ok(v) = widths_tbl.get::<u64>("icon") { rw.icon = v as u16; }
+        if let Ok(v) = widths_tbl.get::<u64>("left") { rw.left = v as u16; }
+        if let Ok(v) = widths_tbl.get::<u64>("middle") { rw.middle = v as u16; }
+        if let Ok(v) = widths_tbl.get::<u64>("right") { rw.right = v as u16; }
+        cfg_mut.ui.row_widths = Some(rw);
       }
       if let Ok(theme_tbl) = ui_tbl.get::<Table>("theme") {
-        let mut th = UiTheme::default();
+        let mut th = cfg_mut.ui.theme.clone().unwrap_or_default();
         if let Ok(s) = theme_tbl.get::<String>("pane_bg") { th.pane_bg = Some(s); }
         if let Ok(s) = theme_tbl.get::<String>("border_fg") { th.border_fg = Some(s); }
         if let Ok(s) = theme_tbl.get::<String>("item_fg") { th.item_fg = Some(s); }
@@ -386,21 +389,12 @@ fn install_lsv_api(
         if let Ok(s) = theme_tbl.get::<String>("hidden_bg") { th.hidden_bg = Some(s); }
         if let Ok(s) = theme_tbl.get::<String>("exec_fg") { th.exec_fg = Some(s); }
         if let Ok(s) = theme_tbl.get::<String>("exec_bg") { th.exec_bg = Some(s); }
-        ui.theme = Some(th);
+        cfg_mut.ui.theme = Some(th);
       }
-      if let Ok(s) = ui_tbl.get::<String>("display_mode") {
-        ui.display_mode = Some(s);
-      }
-      if let Ok(sort_str) = ui_tbl.get::<String>("sort") {
-        ui.sort = Some(sort_str);
-      }
-      if let Ok(b) = ui_tbl.get::<bool>("sort_reverse") {
-        ui.sort_reverse = Some(b);
-      }
-      if let Ok(show_str) = ui_tbl.get::<String>("show") {
-        ui.show = Some(show_str);
-      }
-      cfg_mut.ui = ui;
+      if let Ok(s) = ui_tbl.get::<String>("display_mode") { cfg_mut.ui.display_mode = Some(s); }
+      if let Ok(sort_str) = ui_tbl.get::<String>("sort") { cfg_mut.ui.sort = Some(sort_str); }
+      if let Ok(b) = ui_tbl.get::<bool>("sort_reverse") { cfg_mut.ui.sort_reverse = Some(b); }
+      if let Ok(show_str) = ui_tbl.get::<String>("show") { cfg_mut.ui.show = Some(show_str); }
     }
     if let Ok(cmds_tbl) = tbl.get::<Table>("commands") {
       let mut cmds = Vec::new();

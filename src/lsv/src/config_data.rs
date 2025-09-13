@@ -47,6 +47,7 @@ pub struct UiData {
   pub preview_lines: usize,
   pub max_list_items: usize,
   pub row: UiRowData,
+  pub row_widths: Option<super::config::UiRowWidths>,
   pub theme: Option<UiThemeData>,
 }
 
@@ -96,6 +97,14 @@ pub fn to_lua_config_table(lua: &Lua, app: &crate::App) -> mlua::Result<Table> {
   row.set("middle", row_cfg.middle)?;
   row.set("right", row_cfg.right)?;
   ui.set("row", row)?;
+  if let Some(rw) = app.config.ui.row_widths.as_ref() {
+    let rw_tbl = lua.create_table()?;
+    rw_tbl.set("icon", rw.icon as u64)?;
+    rw_tbl.set("left", rw.left as u64)?;
+    rw_tbl.set("middle", rw.middle as u64)?;
+    rw_tbl.set("right", rw.right as u64)?;
+    ui.set("row_widths", rw_tbl)?;
+  }
 
   // theme
   if let Some(theme) = app.config.ui.theme.as_ref() {
@@ -193,6 +202,17 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String> {
     preview_lines: preview_lines_u64 as usize,
     max_list_items: max_list_items_u64 as usize,
     row,
+    row_widths: match ui_tbl.get::<Value>("row_widths") {
+      Ok(Value::Table(t)) => {
+        let mut rw = super::config::UiRowWidths::default();
+        rw.icon = t.get::<u64>("icon").unwrap_or(0) as u16;
+        rw.left = t.get::<u64>("left").unwrap_or(0) as u16;
+        rw.middle = t.get::<u64>("middle").unwrap_or(0) as u16;
+        rw.right = t.get::<u64>("right").unwrap_or(0) as u16;
+        Some(rw)
+      }
+      _ => None,
+    },
     theme,
   };
 

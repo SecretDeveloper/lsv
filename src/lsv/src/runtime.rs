@@ -59,6 +59,7 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
   disable_raw_mode()?;
   execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
   terminal.show_cursor()?;
+  // Clear caches tied to this session
+  crate::ui::clear_owner_cache();
   res
 }
-
