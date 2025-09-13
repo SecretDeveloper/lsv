@@ -176,7 +176,7 @@ pub struct ConfigPaths {
 
 /// Discover the lsv config directory and entrypoint.
 /// Order:
-/// 1) $LSV_CONFIG_DIR (root) → expects `lua/init.lua` inside
+/// 1) $LSV_CONFIG_DIR (root) → expects `init.lua` inside
 /// 2) $XDG_CONFIG_HOME/lsv
 /// 3) $HOME/.config/lsv
 pub fn discover_config_paths() -> std::io::Result<ConfigPaths> {
@@ -201,7 +201,7 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths> {
     Path::new(".config").join("lsv")
   };
 
-  let entry = root.join("lua").join("init.lua");
+  let entry = root.join("init.lua");
   let exists = fs::metadata(&entry).map(|m| m.is_file()).unwrap_or(false);
   Ok(ConfigPaths { root, entry, exists })
 }
