@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "src/lv",
+    "src/lsv",
 ]
 
-  resolver="3"
+resolver="3"

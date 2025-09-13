@@ -422,6 +422,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lsv"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crossterm 0.29.0",
+ "mlua",
+ "ratatui",
+ "unicode-width 0.1.14",
+ "whoami",
+]
+
+[[package]]
 name = "lua-src"
 version = "548.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -438,18 +450,6 @@ checksum = "813bd31f2759443affa687c0d9c5eb5cf6cb0e898810ab197408431d746054bf"
 dependencies = [
  "cc",
  "which",
-]
-
-[[package]]
-name = "lv"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "crossterm 0.29.0",
- "mlua",
- "ratatui",
- "unicode-width 0.1.14",
- "whoami",
 ]
 
 [[package]]

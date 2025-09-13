@@ -133,15 +133,15 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
   let lua = engine.lua();
   let func = lua.registry_value::<mlua::Function>(&funcs[idx])
     .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("lua fn lookup: {e}")))?;
-  // Build lv helpers (placeholder; reserved for future helpers)
-  let lv_tbl = lua.create_table().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+  // Build lsv helpers (placeholder; reserved for future helpers)
+  let lsv_tbl = lua.create_table().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
   // Build config snapshot table
   let cfg_tbl = crate::config_data::to_lua_config_table(lua, app)
     .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("build config tbl: {e}")))?;
 
-  // Call function(lv, config): may return a table; if not, use mutated arg
+  // Call function(lsv, config): may return a table; if not, use mutated arg
   let ret_val: mlua::Value = func
-    .call((lv_tbl, cfg_tbl.clone()))
+    .call((lsv_tbl, cfg_tbl.clone()))
     .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("lua fn: {e}")))?;
   let candidate_tbl = match ret_val {
     mlua::Value::Table(t) => t,

@@ -1,4 +1,4 @@
-use ratatui::layout::{Constraint, Direction, Layout, Rect, Alignment};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
@@ -197,7 +197,7 @@ fn human_size(bytes: u64) -> String {
 }
 
 fn format_time_abs(t: std::time::SystemTime, fmt: &str) -> String {
-  use chrono::{DateTime, Local, TimeZone};
+  use chrono::{DateTime, Local};
   // Convert to local DateTime
   let dt: DateTime<Local> = DateTime::from(t);
   dt.format(fmt).to_string()
@@ -286,12 +286,12 @@ fn build_row_item(
   let mut mid_txt = mid_s.clone();
   let mut mid_w = UnicodeWidthStr::width(mid_txt.as_str()) as i32;
 
-  let mut space_for_mid_and_gap_and_right = (total - current_w).max(0);
+  let space_for_mid_and_gap_and_right = (total - current_w).max(0);
   // Reserve at least 1 space before right if any content
   if right_w > 0 && space_for_mid_and_gap_and_right > 0 {
     // First, try to fit right; if not, truncate right after dropping mid
     // Step 1: drop or truncate middle if needed
-    let mut middle_space = space_for_mid_and_gap_and_right.saturating_sub(1);
+    let middle_space = space_for_mid_and_gap_and_right.saturating_sub(1);
     if mid_w > middle_space {
       // truncate middle to available space (can be zero)
       mid_txt = truncate_to_width(&mid_txt, middle_space as usize);

@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
@@ -90,9 +90,9 @@ fn run_previewer_command(cmd: &str, dir_str: &str, path_str: &str, name_str: &st
         .arg("-lc")
         .arg(cmd)
         .current_dir(dir_str)
-        .env("LV_PATH", path_str)
-        .env("LV_DIR", dir_str)
-        .env("LV_NAME", name_str)
+        .env("LSV_PATH", path_str)
+        .env("LSV_DIR", dir_str)
+        .env("LSV_NAME", name_str)
         .env("FORCE_COLOR", "1")
         .env("CLICOLOR_FORCE", "1")
         .output()

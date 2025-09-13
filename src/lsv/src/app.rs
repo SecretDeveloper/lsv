@@ -182,7 +182,7 @@ impl App {
           }
         }
         Err(e) => {
-          eprintln!("lv: config load error: {}", e);
+          eprintln!("lsv: config load error: {}", e);
           app.config_paths = Some(paths);
           app.status_error = Some(format!("Config error: {}", e));
         }
@@ -360,7 +360,7 @@ impl App {
         });
       }
     }
-    ensure(&mut self.keymaps, "q", "quit", "Quit lv");
+    ensure(&mut self.keymaps, "q", "quit", "Quit lsv");
     ensure(&mut self.keymaps, "ss", "sort:size", "Sort by size");
     ensure(&mut self.keymaps, "sn", "sort:name", "Sort by name");
     ensure(

@@ -2,7 +2,7 @@ use std::fs::OpenOptions;
 use std::path::PathBuf;
 
 fn enabled() -> bool {
-    std::env::var("LV_TRACE")
+    std::env::var("LSV_TRACE")
         .map(|v| !v.is_empty() && v != "0")
         .unwrap_or(false)
 }
@@ -24,22 +24,14 @@ pub fn log<S: AsRef<str>>(s: S) {
     }
 }
 
-pub fn log_snippet(tag: &str, text: &str, max: usize) {
-    if !enabled() {
-        return;
-    }
-    let snippet = if text.len() > max { &text[..max] } else { text };
-    log(format!("{}:\n{}", tag, snippet));
-}
-
 fn file_path() -> Option<PathBuf> {
-    if let Ok(fp) = std::env::var("LV_TRACE_FILE") {
+    if let Ok(fp) = std::env::var("LSV_TRACE_FILE") {
         return Some(PathBuf::from(fp));
     }
     if let Ok(tmp) = std::env::var("TMPDIR") {
-        return Some(PathBuf::from(tmp).join("lv-trace.log"));
+        return Some(PathBuf::from(tmp).join("lsv-trace.log"));
     }
-    Some(PathBuf::from("/tmp/lv-trace.log"))
+    Some(PathBuf::from("/tmp/lsv-trace.log"))
 }
 
 fn now_millis() -> u128 {
@@ -49,4 +41,3 @@ fn now_millis() -> u128 {
         .map(|d| d.as_millis())
         .unwrap_or(0)
 }
-

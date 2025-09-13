@@ -52,9 +52,9 @@ pub fn run_shell_command(app: &mut crate::App, sc: &crate::config::ShellCmd) {
             .arg("-lc")
             .arg(&cmd_trimmed)
             .current_dir(&cwd)
-            .env("LV_PATH", &path_str)
-            .env("LV_DIR", &dir_str)
-            .env("LV_NAME", &name_str)
+            .env("LSV_PATH", &path_str)
+            .env("LSV_DIR", &dir_str)
+            .env("LSV_NAME", &name_str)
             .status();
         let _ = enable_raw_mode();
         let mut stdout2 = io::stdout();
@@ -75,9 +75,9 @@ pub fn run_shell_command(app: &mut crate::App, sc: &crate::config::ShellCmd) {
         .arg("-lc")
         .arg(&cmd_trimmed)
         .current_dir(&cwd)
-        .env("LV_PATH", &path_str)
-        .env("LV_DIR", &dir_str)
-        .env("LV_NAME", &name_str)
+        .env("LSV_PATH", &path_str)
+        .env("LSV_DIR", &dir_str)
+        .env("LSV_NAME", &name_str)
         .spawn()
     {
         Ok(child) => crate::trace::log(format!("[cmd] spawned pid={}", child.id())),

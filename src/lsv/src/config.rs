@@ -118,10 +118,10 @@ pub struct ShellCmd {
 }
 
 
-/// LuaEngine creates a sandboxed Lua runtime for lv configuration.
+/// LuaEngine creates a sandboxed Lua runtime for lsv configuration.
 /// Safety model:
 /// - Load only BASE | STRING | TABLE | MATH stdlibs (no io/os/debug/package).
-/// - Provide an `lv` table with stub functions (`config`, `mapkey`).
+/// - Provide an `lsv` table with stub functions (`config`, `mapkey`).
 /// - A restricted `require()` will be added in a later step.
 pub struct LuaEngine {
   lua: Lua,
@@ -135,26 +135,26 @@ impl LuaEngine {
       LuaOptions::default(),
     )?;
 
-    // Inject `lv` namespace with stub APIs that accept calls from user config.
+    // Inject `lsv` namespace with stub APIs that accept calls from user config.
     {
       let globals = lua.globals();
-      let lv: Table = lua.create_table()?;
+      let lsv: Table = lua.create_table()?;
 
-      // lv.config(tbl): accept and store later (currently a no-op returning true)
+      // lsv.config(tbl): accept and store later (currently a no-op returning true)
       let config_fn = lua.create_function(|_, _tbl: mlua::Value| {
         // Parsing/validation will be implemented in later steps.
         Ok(true)
       })?;
 
-      // lv.mapkey(seq, action, description?): accept and store later (no-op returning true)
+      // lsv.mapkey(seq, action, description?): accept and store later (no-op returning true)
       let mapkey_fn = lua.create_function(
         |_, (_seq, _action, _desc): (String, String, Option<String>)| Ok(true),
       )?;
 
-      lv.set("config", config_fn)?;
-      lv.set("mapkey", mapkey_fn)?;
+      lsv.set("config", config_fn)?;
+      lsv.set("mapkey", mapkey_fn)?;
 
-      globals.set("lv", lv)?;
+      globals.set("lsv", lsv)?;
     }
 
     Ok(Self { lua })
@@ -166,7 +166,7 @@ impl LuaEngine {
   }
 }
 
-/// Discovered configuration locations for lv
+/// Discovered configuration locations for lsv
 #[derive(Debug, Clone)]
 pub struct ConfigPaths {
   pub root: PathBuf,
@@ -174,15 +174,15 @@ pub struct ConfigPaths {
   pub exists: bool,
 }
 
-/// Discover the lv config directory and entrypoint.
+/// Discover the lsv config directory and entrypoint.
 /// Order:
-/// 1) $LV_CONFIG_DIR (root) → expects `lua/init.lua` inside
-/// 2) $XDG_CONFIG_HOME/lv
-/// 3) $HOME/.config/lv
+/// 1) $LSV_CONFIG_DIR (root) → expects `lua/init.lua` inside
+/// 2) $XDG_CONFIG_HOME/lsv
+/// 3) $HOME/.config/lsv
 pub fn discover_config_paths() -> std::io::Result<ConfigPaths> {
   // Helper to decide a config root
   fn root_from_env() -> Option<PathBuf> {
-    if let Ok(dir) = env::var("LV_CONFIG_DIR") {
+    if let Ok(dir) = env::var("LSV_CONFIG_DIR") {
       if !dir.trim().is_empty() {
         return Some(PathBuf::from(dir));
       }
@@ -193,12 +193,12 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths> {
   let root = if let Some(over) = root_from_env() {
     over
   } else if let Ok(xdg) = env::var("XDG_CONFIG_HOME") {
-    Path::new(&xdg).join("lv")
+    Path::new(&xdg).join("lsv")
   } else if let Ok(home) = env::var("HOME") {
-    Path::new(&home).join(".config").join("lv")
+    Path::new(&home).join(".config").join("lsv")
   } else {
-    // Fallback to current dir .config/lv to avoid empty paths in exotic envs
-    Path::new(".config").join("lv")
+    // Fallback to current dir .config/lsv to avoid empty paths in exotic envs
+    Path::new(".config").join("lsv")
   };
 
   let entry = root.join("lua").join("init.lua");
@@ -225,14 +225,14 @@ pub fn load_config(
 
   let previewer_key_acc: Rc<RefCell<Option<RegistryKey>>> = Rc::new(RefCell::new(None));
   let lua_action_keys_acc: Rc<RefCell<Vec<RegistryKey>>> = Rc::new(RefCell::new(Vec::new()));
-  install_lv_api(
+  install_lsv_api(
     lua,
     Rc::clone(&config_acc),
     Rc::clone(&keymaps_acc),
     Rc::clone(&previewer_key_acc),
     Rc::clone(&lua_action_keys_acc),
   )
-  .map_err(|e| io_err(format!("lv api install failed: {e}")))?;
+  .map_err(|e| io_err(format!("lsv api install failed: {e}")))?;
   install_require(lua, &paths.root.join("lua"))
     .map_err(|e| io_err(format!("require install failed: {e}")))?;
 
@@ -256,7 +256,7 @@ fn io_err(msg: String) -> std::io::Error {
   std::io::Error::new(std::io::ErrorKind::Other, msg)
 }
 
-fn install_lv_api(
+fn install_lsv_api(
   lua: &Lua,
   cfg: Rc<RefCell<Config>>,
   maps: Rc<RefCell<Vec<KeyMapping>>>,
@@ -264,12 +264,12 @@ fn install_lv_api(
   lua_action_keys_out: Rc<RefCell<Vec<RegistryKey>>>,
 ) -> mlua::Result<()> {
   let globals = lua.globals();
-  let lv: Table = match globals.get::<Value>("lv") {
+  let lsv: Table = match globals.get::<Value>("lsv") {
     Ok(Value::Table(t)) => t,
     _ => lua.create_table()?,
   };
 
-  // lv.config(table)
+  // lsv.config(table)
   let cfg_clone = Rc::clone(&cfg);
   let maps_for_config = Rc::clone(&maps);
   let actions_for_config = Rc::clone(&lua_action_keys_out);
@@ -419,7 +419,7 @@ fn install_lv_api(
       let mut acc = actions_for_config.borrow_mut();
       for pair in actions_tbl.sequence_values::<Value>() {
         if let Value::Table(t) = pair? {
-          // Lua function action: fn = function(lv, config) ... end
+          // Lua function action: fn = function(lsv, config) ... end
           if let Ok(func) = t.get::<Function>("fn") {
             let keymap = t.get::<String>("keymap")?;
             let desc = t.get::<String>("description").ok();
@@ -450,7 +450,7 @@ fn install_lv_api(
     Ok(true)
   })?;
 
-  // lv.mapkey(seq, action, desc?)
+  // lsv.mapkey(seq, action, desc?)
   let maps_clone = Rc::clone(&maps);
   let mapkey_fn = lua.create_function(
     move |_, (seq, action, desc): (String, String, Option<String>)| {
@@ -463,7 +463,7 @@ fn install_lv_api(
     },
   )?;
 
-  // lv.set_previewer(function(ctx) -> string|nil)
+  // lsv.set_previewer(function(ctx) -> string|nil)
   let prev_out = Rc::clone(&previewer_key_out);
   let set_previewer_fn = lua.create_function(move |lua, func: Function| {
     let key = lua.create_registry_value(func)?;
@@ -471,7 +471,7 @@ fn install_lv_api(
     Ok(true)
   })?;
 
-  // lv.map_action(keymap, description, fn)
+  // lsv.map_action(keymap, description, fn)
   let maps_for_actions_outer = Rc::clone(&maps);
   let actions_acc_outer = Rc::clone(&lua_action_keys_out);
   let map_action_fn = lua.create_function(move |lua, (keymap, desc, func): (String, String, Function)| {
@@ -482,7 +482,7 @@ fn install_lv_api(
     Ok(true)
   })?;
 
-  // lv.map_command(keymap, description, cmd_string)
+  // lsv.map_command(keymap, description, cmd_string)
   let cfg_for_cmds = Rc::clone(&cfg);
   let maps_for_cmds = Rc::clone(&maps);
   let map_command_fn = lua.create_function(move |_, (keymap, desc, cmd): (String, String, String)| {
@@ -494,12 +494,12 @@ fn install_lv_api(
     Ok(true)
   })?;
 
-  lv.set("config", config_fn)?;
-  lv.set("mapkey", mapkey_fn)?;
-  lv.set("set_previewer", set_previewer_fn)?;
-  lv.set("map_action", map_action_fn)?;
-  lv.set("map_command", map_command_fn)?;
-  globals.set("lv", lv)?;
+  lsv.set("config", config_fn)?;
+  lsv.set("mapkey", mapkey_fn)?;
+  lsv.set("set_previewer", set_previewer_fn)?;
+  lsv.set("map_action", map_action_fn)?;
+  lsv.set("map_command", map_command_fn)?;
+  globals.set("lsv", lsv)?;
   Ok(())
 }
 
