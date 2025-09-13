@@ -8,6 +8,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+const BUILTIN_DEFAULTS_LUA: &str = include_str!("../lua/defaults.lua");
+
 #[derive(Debug, Clone, Default)]
 pub struct IconsConfig {
   pub enabled: bool,
@@ -73,6 +75,7 @@ pub struct UiConfig {
   pub sort: Option<String>,
   pub sort_reverse: Option<bool>,
   pub show: Option<String>,
+  pub theme: Option<UiTheme>,
 }
 
 impl Default for UiConfig {
@@ -88,6 +91,7 @@ impl Default for UiConfig {
       sort: None,
       sort_reverse: None,
       show: None,
+      theme: None,
     }
   }
 }
@@ -109,6 +113,27 @@ impl Default for UiRowFormat {
       right: "{info}".to_string(),
     }
   }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UiTheme {
+  pub pane_bg: Option<String>,
+  pub border_fg: Option<String>,
+  pub item_fg: Option<String>,
+  pub item_bg: Option<String>,
+  pub selected_item_fg: Option<String>,
+  pub selected_item_bg: Option<String>,
+  pub title_fg: Option<String>,
+  pub title_bg: Option<String>,
+  pub info_fg: Option<String>,
+  pub dir_fg: Option<String>,
+  pub dir_bg: Option<String>,
+  pub file_fg: Option<String>,
+  pub file_bg: Option<String>,
+  pub hidden_fg: Option<String>,
+  pub hidden_bg: Option<String>,
+  pub exec_fg: Option<String>,
+  pub exec_bg: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -211,10 +236,6 @@ pub fn load_config(
   paths: &ConfigPaths
 ) -> std::io::Result<(Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>)>
 {
-  if !paths.exists {
-    return Ok((Config::default(), Vec::new(), None));
-  }
-
   let engine =
     LuaEngine::new().map_err(|e| io_err(format!("lua init failed: {e}")))?;
   let lua = engine.lua();
@@ -236,13 +257,23 @@ pub fn load_config(
   install_require(lua, &paths.root.join("lua"))
     .map_err(|e| io_err(format!("require install failed: {e}")))?;
 
-  let code = fs::read_to_string(&paths.entry)
-    .map_err(|e| io_err(format!("read init.lua failed: {e}")))?;
+  // 1) Execute built-in defaults
   lua
-    .load(&code)
-    .set_name(paths.entry.to_string_lossy())
+    .load(BUILTIN_DEFAULTS_LUA)
+    .set_name("builtin/defaults.lua")
     .exec()
-    .map_err(|e| io_err(format!("init.lua execution failed: {e}")))?;
+    .map_err(|e| io_err(format!("defaults.lua execution failed: {e}")))?;
+
+  // 2) Execute user config if present
+  if paths.exists {
+    let code = fs::read_to_string(&paths.entry)
+      .map_err(|e| io_err(format!("read init.lua failed: {e}")))?;
+    lua
+      .load(&code)
+      .set_name(paths.entry.to_string_lossy())
+      .exec()
+      .map_err(|e| io_err(format!("init.lua execution failed: {e}")))?;
+  }
 
   let cfg = config_acc.borrow().clone();
   let maps = keymaps_acc.borrow().clone();
@@ -335,6 +366,27 @@ fn install_lsv_api(
         if let Ok(s) = row_tbl.get::<String>("middle") { rf.middle = s; }
         if let Ok(s) = row_tbl.get::<String>("right") { rf.right = s; }
         ui.row = Some(rf);
+      }
+      if let Ok(theme_tbl) = ui_tbl.get::<Table>("theme") {
+        let mut th = UiTheme::default();
+        if let Ok(s) = theme_tbl.get::<String>("pane_bg") { th.pane_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("border_fg") { th.border_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("item_fg") { th.item_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("item_bg") { th.item_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("selected_item_fg") { th.selected_item_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("selected_item_bg") { th.selected_item_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("title_fg") { th.title_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("title_bg") { th.title_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("info_fg") { th.info_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("dir_fg") { th.dir_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("dir_bg") { th.dir_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("file_fg") { th.file_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("file_bg") { th.file_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("hidden_fg") { th.hidden_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("hidden_bg") { th.hidden_bg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("exec_fg") { th.exec_fg = Some(s); }
+        if let Ok(s) = theme_tbl.get::<String>("exec_bg") { th.exec_bg = Some(s); }
+        ui.theme = Some(th);
       }
       if let Ok(s) = ui_tbl.get::<String>("display_mode") {
         ui.display_mode = Some(s);

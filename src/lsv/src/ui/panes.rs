@@ -52,7 +52,15 @@ pub fn draw_parent_panel(
   app: &crate::App,
 ) {
   f.render_widget(Clear, area);
-  let block = Block::default().borders(Borders::ALL);
+  let mut block = Block::default().borders(Borders::ALL);
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      block = block.style(Style::default().bg(bg));
+    }
+    if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      block = block.border_style(Style::default().fg(bfg));
+    }
+  }
   // Draw block and compute inner content area
   f.render_widget(block.clone(), area);
   let inner = block.inner(area);
@@ -65,7 +73,15 @@ pub fn draw_parent_panel(
     .iter()
     .map(|e| build_row_item(app, &fmt, e, inner_width))
     .collect();
-  let list = List::new(items);
+  let mut list = List::new(items);
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(fg) = th.item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      list = list.style(Style::default().fg(fg));
+    }
+    if let Some(bg) = th.item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      list = list.style(Style::default().bg(bg));
+    }
+  }
   f.render_widget(list, list_area);
 }
 
@@ -75,7 +91,15 @@ pub fn draw_current_panel(
   app: &mut crate::App,
 ) {
   f.render_widget(Clear, area);
-  let block = Block::default().borders(Borders::ALL);
+  let mut block = Block::default().borders(Borders::ALL);
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      block = block.style(Style::default().bg(bg));
+    }
+    if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      block = block.border_style(Style::default().fg(bfg));
+    }
+  }
   // Draw block and compute inner content area
   f.render_widget(block.clone(), area);
   let inner = block.inner(area);
@@ -92,9 +116,25 @@ pub fn draw_current_panel(
 
   // List area (full inner area; no per-pane header)
   let list_area = Rect { x: inner.x, y: inner.y, width: inner.width, height: inner.height };
-  let list = List::new(items)
-    .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-    .highlight_symbol(highlight_symbol);
+  let mut list = List::new(items).highlight_symbol(highlight_symbol);
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    let mut hl = Style::default();
+    if let Some(fg) = th.selected_item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      hl = hl.fg(fg);
+    }
+    if let Some(bg) = th.selected_item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      hl = hl.bg(bg);
+    }
+    list = list.highlight_style(hl.add_modifier(Modifier::BOLD));
+    if let Some(fg) = th.item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      list = list.style(Style::default().fg(fg));
+    }
+    if let Some(bg) = th.item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      list = list.style(Style::default().bg(bg));
+    }
+  } else {
+    list = list.highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+  }
 
   f.render_stateful_widget(list, list_area, &mut app.list_state);
 }
@@ -250,20 +290,22 @@ fn format_info(app: &crate::App, e: &crate::app::DirEntryInfo) -> Option<String>
 
 // no per-pane header; info label is shown in top title line
 
-fn build_row_item(
+pub fn build_row_line(
   app: &crate::App,
   fmt: &crate::config::UiRowFormat,
   e: &crate::app::DirEntryInfo,
   inner_width: u16,
-) -> ListItem<'static> {
+) -> Line<'static> {
+  let base_style = entry_style(app, e);
   let marker = if e.is_dir { "/" } else { "" };
   let name_val = format!("{}{}", e.name, marker);
   let icon_val = compute_icon(app, e);
   let info_val = format_info(app, e).unwrap_or_default();
-  let icon_s = replace_placeholders(&fmt.icon, &icon_val, &name_val, &info_val);
-  let left_s = replace_placeholders(&fmt.left, &icon_val, &name_val, &info_val);
-  let mid_s = replace_placeholders(&fmt.middle, &icon_val, &name_val, &info_val);
-  let right_s = replace_placeholders(&fmt.right, &icon_val, &name_val, &info_val);
+  let perms_val = permissions_string(e);
+  let icon_s = replace_placeholders(&fmt.icon, &icon_val, &name_val, &info_val, &perms_val);
+  let left_s = replace_placeholders(&fmt.left, &icon_val, &name_val, &info_val, &perms_val);
+  let mid_s = replace_placeholders(&fmt.middle, &icon_val, &name_val, &info_val, &perms_val);
+  let right_s = replace_placeholders(&fmt.right, &icon_val, &name_val, &info_val, &perms_val);
   // Compose with truncation: [icon][left] [middle centered] [right aligned]
   let mut spans: Vec<Span> = Vec::new();
   let total = inner_width as i32;
@@ -272,11 +314,11 @@ fn build_row_item(
   let mut current_w = 0i32;
 
   if !icon_s.is_empty() {
-    spans.push(Span::raw(icon_s.clone()));
+    spans.push(Span::styled(icon_s.clone(), base_style));
     current_w += icon_w;
   }
   if !left_s.is_empty() {
-    spans.push(Span::raw(left_s.clone()));
+    spans.push(Span::styled(left_s.clone(), base_style));
     current_w += left_w;
   }
 
@@ -322,30 +364,74 @@ fn build_row_item(
       let mut mid_start = current_w + (middle_space - mid_w) / 2;
       if mid_start < current_w { mid_start = current_w; }
       let pad_before_mid = (mid_start - current_w) as usize;
-      if pad_before_mid > 0 { spans.push(Span::raw(" ".repeat(pad_before_mid))); }
-      spans.push(Span::raw(mid_txt.clone()));
+      if pad_before_mid > 0 { spans.push(Span::styled(" ".repeat(pad_before_mid), base_style)); }
+      spans.push(Span::styled(mid_txt.clone(), base_style));
       current_w = mid_start + mid_w;
     }
 
     // Pad up to where right should start; allow zero gap if exact fit
     let pad_before_right = (total - right_w - current_w).max(0) as usize;
-    if pad_before_right > 0 { spans.push(Span::raw(" ".repeat(pad_before_right))); }
-    if right_w > 0 { spans.push(Span::styled(right_txt, Style::default().fg(Color::Gray))); }
+    if pad_before_right > 0 { spans.push(Span::styled(" ".repeat(pad_before_right), base_style)); }
+    if right_w > 0 {
+      let mut s = Style::default().fg(Color::Gray);
+      if let Some(th) = app.config.ui.theme.as_ref() {
+        if let Some(fg) = th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v)) {
+          s = s.fg(fg);
+        }
+      }
+      spans.push(Span::styled(right_txt, s));
+    }
   }
 
-  ListItem::new(Line::from(spans))
+  Line::from(spans)
 }
 
-fn replace_placeholders(tpl: &str, icon: &str, name: &str, info: &str) -> String {
+fn replace_placeholders(tpl: &str, icon: &str, name: &str, info: &str, perms: &str) -> String {
   let mut s = tpl.replace("{icon}", icon);
   s = s.replace("{name}", name);
   s = s.replace("{info}", info);
+  s = s.replace("{perms}", perms);
   s
 }
 
 fn compute_icon(_app: &crate::App, _e: &crate::app::DirEntryInfo) -> String {
   // Placeholder: integrate actual icon theme later. For now, one space to reserve a column.
   " ".to_string()
+}
+
+fn permissions_string(e: &crate::app::DirEntryInfo) -> String {
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    let mut s = String::new();
+    s.push(if e.is_dir { 'd' } else { '-' });
+    if let Ok(meta) = std::fs::metadata(&e.path) {
+      let mode = meta.permissions().mode();
+      let classes = [(mode >> 6) & 0o7, (mode >> 3) & 0o7, mode & 0o7];
+      for c in classes { s.push_str(rwx(c as u8)); }
+    } else {
+      s.push_str("?????????");
+    }
+    s
+  }
+  #[cfg(not(unix))]
+  {
+    String::new()
+  }
+}
+
+#[cfg(unix)]
+fn rwx(bits: u8) -> &'static str {
+  match bits & 0o7 {
+    0o0 => "---",
+    0o1 => "--x",
+    0o2 => "-w-",
+    0o3 => "-wx",
+    0o4 => "r--",
+    0o5 => "r-x",
+    0o6 => "rw-",
+    _ => "rwx",
+  }
 }
 
 fn truncate_to_width(s: &str, max_w: usize) -> String {
@@ -372,4 +458,55 @@ fn truncate_tail_to_width(s: &str, max_w: usize) -> String {
     w += cw;
   }
   out_rev.into_iter().rev().collect()
+}
+
+fn build_row_item(
+  app: &crate::App,
+  fmt: &crate::config::UiRowFormat,
+  e: &crate::app::DirEntryInfo,
+  inner_width: u16,
+) -> ListItem<'static> {
+  let item = ListItem::new(build_row_line(app, fmt, e, inner_width));
+  item.style(entry_style(app, e))
+}
+
+fn entry_style(app: &crate::App, e: &crate::app::DirEntryInfo) -> Style {
+  let mut st = Style::default();
+  let th = match app.config.ui.theme.as_ref() { Some(t) => t, None => return st };
+  // base item colors
+  if let Some(fg) = th.item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.fg(fg); }
+  if let Some(bg) = th.item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.bg(bg); }
+  // type overrides
+  if e.is_dir {
+    if let Some(fg) = th.dir_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.fg(fg); }
+    if let Some(bg) = th.dir_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.bg(bg); }
+  } else {
+    if let Some(fg) = th.file_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.fg(fg); }
+    if let Some(bg) = th.file_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.bg(bg); }
+    if is_executable(&e.path) {
+      if let Some(fg) = th.exec_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.fg(fg); }
+      if let Some(bg) = th.exec_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.bg(bg); }
+    }
+  }
+  // hidden overrides last
+  if e.name.starts_with('.') {
+    if let Some(fg) = th.hidden_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.fg(fg); }
+    if let Some(bg) = th.hidden_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.bg(bg); }
+  }
+  st
+}
+
+#[cfg(unix)]
+fn is_executable(path: &std::path::Path) -> bool {
+  use std::os::unix::fs::PermissionsExt;
+  if let Ok(meta) = std::fs::metadata(path) {
+    let mode = meta.permissions().mode();
+    return (mode & 0o111) != 0;
+  }
+  false
+}
+
+#[cfg(not(unix))]
+fn is_executable(_path: &std::path::Path) -> bool {
+  false
 }

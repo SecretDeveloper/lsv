@@ -18,10 +18,40 @@ pub fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &crate::App) 
             dynamic_lines = run_previewer(app, &sel.path, area, app.config.ui.preview_lines);
         }
     }
-    let block = Block::default()
-        .borders(Borders::ALL);
+    let mut block = Block::default().borders(Borders::ALL);
+    if let Some(th) = app.config.ui.theme.as_ref() {
+        if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+            block = block.style(Style::default().bg(bg));
+        }
+        if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+            block = block.border_style(Style::default().fg(bfg));
+        }
+    }
 
-    let text: Vec<Line> = if let Some(lines) = dynamic_lines.as_ref() {
+    // If a directory is selected, draw entries using the same row format as other panes
+    let text: Vec<Line> = if let Some(sel) = app.selected_entry() {
+        if sel.is_dir {
+            let block_inner = block.inner(area);
+            let inner_w = block_inner.width;
+            let fmt = app.config.ui.row.clone().unwrap_or_default();
+            let list = app.read_dir_sorted(&sel.path).unwrap_or_default();
+            let limit = app.config.ui.preview_lines.min(list.len());
+            list.into_iter()
+                .take(limit)
+                .map(|e| crate::ui::panes::build_row_line(app, &fmt, &e, inner_w))
+                .collect()
+        } else if let Some(lines) = dynamic_lines.as_ref() {
+            if lines.is_empty() {
+                vec![Line::from(Span::styled("<no selection>", Style::default().fg(Color::DarkGray)))]
+            } else {
+                lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+            }
+        } else if app.preview_lines.is_empty() {
+            vec![Line::from(Span::styled("<no selection>", Style::default().fg(Color::DarkGray)))]
+        } else {
+            app.preview_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+        }
+    } else if let Some(lines) = dynamic_lines.as_ref() {
         if lines.is_empty() {
             vec![Line::from(Span::styled("<no selection>", Style::default().fg(Color::DarkGray)))]
         } else {
@@ -33,7 +63,13 @@ pub fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &crate::App) 
         app.preview_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
     };
 
-    let para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
+    let mut para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
+    if let Some(th) = app.config.ui.theme.as_ref() {
+        let mut st = Style::default();
+        if let Some(fg) = th.item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.fg(fg); }
+        if let Some(bg) = th.item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { st = st.bg(bg); }
+        para = para.style(st);
+    }
     f.render_widget(para, area);
 }
 
@@ -59,11 +95,11 @@ fn run_previewer(app: &crate::App, path: &Path, area: Rect, limit: usize) -> Opt
                     if let Some(mut cmd) = ret {
                         let name_str = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
                         let ext_str = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
-                        cmd = cmd.replace("{path}", &crate::shell_escape(&path_str));
-                        cmd = cmd.replace("{directory}", &crate::shell_escape(&dir_str));
-                        cmd = cmd.replace("{dir}", &crate::shell_escape(&dir_str));
-                        cmd = cmd.replace("{name}", &crate::shell_escape(&name_str));
-                        cmd = cmd.replace("{extension}", &crate::shell_escape(&ext_str));
+                        cmd = cmd.replace("{path}", &crate::util::shell_escape(&path_str));
+                        cmd = cmd.replace("{directory}", &crate::util::shell_escape(&dir_str));
+                        cmd = cmd.replace("{dir}", &crate::util::shell_escape(&dir_str));
+                        cmd = cmd.replace("{name}", &crate::util::shell_escape(&name_str));
+                        cmd = cmd.replace("{extension}", &crate::util::shell_escape(&ext_str));
                         let w = area.width.saturating_sub(10);
                         let h = area.height.saturating_sub(10);
                         cmd = cmd.replace("{width}", &w.to_string());

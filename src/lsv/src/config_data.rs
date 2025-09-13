@@ -10,6 +10,27 @@ pub struct UiRowData {
   pub right: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UiThemeData {
+  pub pane_bg: Option<String>,
+  pub border_fg: Option<String>,
+  pub item_fg: Option<String>,
+  pub item_bg: Option<String>,
+  pub selected_item_fg: Option<String>,
+  pub selected_item_bg: Option<String>,
+  pub title_fg: Option<String>,
+  pub title_bg: Option<String>,
+  pub info_fg: Option<String>,
+  pub dir_fg: Option<String>,
+  pub dir_bg: Option<String>,
+  pub file_fg: Option<String>,
+  pub file_bg: Option<String>,
+  pub hidden_fg: Option<String>,
+  pub hidden_bg: Option<String>,
+  pub exec_fg: Option<String>,
+  pub exec_bg: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct UiPanesData {
   pub parent: u16,
@@ -26,6 +47,7 @@ pub struct UiData {
   pub preview_lines: usize,
   pub max_list_items: usize,
   pub row: UiRowData,
+  pub theme: Option<UiThemeData>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +97,29 @@ pub fn to_lua_config_table(lua: &Lua, app: &crate::App) -> mlua::Result<Table> {
   row.set("right", row_cfg.right)?;
   ui.set("row", row)?;
 
+  // theme
+  if let Some(theme) = app.config.ui.theme.as_ref() {
+    let theme_tbl = lua.create_table()?;
+    if let Some(v) = theme.pane_bg.as_ref() { theme_tbl.set("pane_bg", v.as_str())?; }
+    if let Some(v) = theme.border_fg.as_ref() { theme_tbl.set("border_fg", v.as_str())?; }
+    if let Some(v) = theme.item_fg.as_ref() { theme_tbl.set("item_fg", v.as_str())?; }
+    if let Some(v) = theme.item_bg.as_ref() { theme_tbl.set("item_bg", v.as_str())?; }
+    if let Some(v) = theme.selected_item_fg.as_ref() { theme_tbl.set("selected_item_fg", v.as_str())?; }
+    if let Some(v) = theme.selected_item_bg.as_ref() { theme_tbl.set("selected_item_bg", v.as_str())?; }
+    if let Some(v) = theme.title_fg.as_ref() { theme_tbl.set("title_fg", v.as_str())?; }
+    if let Some(v) = theme.title_bg.as_ref() { theme_tbl.set("title_bg", v.as_str())?; }
+    if let Some(v) = theme.info_fg.as_ref() { theme_tbl.set("info_fg", v.as_str())?; }
+    if let Some(v) = theme.dir_fg.as_ref() { theme_tbl.set("dir_fg", v.as_str())?; }
+    if let Some(v) = theme.dir_bg.as_ref() { theme_tbl.set("dir_bg", v.as_str())?; }
+    if let Some(v) = theme.file_fg.as_ref() { theme_tbl.set("file_fg", v.as_str())?; }
+    if let Some(v) = theme.file_bg.as_ref() { theme_tbl.set("file_bg", v.as_str())?; }
+    if let Some(v) = theme.hidden_fg.as_ref() { theme_tbl.set("hidden_fg", v.as_str())?; }
+    if let Some(v) = theme.hidden_bg.as_ref() { theme_tbl.set("hidden_bg", v.as_str())?; }
+    if let Some(v) = theme.exec_fg.as_ref() { theme_tbl.set("exec_fg", v.as_str())?; }
+    if let Some(v) = theme.exec_bg.as_ref() { theme_tbl.set("exec_bg", v.as_str())?; }
+    ui.set("theme", theme_tbl)?;
+  }
+
   tbl.set("ui", ui.clone())?;
 
   // sort and show as simple values under ui
@@ -116,6 +161,30 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String> {
     middle: get_string(&row_tbl, "middle")?,
     right: get_string(&row_tbl, "right")?,
   };
+  let theme = match ui_tbl.get::<Value>("theme") {
+    Ok(Value::Table(t)) => {
+      let mut th = UiThemeData::default();
+      th.pane_bg = get_opt_str(&t, "pane_bg")?;
+      th.border_fg = get_opt_str(&t, "border_fg")?;
+      th.item_fg = get_opt_str(&t, "item_fg")?;
+      th.item_bg = get_opt_str(&t, "item_bg")?;
+      th.selected_item_fg = get_opt_str(&t, "selected_item_fg")?;
+      th.selected_item_bg = get_opt_str(&t, "selected_item_bg")?;
+      th.title_fg = get_opt_str(&t, "title_fg")?;
+      th.title_bg = get_opt_str(&t, "title_bg")?;
+      th.info_fg = get_opt_str(&t, "info_fg")?;
+      th.dir_fg = get_opt_str(&t, "dir_fg")?;
+      th.dir_bg = get_opt_str(&t, "dir_bg")?;
+      th.file_fg = get_opt_str(&t, "file_fg")?;
+      th.file_bg = get_opt_str(&t, "file_bg")?;
+      th.hidden_fg = get_opt_str(&t, "hidden_fg")?;
+      th.hidden_bg = get_opt_str(&t, "hidden_bg")?;
+      th.exec_fg = get_opt_str(&t, "exec_fg")?;
+      th.exec_bg = get_opt_str(&t, "exec_bg")?;
+      Some(th)
+    }
+    _ => None,
+  };
   let ui = UiData {
     panes: UiPanesData { parent, current, preview },
     show_hidden,
@@ -124,6 +193,7 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String> {
     preview_lines: preview_lines_u64 as usize,
     max_list_items: max_list_items_u64 as usize,
     row,
+    theme,
   };
 
   // sort (under ui)

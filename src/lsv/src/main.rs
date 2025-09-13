@@ -8,13 +8,15 @@ mod input;
 mod enums;
 mod config_data;
 mod app;
+mod runtime;
+mod util;
+mod app_actions;
 
 pub use app::App;
-// Re-export helpers referenced as `crate::...` by sibling modules
-pub(crate) use app::{dispatch_action, shell_escape};
+// helpers moved to dedicated modules
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new()?;
-    app::run_app(&mut app)?;
+    runtime::run_app(&mut app)?;
     Ok(())
 }

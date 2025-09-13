@@ -1,5 +1,6 @@
 pub mod ansi;
 pub mod panes;
+pub mod colors;
 
 use ratatui::layout::{Direction, Layout, Constraint, Alignment, Rect};
 use ratatui::widgets::Paragraph;
@@ -56,7 +57,15 @@ fn draw_header(f: &mut ratatui::Frame, area: Rect, app: &crate::App) {
   let left = truncate_to_width(&left_full, left_max);
 
   // Draw left and right in the same row using two aligned paragraphs
-  let style = ratatui::style::Style::default().fg(ratatui::style::Color::Gray);
+  let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::Gray);
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(fg) = th.title_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      style = style.fg(fg);
+    }
+    if let Some(bg) = th.title_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) {
+      style = style.bg(bg);
+    }
+  }
   let left_p = Paragraph::new(left).alignment(Alignment::Left).style(style);
   let right_p = Paragraph::new(right_full).alignment(Alignment::Right).style(style);
   f.render_widget(left_p, area);

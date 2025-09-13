@@ -41,7 +41,7 @@ pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool
         app.pending_seq.clear();
         app.show_whichkey = false;
         app.whichkey_prefix.clear();
-        if crate::dispatch_action(app, &action).unwrap_or(false) {
+        if crate::app_actions::dispatch_action(app, &action).unwrap_or(false) {
           if app.should_quit {
             return Ok(true);
           }
@@ -65,7 +65,7 @@ pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool
         ] {
           if !tried.insert(k.clone()) { continue; }
           if let Some(action) = app.keymap_lookup.get(&k).cloned() {
-            if crate::dispatch_action(app, &action).unwrap_or(false) {
+            if crate::app_actions::dispatch_action(app, &action).unwrap_or(false) {
               if app.should_quit { return Ok(true); }
               return Ok(false);
             }

@@ -15,6 +15,7 @@ pub(crate) enum InternalAction {
   ToggleSortReverse,
   SetInfo(crate::app::InfoMode),
   SetDisplayMode(crate::app::DisplayMode),
+  SetRowMiddlePerms,
 }
 
 pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
@@ -44,6 +45,9 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
     if parts.len() >= 2 {
       return crate::enums::display_mode_from_str(parts[1]).map(InternalAction::SetDisplayMode);
     }
+  }
+  if low == "row:perms" || low == "row:middle:perms" || low == "perms" {
+    return Some(InternalAction::SetRowMiddlePerms);
   }
   None
 }
@@ -94,6 +98,13 @@ pub(crate) fn execute_internal_action(app: &mut crate::App, action: InternalActi
       if matches!(app.info_mode, crate::app::InfoMode::None) {
         app.info_mode = crate::app::InfoMode::Modified;
       }
+      app.force_full_redraw = true;
+    }
+    InternalAction::SetRowMiddlePerms => {
+      // Set middle template to permissions; retain other parts
+      let mut row = app.config.ui.row.clone().unwrap_or_default();
+      row.middle = "{perms}".to_string();
+      app.config.ui.row = Some(row);
       app.force_full_redraw = true;
     }
   }

@@ -28,10 +28,10 @@ pub fn run_shell_command(app: &mut crate::App, sc: &crate::config::ShellCmd) {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_string();
-    cmd_str = cmd_str.replace("{path}", &crate::shell_escape(&path_str));
-    cmd_str = cmd_str.replace("{dir}", &crate::shell_escape(&dir_str));
-    cmd_str = cmd_str.replace("{name}", &crate::shell_escape(&name_str));
-    cmd_str = cmd_str.replace("{extension}", &crate::shell_escape(&ext_str));
+    cmd_str = cmd_str.replace("{path}", &crate::util::shell_escape(&path_str));
+    cmd_str = cmd_str.replace("{dir}", &crate::util::shell_escape(&dir_str));
+    cmd_str = cmd_str.replace("{name}", &crate::util::shell_escape(&name_str));
+    cmd_str = cmd_str.replace("{extension}", &crate::util::shell_escape(&ext_str));
     // Trim leading '&' (treated as hint)
     let cmd_trimmed = cmd_str.trim_start_matches('&').to_string();
 
