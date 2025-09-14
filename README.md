@@ -22,6 +22,7 @@ The app is keyboard‑driven, configurable via Lua, and supports rich, ANSI‑co
 - Right or Enter: enter selected directory
 - Left or Backspace: go to parent directory (reselect the dir you just left)
 - q or Esc: quit
+ - ?: toggle which‑key overlay (shows grouped keybindings)
 
 ## Configuration Overview
 
@@ -33,30 +34,31 @@ lsv loads a Lua config from the first of:
 
 Top‑level Lua API:
 
-- `lsv.config({ ... })`: core settings (icons, ui, keys, actions, commands)
-- `lsv.set_previewer(function(ctx) ... end)`: return a shell command to render preview
+- `lsv.config({ ... })`: core settings (icons, keys, ui, etc.).
+- `lsv.set_previewer(function(ctx) ... end)`: return a shell command to render preview.
+- `lsv.map_action(key, description, function(lsv, config) ... end)`: bind keys to Lua functions.
 
-Only the new Lua function approach is supported (no legacy config files/lists). Keybindings are defined inside the `actions` and `commands` arrays.
+Action helper functions available on `lsv` inside actions:
 
-### Example (based on test-config/config1/lua/init.lua)
+- `lsv.select_item(index)`: set the current selection to `index` (0-based).
+- `lsv.select_last_item()`: select the last item in the current list.
+- `lsv.quit()`: request the app to exit.
+- `lsv.display_output(text, title?)`: show text in a bottom Output panel.
+- `lsv.os_run(cmd)`: run a shell command and show its captured output in the Output panel. Env includes `LSV_PATH`, `LSV_DIR`, `LSV_NAME`.
+
+Context data passed to actions via `config.context`:
+
+- `cwd`: current working directory.
+- `selected_index`: current selection index (or a sentinel if none).
+- `current_len`: number of items in the current list.
+
+### Minimal Example: Bind an external tool
 
 ```lua
 -- Sample lsv config -- place in $HOME/.config/lsv/lua/init.lua
 lsv.config({
   config_version = 1,
-  keys = { sequence_timeout_ms = 500 },
-
-  -- External commands (spawned). keymap binds the entry.
-  commands = {
-    { description = "Open in new tmux pane", keymap = "E", cmd = "&tmux split-window -h nvim '{path}'" },
-    { description = "Edit in nvim",          keymap = "e", cmd = "nvim '{path}'" },
-    { description = "New tmux window",        keymap = "t", cmd = "tmux new-window -c {directory}" },
-  },
-
-  -- Internal actions. keymap binds action strings (see list below).
-  actions = {
-    -- function(lsv, config) style recommended
-  },
+  keys = { sequence_timeout_ms = 0 },
 
   ui = {
     panes = { parent = 20, current = 30, preview = 50 },
@@ -73,6 +75,17 @@ lsv.config({
     },
   },
 })
+
+-- Safe shell quote helper
+local function shquote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+-- Example: bind "gs" to git status of the current directory
+lsv.map_action("gs", "Git Status", function(lsv, config)
+  local dir = (config.context and config.context.cwd) or "."
+  lsv.os_run("git -C " .. shquote(dir) .. " status")
+end)
 
 -- Previewer function (ctx):
 -- ctx = {
@@ -114,28 +127,48 @@ lsv.set_previewer(function(ctx)
 end)
 ```
 
-### Keybindings: Internal Actions
+### Keybindings: Actions
 
-Action strings (case‑insensitive):
+- Bind with `lsv.map_action(key, description, function(lsv, config) ... end)`.
+- Prefer mutating `config` (e.g., `config.ui.sort = "size"`) and using helpers like `lsv.select_item(...)`.
 
-- Use `lsv.map_action(key, description, function(lsv, config) ... end)` with config mutation.
+Default action bindings
 
-Notes:
-- Prefer function(lsv, config): mutate `config.ui.sort`, `config.ui.sort_reverse`, `config.ui.show`, `config.ui.show_hidden`, etc. Strings are deprecated.
+- Sorting: `sn` (by name), `ss` (by size), `sr` (toggle reverse)
+- Info field: `zn` (none), `zs` (size), `zc` (created)
+- Display mode: `zf` (friendly), `za` (absolute)
+- Navigation: `gg` (top), `G` (bottom)
+- Overlays: `zm` (toggle messages), `zo` (toggle last output), `?` (which‑key)
+
+Override example
+
+```lua
+-- Change the default for "ss" to also show sizes in the info column
+lsv.map_action("ss", "Sort by size + show size", function(lsv, config)
+  config.ui.sort = "size"
+  config.ui.show = "size"
+end)
+```
 
 ### Which‑Key Overlay and Sequences
 
 - Type `?` to toggle a bottom overlay listing available keys (uses descriptions).
 - Composite sequences are supported (e.g., `ss`, `zc`). The overlay opens automatically when you type a registered prefix.
-- Timeout is configured by `keys.sequence_timeout_ms`.
+- Timeout: by default there is no timeout for multi‑key sequences (0).
+  - To enable a timeout, set `keys.sequence_timeout_ms` in your Lua config:
+    
+    ```lua
+    lsv.config({
+      keys = { sequence_timeout_ms = 600 },  -- 600ms timeout for sequences
+    })
+    ```
 
-### Row Layout (icon/left/middle/right)
+### Row Layout (icon/left/right)
 
 Configure row sections under `ui.row`:
 
 - Templates accept placeholders `{icon}`, `{name}`, `{info}`.
-- Alignment: left and icon render first, middle is centered if space permits, right is right‑aligned.
-- Truncation policy: middle is truncated first, then right; right truncation preserves the end (so "3d ago" stays readable).
+- Right column is right‑aligned, left is left‑aligned.
 
 ### Rendering Modes and Formats
 

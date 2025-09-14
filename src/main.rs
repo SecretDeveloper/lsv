@@ -1,6 +1,5 @@
 mod config;
 mod preview;
-mod cmd;
 mod ui;
 mod trace;
 mod actions;

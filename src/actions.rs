@@ -15,6 +15,8 @@ pub(crate) enum InternalAction {
   ToggleSortReverse,
   SetInfo(crate::app::InfoMode),
   SetDisplayMode(crate::app::DisplayMode),
+  GoTop,
+  GoBottom,
 }
 
 pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
@@ -45,6 +47,8 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
       return crate::enums::display_mode_from_str(parts[1]).map(InternalAction::SetDisplayMode);
     }
   }
+  if low == "nav:top" || low == "top" || low == "gg" { return Some(InternalAction::GoTop); }
+  if low == "nav:bottom" || low == "bottom" || low == "g$" { return Some(InternalAction::GoBottom); }
   None
 }
 
@@ -95,6 +99,19 @@ pub(crate) fn execute_internal_action(app: &mut crate::App, action: InternalActi
         app.info_mode = crate::app::InfoMode::Modified;
       }
       app.force_full_redraw = true;
+    }
+    InternalAction::GoTop => {
+      if !app.current_entries.is_empty() {
+        app.list_state.select(Some(0));
+        app.refresh_preview();
+      }
+    }
+    InternalAction::GoBottom => {
+      if !app.current_entries.is_empty() {
+        let last = app.current_entries.len().saturating_sub(1);
+        app.list_state.select(Some(last));
+        app.refresh_preview();
+      }
     }
   }
 }

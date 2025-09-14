@@ -39,12 +39,18 @@ pub fn draw(
   if app.show_whichkey {
     panes::draw_whichkey_panel(f, f.area(), app);
   }
+  if app.show_messages {
+    panes::draw_messages_panel(f, f.area(), app);
+  }
+  if app.show_output {
+    panes::draw_output_panel(f, f.area(), app);
+  }
 }
 
 fn draw_header(f: &mut ratatui::Frame, area: Rect, app: &crate::App) {
   // Left: {user}@{host}:{current_dir}
   let user = whoami::username();
-  let host = whoami::hostname();
+  let host = whoami::fallible::hostname().unwrap_or_default();
   let left_full = format!("{}@{}:{}", user, host, app.cwd.display());
 
   // Right: details for selected entry: perms, owner, size, created

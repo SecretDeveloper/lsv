@@ -89,6 +89,15 @@ pub fn to_lua_config_table(lua: &Lua, app: &crate::App) -> mlua::Result<Table> {
   ui.set("preview_lines", app.config.ui.preview_lines as u64)?;
   ui.set("max_list_items", app.config.ui.max_list_items as u64)?;
 
+  // context snapshot for actions
+  let ctx = lua.create_table()?;
+  ctx.set("cwd", app.cwd.to_string_lossy().to_string())?;
+  let sel_idx = app.list_state.selected().map(|i| i as u64).unwrap_or(u64::MAX);
+  ctx.set("selected_index", sel_idx)?;
+  ctx.set("current_len", app.current_entries.len() as u64)?;
+  ui.set("context_note", "actions should use top-level context; kept for compatibility")?; // noop hint
+  tbl.set("context", ctx.clone())?;
+
   // row
   let row = lua.create_table()?;
   let row_cfg = app.config.ui.row.clone().unwrap_or_default();

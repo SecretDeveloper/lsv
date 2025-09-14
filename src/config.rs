@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-const BUILTIN_DEFAULTS_LUA: &str = include_str!("../lua/defaults.lua");
+const BUILTIN_DEFAULTS_LUA: &str = include_str!("lua/defaults.lua");
 
 #[derive(Debug, Clone, Default)]
 pub struct IconsConfig {
@@ -24,19 +24,9 @@ pub struct KeysConfig {
 
 impl Default for KeysConfig {
   fn default() -> Self {
-    Self { sequence_timeout_ms: 600 }
+    // 0 means: no timeout for key sequences
+    Self { sequence_timeout_ms: 0 }
   }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CommandSpec {
-  pub cmd: Vec<String>,
-  pub args: Vec<String>,
-  pub when: Option<String>,
-  pub cwd: Option<String>,
-  pub interactive: bool,
-  pub env: Vec<(String, String)>,
-  pub confirm: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -45,8 +35,7 @@ pub struct Config {
     pub icons: IconsConfig,
     pub keys: KeysConfig,
     pub ui: UiConfig,
-    pub commands: Vec<(String, CommandSpec)>,
-    pub shell_cmds: Vec<ShellCmd>,
+    // no built-in commands in action-first config; users bind via map_action
 }
 
 #[derive(Debug, Clone)]
@@ -146,11 +135,7 @@ pub struct UiTheme {
   pub exec_bg: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ShellCmd {
-  pub cmd: String,
-  pub description: Option<String>,
-}
+// No ShellCmd in action-first config
 
 
 /// LuaEngine creates a sandboxed Lua runtime for lsv configuration.
@@ -396,69 +381,7 @@ fn install_lsv_api(
       if let Ok(b) = ui_tbl.get::<bool>("sort_reverse") { cfg_mut.ui.sort_reverse = Some(b); }
       if let Ok(show_str) = ui_tbl.get::<String>("show") { cfg_mut.ui.show = Some(show_str); }
     }
-    if let Ok(cmds_tbl) = tbl.get::<Table>("commands") {
-      let mut cmds = Vec::new();
-      for pair in cmds_tbl.pairs::<Value, Value>() {
-        let (k, v) = pair?;
-        if let Value::String(sname) = k {
-          if let Value::Table(t) = v {
-            let name = sname.to_str()?.to_string();
-            let mut spec = CommandSpec::default();
-            if let Ok(arr) = t.get::<Vec<String>>("cmd") {
-              spec.cmd = arr;
-            } else if let Ok(s) = t.get::<String>("cmd") {
-              spec.cmd = vec![s];
-            }
-            if let Ok(arr) = t.get::<Vec<String>>("args") {
-              spec.args = arr;
-            }
-            if let Ok(s) = t.get::<String>("when") {
-              spec.when = Some(s);
-            }
-            if let Ok(s) = t.get::<String>("cwd") {
-              spec.cwd = Some(s);
-            }
-            if let Ok(b) = t.get::<bool>("interactive") {
-              spec.interactive = b;
-            }
-            if let Ok(env_tbl) = t.get::<Table>("env") {
-              for kv in env_tbl.pairs::<String, String>() {
-                let (ek, ev) = kv?;
-                spec.env.push((ek, ev));
-              }
-            }
-            if let Ok(s) = t.get::<String>("confirm") {
-              spec.confirm = Some(s);
-            }
-            cmds.push((name, spec));
-          }
-        } else if let Value::Integer(_) = k {
-          if let Value::Table(t) = v {
-            // External shell command
-            if let Ok(cmd_str) = t.get::<String>("cmd") {
-              let desc = t.get::<String>("description").ok();
-              let keymap = t.get::<String>("keymap").ok();
-              let idx = cfg_mut.shell_cmds.len();
-              cfg_mut.shell_cmds.push(ShellCmd {
-                cmd: cmd_str.clone(),
-                description: desc.clone(),
-              });
-              if let Some(kseq) = keymap {
-                seq_keymaps_acc.push((kseq, format!("run_shell:{}", idx), desc));
-              }
-            }
-            // Internal action
-            if let Ok(action_str) = t.get::<String>("action") {
-              let desc = t.get::<String>("description").ok();
-              if let Ok(kseq) = t.get::<String>("keymap") {
-                seq_keymaps_acc.push((kseq, action_str, desc));
-              }
-            }
-          }
-        }
-      }
-      cfg_mut.commands = cmds;
-    }
+    // Note: legacy 'commands' table removed in favor of map_action + lsv.os_run
 
     // Separate top-level actions table for internal actions
     if let Ok(actions_tbl) = tbl.get::<Table>("actions") {
@@ -528,23 +451,11 @@ fn install_lsv_api(
     Ok(true)
   })?;
 
-  // lsv.map_command(keymap, description, cmd_string)
-  let cfg_for_cmds = Rc::clone(&cfg);
-  let maps_for_cmds = Rc::clone(&maps);
-  let map_command_fn = lua.create_function(move |_, (keymap, desc, cmd): (String, String, String)| {
-    let mut cfg_mut = cfg_for_cmds.borrow_mut();
-    let idx = cfg_mut.shell_cmds.len();
-    cfg_mut.shell_cmds.push(ShellCmd { cmd: cmd.clone(), description: Some(desc.clone()) });
-    drop(cfg_mut);
-    maps_for_cmds.borrow_mut().push(KeyMapping { sequence: keymap, action: format!("run_shell:{}", idx), description: Some(desc) });
-    Ok(true)
-  })?;
 
   lsv.set("config", config_fn)?;
   lsv.set("mapkey", mapkey_fn)?;
   lsv.set("set_previewer", set_previewer_fn)?;
   lsv.set("map_action", map_action_fn)?;
-  lsv.set("map_command", map_command_fn)?;
   globals.set("lsv", lsv)?;
   Ok(())
 }

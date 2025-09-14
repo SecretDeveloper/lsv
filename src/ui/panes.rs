@@ -1,25 +1,10 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
+use crate::ui::ansi::ansi_spans;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-pub fn panel_title<'a>(
-  label: &'a str,
-  path: Option<&std::path::Path>,
-) -> Line<'a> {
-  let path_str = path
-    .map(|p| p.to_string_lossy().to_string())
-    .unwrap_or_else(|| String::from("<root>"));
-  Line::from(vec![
-    Span::styled(
-      label,
-      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-    ),
-    Span::raw("  "),
-    Span::styled(path_str, Style::default().fg(Color::Gray)),
-  ])
-}
 
 pub fn pane_constraints(app: &crate::App) -> [Constraint; 3] {
   let (mut p, mut c, mut r) = (30u16, 40u16, 30u16);
@@ -300,6 +285,83 @@ pub fn draw_whichkey_panel(
   let panel = layout[1];
   f.render_widget(Clear, panel);
   let para = Paragraph::new(lines).block(block);
+  f.render_widget(para, panel);
+}
+
+pub fn draw_messages_panel(
+  f: &mut ratatui::Frame,
+  area: Rect,
+  app: &crate::App,
+) {
+  // Bottom area: start with 20% height, expand up to fit all messages but cap at 50%
+  let min_h = ((area.height as u32 * 20) / 100).max(3) as u16;
+  let max_h = ((area.height as u32 * 50) / 100).max(min_h as u32) as u16;
+  // Determine needed height (messages + borders)
+  let needed = (app.recent_messages.len() as u16).saturating_add(2).max(3);
+  let panel_h = needed.min(max_h).max(min_h).min(area.height);
+
+  let mut block = Block::default()
+    .borders(Borders::ALL)
+    .title(Span::styled(
+      "Messages",
+      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+    ));
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { block = block.style(Style::default().bg(bg)); }
+    if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { block = block.border_style(Style::default().fg(bfg)); }
+  }
+  let layout = Layout::default().direction(Direction::Vertical).constraints([
+    Constraint::Min(0), Constraint::Length(panel_h)
+  ]).split(area);
+  let panel = layout[1];
+  f.render_widget(Clear, panel);
+
+  // Render messages newest last (bottom) for natural reading; we will take the last panel_h-2 items
+  let avail_rows = panel_h.saturating_sub(2) as usize;
+  let start = app.recent_messages.len().saturating_sub(avail_rows);
+  let slice = &app.recent_messages[start..];
+  let mut lines: Vec<Line> = Vec::new();
+  for m in slice {
+    lines.push(Line::from(Span::styled(m.clone(), Style::default().fg(Color::Gray))));
+  }
+  let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
+  f.render_widget(para, panel);
+}
+
+pub fn draw_output_panel(
+  f: &mut ratatui::Frame,
+  area: Rect,
+  app: &crate::App,
+) {
+  let min_h = ((area.height as u32 * 20) / 100).max(3) as u16;
+  let max_h = ((area.height as u32 * 60) / 100).max(min_h as u32) as u16;
+  let needed = (app.output_lines.len() as u16).saturating_add(2).max(3);
+  let panel_h = needed.min(max_h).max(min_h).min(area.height);
+
+  let mut block = Block::default()
+    .borders(Borders::ALL)
+    .title(Span::styled(
+      app.output_title.clone(),
+      Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+    ));
+  if let Some(th) = app.config.ui.theme.as_ref() {
+    if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { block = block.style(Style::default().bg(bg)); }
+    if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)) { block = block.border_style(Style::default().fg(bfg)); }
+  }
+  let layout = Layout::default().direction(Direction::Vertical).constraints([
+    Constraint::Min(0), Constraint::Length(panel_h)
+  ]).split(area);
+  let panel = layout[1];
+  f.render_widget(Clear, panel);
+
+  let avail_rows = panel_h.saturating_sub(2) as usize;
+  let start = app.output_lines.len().saturating_sub(avail_rows);
+  let slice = &app.output_lines[start..];
+  let mut lines: Vec<Line> = Vec::new();
+  for m in slice {
+    lines.push(Line::from(ansi_spans(m)));
+  }
+  let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
   f.render_widget(para, panel);
 }
 

@@ -25,10 +25,12 @@ pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool
     if !disallowed {
       let now = std::time::Instant::now();
       // reset pending_seq on timeout
-      if let Some(last) = app.last_seq_time {
-        let timeout = std::time::Duration::from_millis(app.config.keys.sequence_timeout_ms);
-        if now.duration_since(last) > timeout {
-          app.pending_seq.clear();
+      if app.config.keys.sequence_timeout_ms > 0 {
+        if let Some(last) = app.last_seq_time {
+          let timeout = std::time::Duration::from_millis(app.config.keys.sequence_timeout_ms);
+          if now.duration_since(last) > timeout {
+            app.pending_seq.clear();
+          }
         }
       }
       app.last_seq_time = Some(now);
@@ -81,6 +83,8 @@ pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool
       app.pending_seq.clear();
       app.show_whichkey = false;
       app.whichkey_prefix.clear();
+      app.show_messages = false;
+      app.show_output = false;
       return Ok(false);
     }
     (KeyCode::Up, _) | (KeyCode::Char('k'), _) => {

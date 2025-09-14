@@ -8,14 +8,24 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 use crate::ui::ansi::ansi_spans;
 
-pub fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &crate::App) {
+pub fn draw_preview_panel(f: &mut ratatui::Frame, area: Rect, app: &mut crate::App) {
     // Clear area to prevent artifacts when content shrinks or lines are shorter
     f.render_widget(Clear, area);
-    // Try dynamic preview via Lua previewer or rule-based previewers
+    // Try dynamic preview via Lua previewer with simple caching to avoid re-running when unchanged
     let mut dynamic_lines: Option<Vec<String>> = None;
     if let Some(sel) = app.selected_entry() {
         if !sel.is_dir {
-            dynamic_lines = run_previewer(app, &sel.path, area, app.config.ui.preview_lines);
+            let key = (sel.path.clone(), area.width, area.height);
+            if app.preview_dyn_key.as_ref() == Some(&key) {
+                dynamic_lines = app.preview_dyn_lines.clone();
+            } else {
+                dynamic_lines = run_previewer(app, &sel.path, area, app.config.ui.preview_lines);
+                app.preview_dyn_key = Some(key);
+                app.preview_dyn_lines = dynamic_lines.clone();
+            }
+        } else {
+            app.preview_dyn_key = None;
+            app.preview_dyn_lines = None;
         }
     }
     let mut block = Block::default().borders(Borders::ALL);

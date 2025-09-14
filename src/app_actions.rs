@@ -19,15 +19,6 @@ pub(crate) fn dispatch_action(app: &mut App, action: &str) -> io::Result<bool> {
 }
 
 fn run_single_action(app: &mut App, action: &str) -> io::Result<bool> {
-  if let Some(rest) = action.strip_prefix("run_shell:") {
-    if let Ok(idx) = rest.parse::<usize>() {
-      if idx < app.config.shell_cmds.len() {
-        let sc = app.config.shell_cmds[idx].clone();
-        crate::cmd::run_shell_command(app, &sc);
-        return Ok(true);
-      }
-    }
-  }
   if let Some(rest) = action.strip_prefix("run_lua:") {
     if let Ok(idx) = rest.parse::<usize>() {
       return run_lua_action(app, idx);
@@ -49,11 +40,85 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
   let lua = engine.lua();
   let func = lua.registry_value::<mlua::Function>(&funcs[idx])
     .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("lua fn lookup: {e}")))?;
-  // Build lsv helpers (placeholder; reserved for future helpers)
-  let lsv_tbl = lua.create_table().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-  // Build config snapshot table
+  // Build config snapshot table (mutable by Lua)
   let cfg_tbl = crate::config_data::to_lua_config_table(lua, app)
     .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("build config tbl: {e}")))?;
+  // Build lsv helpers that can update config.context
+  let lsv_tbl = {
+    let tbl = lua.create_table().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    // lsv.select_item(index)
+    let cfg_ref = cfg_tbl.clone();
+    let select_item_fn = lua.create_function(move |lua, idx: i64| {
+      let ctx: mlua::Table = match cfg_ref.get("context") { Ok(t) => t, Err(_) => {
+        let t = lua.create_table()?; cfg_ref.set("context", t.clone())?; t }
+      };
+      let i = if idx < 0 { 0 } else { idx as u64 };
+      ctx.set("selected_index", i)?;
+      Ok(true)
+    }).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl.set("select_item", select_item_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    // lsv.select_last_item()
+    let cfg_ref2 = cfg_tbl.clone();
+    let select_last_fn = lua.create_function(move |_, ()| {
+      if let Ok(ctx) = cfg_ref2.get::<mlua::Table>("context") {
+        let len = ctx.get::<u64>("current_len").unwrap_or(0);
+        if len > 0 { ctx.set("selected_index", len - 1)?; }
+      }
+      Ok(true)
+    }).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl.set("select_last_item", select_last_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    // lsv.quit()
+    let cfg_ref3 = cfg_tbl.clone();
+    let quit_fn = lua.create_function(move |_, ()| { cfg_ref3.set("quit", true)?; Ok(true) })
+      .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl.set("quit", quit_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    // lsv.display_output(text, title?)
+    let cfg_ref4 = cfg_tbl.clone();
+    let display_output_fn = lua.create_function(move |_, (text, title): (String, Option<String>)| {
+      cfg_ref4.set("output_text", text)?;
+      if let Some(t) = title { cfg_ref4.set("output_title", t)?; }
+      Ok(true)
+    }).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl.set("display_output", display_output_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    // lsv.os_run(cmd): run external command and put output in config
+    let cfg_ref5 = cfg_tbl.clone();
+    let cwd_str = app.cwd.to_string_lossy().to_string();
+    let sel_path = app
+      .selected_entry()
+      .map(|e| e.path.clone())
+      .unwrap_or_else(|| app.cwd.clone());
+    let sel_dir = sel_path.parent().unwrap_or(&app.cwd).to_path_buf();
+    let path_str = sel_path.to_string_lossy().to_string();
+    let dir_str = sel_dir.to_string_lossy().to_string();
+    let name_str = sel_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let os_run_fn = lua.create_function(move |_, cmd: String| {
+      let out = std::process::Command::new("sh")
+        .arg("-lc").arg(&cmd)
+        .current_dir(&cwd_str)
+        .env("LSV_PATH", &path_str)
+        .env("LSV_DIR", &dir_str)
+        .env("LSV_NAME", &name_str)
+        .output();
+      match out {
+        Ok(output) => {
+          let mut buf = Vec::new();
+          buf.extend_from_slice(&output.stdout);
+          if !output.stderr.is_empty() { buf.push(b'\n'); buf.extend_from_slice(&output.stderr); }
+          let text = String::from_utf8_lossy(&buf).to_string();
+          cfg_ref5.set("output_text", text)?;
+          cfg_ref5.set("output_title", format!("$ {}", cmd))?;
+          Ok(true)
+        }
+        Err(e) => {
+          cfg_ref5.set("output_text", format!("<error: {}>", e))?;
+          cfg_ref5.set("output_title", format!("$ {}", cmd))?;
+          Ok(true)
+        }
+      }
+    }).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl.set("os_run", os_run_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl
+  };
   // Call function(lsv, config): may return a table; if not, use mutated arg
   let ret_val: mlua::Value = func
     .call((lsv_tbl, cfg_tbl.clone()))
@@ -62,6 +127,62 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
     mlua::Value::Table(t) => t,
     _ => cfg_tbl,
   };
+
+  // Handle context-driven navigation
+  if let Ok(ctx) = candidate_tbl.get::<mlua::Table>("context") {
+    if let Ok(sel_idx) = ctx.get::<u64>("selected_index") {
+      let len = app.current_entries.len();
+      if len > 0 {
+        let idx = (sel_idx as usize).min(len.saturating_sub(1));
+        app.list_state.select(Some(idx));
+        app.refresh_preview();
+      }
+    }
+  }
+  // Handle messages directive
+  if let Ok(m) = candidate_tbl.get::<String>("messages") {
+    match m.as_str() {
+      "toggle" => { app.show_messages = !app.show_messages; app.force_full_redraw = true; }
+      "show" => { app.show_messages = true; app.force_full_redraw = true; }
+      "hide" => { app.show_messages = false; app.force_full_redraw = true; }
+      _ => {}
+    }
+  }
+  // Handle special action directives embedded in the returned table (legacy)
+  if let Ok(nav) = candidate_tbl.get::<String>("nav") {
+    match nav.as_str() {
+      "top" => {
+        if !app.current_entries.is_empty() {
+          app.list_state.select(Some(0));
+          app.refresh_preview();
+        }
+      }
+      "bottom" => {
+        if !app.current_entries.is_empty() {
+          let last = app.current_entries.len().saturating_sub(1);
+          app.list_state.select(Some(last));
+          app.refresh_preview();
+        }
+      }
+      _ => {}
+    }
+  }
+  // Handle output request from Lua
+  if let Ok(text) = candidate_tbl.get::<String>("output_text") {
+    let title = candidate_tbl.get::<String>("output_title").unwrap_or_else(|_| String::from("Output"));
+    app.display_output(&title, &text);
+  }
+  if let Ok(o) = candidate_tbl.get::<String>("output") {
+    match o.as_str() {
+      "toggle" => { app.show_output = !app.show_output; app.show_messages = false; app.show_whichkey = false; app.force_full_redraw = true; }
+      "show" => { app.show_output = true; app.show_messages = false; app.show_whichkey = false; app.force_full_redraw = true; }
+      "hide" => { app.show_output = false; app.force_full_redraw = true; }
+      _ => {}
+    }
+  }
+  if let Ok(q) = candidate_tbl.get::<bool>("quit") {
+    if q { app.should_quit = true; }
+  }
   // Validate and apply
   let data = crate::config_data::from_lua_config_table(candidate_tbl)
     .map_err(|msg| io::Error::new(io::ErrorKind::Other, format!("Config validation error: {}", msg)))?;
