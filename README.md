@@ -10,11 +10,15 @@ lsv is a fast, curses‑based file viewer for the terminal. It presents three pa
 
 The app is keyboard‑driven, configurable via Lua, and supports rich, ANSI‑colored previews from external tools (e.g., bat, glow).
 
-## Build & Run
+## Install
 
-- Build: `cargo build -p lsv`
-- Run: `cargo run -p lsv`
-- Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run -p lsv`
+- From crates.io: `cargo install lsv`
+
+## Build & Run (from source)
+
+- Build: `cargo build`
+- Run: `cargo run`
+- Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run`
 
 ## Navigation (defaults)
 
