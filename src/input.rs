@@ -3,7 +3,7 @@ use crate::app::App;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) fn handle_key(app: &mut App, key: KeyEvent) -> io::Result<bool> {
+pub fn handle_key(app: &mut App, key: KeyEvent) -> io::Result<bool> {
   // First, try dynamic key mappings with simple sequence support
   // Quick toggle of which-key help
   if let KeyCode::Char('?') = key.code {

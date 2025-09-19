@@ -9,6 +9,7 @@ use std::io;
 use crate::app::App;
 
 use super::{internal::{parse_internal_action, execute_internal_action}, apply::{apply_effects, apply_config_overlay}, lua_glue::call_lua_action};
+use crate::trace;
 
 /// Parse and execute an action string.
 /// Supports multiple actions separated by ';', Lua actions via `run_lua:<idx>`,
@@ -19,6 +20,7 @@ pub fn dispatch_action(app: &mut App, action: &str) -> io::Result<bool> {
   if parts.len() > 1 {
     let mut any = false;
     for p in parts {
+      trace::log(format!("[dispatch] action='{}'", p));
       if dispatch_action(app, p)? { any = true; }
       if app.should_quit { break; }
     }
@@ -27,6 +29,7 @@ pub fn dispatch_action(app: &mut App, action: &str) -> io::Result<bool> {
 
   // Lua action index
   if let Some(rest) = action.strip_prefix("run_lua:") {
+    trace::log(format!("[dispatch] action='{}'", action));
     if let Ok(idx) = rest.parse::<usize>() {
       if let (Some(_), Some(funcs)) = (app.lua_engine.as_ref(), app.lua_action_fns.as_ref()) {
         if idx < funcs.len() {
@@ -42,6 +45,7 @@ pub fn dispatch_action(app: &mut App, action: &str) -> io::Result<bool> {
 
   // Internal action
   if let Some(int) = parse_internal_action(action) {
+    trace::log(format!("[dispatch] action='{}'", action));
     execute_internal_action(app, int);
     return Ok(true);
   }

@@ -52,6 +52,9 @@ The current context is available in `config.context`:
 - `cwd` — current working directory
 - `selected_index` — current selection index
 - `current_len` — number of items in the current list
+- `path` — absolute path of the selected entry (falls back to `cwd`)
+- `parent_dir` — parent directory of the selected entry (falls back to `cwd`)
+- `name` — file name (basename) of the selected entry, when available
 
 ## Minimal example `~/.config/lsv/init.lua`
 

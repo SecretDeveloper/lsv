@@ -42,6 +42,7 @@ lsv.map_action("ss", "Sort by size + show size", function(lsv, config)
 	config.ui.sort = "size"
 	config.ui.show = "size"
 end)
+
 local function shquote(s)
 	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
@@ -57,10 +58,10 @@ lsv.map_action("gs", "Git Status", function(lsv, config)
 end)
 
 lsv.map_action("E", "Open in tmux pane", function(lsv, config)
-  local path = (config.context and config.context.cwd) or "."
-  lsv.os_run_interactive("&tmux split-window -h nvim " .. shquote(path))
+	local path = (config.context and config.context.cwd) or "."
+	lsv.os_run_interactive("&tmux split-window -h nvim " .. shquote(path))
 end)
 lsv.map_action("e", "Edit in nvim", function(lsv, config)
-  local path = (config.context and config.context.cwd) or "."
-  lsv.os_run_interactive("nvim " .. shquote(path))
+	local path = (config.context and config.context.path) or "."
+	lsv.os_run_interactive("nvim " .. shquote(path))
 end)

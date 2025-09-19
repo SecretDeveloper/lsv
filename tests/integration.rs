@@ -722,10 +722,10 @@ mod input_tests {
     fn which_key_toggle_with_question_mark() {
         let mut app = lsv::app::App::new().expect("app new");
         assert!(!app.test_show_whichkey());
-        let _ = lsv::input::test_handle_key(&mut app, key('?')).unwrap();
+        let _ = lsv::input::handle_key(&mut app, key('?')).unwrap();
         assert!(app.test_show_whichkey());
         // Toggle off
-        let _ = lsv::input::test_handle_key(&mut app, key('?')).unwrap();
+        let _ = lsv::input::handle_key(&mut app, key('?')).unwrap();
         assert!(!app.test_show_whichkey());
     }
 
@@ -735,11 +735,11 @@ mod input_tests {
         // map "ss" -> sort:size
         app.test_set_keymaps(vec![lsv::config::KeyMapping { sequence: "ss".into(), action: "sort:size".into(), description: Some("sort size".into()) }]);
         // First 's' should open which-key with prefix
-        let _ = lsv::input::test_handle_key(&mut app, key('s')).unwrap();
+        let _ = lsv::input::handle_key(&mut app, key('s')).unwrap();
         assert!(app.test_show_whichkey());
         assert_eq!(app.test_whichkey_prefix().as_str(), "s");
         // Second 's' should dispatch and close overlay
-        let _ = lsv::input::test_handle_key(&mut app, key('s')).unwrap();
+        let _ = lsv::input::handle_key(&mut app, key('s')).unwrap();
         assert!(!app.test_show_whichkey());
         // sort applied
         assert!(matches!(app.test_sort_key(), lsv::actions::internal::SortKey::Size));
@@ -753,11 +753,11 @@ mod input_tests {
         let code = r#"lsv.config({ keys = { sequence_timeout_ms = 10 } })"#;
         let (cfg, _maps, _eng) = lsv::config::load_config_from_code(code, None).unwrap();
         app.test_set_config(cfg);
-        let _ = lsv::input::test_handle_key(&mut app, key('x')).unwrap();
+        let _ = lsv::input::handle_key(&mut app, key('x')).unwrap();
         // sleep beyond timeout
         sleep(Duration::from_millis(20));
         // now 'y' should not complete sequence and should not quit
-        let _ = lsv::input::test_handle_key(&mut app, key('y')).unwrap();
+        let _ = lsv::input::handle_key(&mut app, key('y')).unwrap();
         assert!(!app.test_should_quit());
     }
 
@@ -769,7 +769,7 @@ mod input_tests {
         fx.messages = lsv::actions::effects::OverlayToggle::Show;
         lsv::actions::apply::apply_effects(&mut app, fx);
         // Now send ESC
-        let _ = lsv::input::test_handle_key(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)).unwrap();
+        let _ = lsv::input::handle_key(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)).unwrap();
         assert!(!app.test_show_messages());
         assert!(!app.test_show_output());
         assert_eq!(app.test_whichkey_prefix().as_str(), "");
@@ -786,16 +786,16 @@ mod input_tests {
         // Ensure selection exists
         if app.test_has_entries() {
             // Down should move selection if possible
-            let _ = lsv::input::test_handle_key(&mut app, KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)).unwrap();
+            let _ = lsv::input::handle_key(&mut app, KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)).unwrap();
             // Entering a directory if selected
             // Find index of 'sub'
             if let Some(idx) = (0..100).find(|&i| app.test_entry_name(i).as_deref() == Some("sub")) {
                 app.test_select_index(idx);
                 let prev = app.test_cwd_path();
-                let _ = lsv::input::test_handle_key(&mut app, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)).unwrap();
+                let _ = lsv::input::handle_key(&mut app, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE)).unwrap();
                 assert_ne!(app.test_cwd_path(), prev);
                 // Go back up
-                let _ = lsv::input::test_handle_key(&mut app, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)).unwrap();
+                let _ = lsv::input::handle_key(&mut app, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)).unwrap();
                 assert_eq!(app.test_cwd_path(), dir);
             }
         }
@@ -806,7 +806,7 @@ mod input_tests {
         let mut app = lsv::app::App::new().expect("app new");
         app.test_set_keymaps(vec![lsv::config::KeyMapping { sequence: "q".into(), action: "quit".into(), description: None }]);
         // Press uppercase Q: handler tries 'Q','q','Q' variants
-        let quit = lsv::input::test_handle_key(&mut app, key('Q')).unwrap();
+        let quit = lsv::input::handle_key(&mut app, key('Q')).unwrap();
         assert!(quit);
     }
 }
@@ -925,16 +925,16 @@ mod util_rs_tests {
     #[test]
     fn sanitize_line_expands_tabs_and_strips_cr_and_controls() {
         let input = "a\tb\rc\x07d"; // tab, CR, bell
-        let out = lsv::util::test_sanitize_line(input);
+        let out = lsv::util::sanitize_line(input);
         // tab -> 4 spaces, CR removed, control -> space
         assert_eq!(out, "a    bc d");
     }
 
     #[test]
     fn shell_escape_quotes_and_handles_empty() {
-        assert_eq!(lsv::util::test_shell_escape(""), "''");
-        assert_eq!(lsv::util::test_shell_escape("abc"), "'abc'");
-        assert_eq!(lsv::util::test_shell_escape("a'b"), "'a'\\''b'");
+        assert_eq!(lsv::util::shell_escape(""), "''");
+        assert_eq!(lsv::util::shell_escape("abc"), "'abc'");
+        assert_eq!(lsv::util::shell_escape("a'b"), "'a'\\''b'");
     }
 
     #[test]
@@ -942,9 +942,9 @@ mod util_rs_tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let file = temp.path().join("sample.txt");
         fs::write(&file, "l1\nl2\nl3\n").unwrap();
-        let v = lsv::util::test_read_file_head(Path::new(&file), 2).expect("read");
+        let v = lsv::util::read_file_head(Path::new(&file), 2).expect("read");
         assert_eq!(v, vec!["l1", "l2"]);
-        let v2 = lsv::util::test_read_file_head(Path::new(&file), 10).expect("read");
+        let v2 = lsv::util::read_file_head(Path::new(&file), 10).expect("read");
         assert_eq!(v2, vec!["l1", "l2", "l3"]);
     }
 }
@@ -1061,6 +1061,7 @@ end)
         assert!(app.test_output_text().contains("hello.txt"));
     }
 
+
     #[test]
     fn lsv_select_last_item_goes_to_end() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -1147,5 +1148,40 @@ end)
         assert!(text.contains("Body"));
         lsv::actions::apply::apply_effects(&mut app, fx);
         assert_eq!(app.test_output_title(), "Output");
+    }
+
+    #[test]
+    fn e_mapping_passes_path_to_command() {
+        use std::fs;
+        let temp = tempfile::tempdir().expect("tempdir");
+        let dir = temp.path();
+        // Use a path with space to verify quoting
+        let fname = "hello world.txt";
+        let fpath = dir.join(fname);
+        fs::write(&fpath, b"content").unwrap();
+        let code = r#"
+local function shquote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+lsv.map_action('e', 'Edit', function(lsv, config)
+  local path = (config.context and config.context.path) or "."
+  -- Simulate editor by printing the argument we pass
+  lsv.os_run("printf 'EDIT:%s' " .. shquote(path))
+end)
+"#;
+        let (mut app, idx) = make_app_with_actions(code, "e");
+        app.test_set_cwd(dir);
+        // Select our file
+        let pos = (0..100).find(|&i| app.test_entry_name(i).as_deref() == Some(fname)).expect("find file");
+        app.test_select_index(pos);
+        let (fx, _ov) = lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
+        // Verify captured output contains the expanded absolute path
+        let (_title, text) = fx.output.clone().expect("fx.output present");
+        let abs = fpath.to_string_lossy();
+        assert!(text.contains("EDIT:"));
+        assert!(text.contains(&*abs), "expected output to contain path: {} in {}", abs, text);
+        lsv::actions::apply::apply_effects(&mut app, fx);
+        assert!(app.test_show_output());
+        assert!(app.test_output_text().contains(&*abs));
     }
 }

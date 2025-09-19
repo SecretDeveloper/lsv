@@ -96,6 +96,17 @@ pub fn to_lua_config_table(lua: &Lua, app: &App) -> mlua::Result<Table> {
   let sel_idx = app.list_state.selected().map(|i| i as u64).unwrap_or(u64::MAX);
   ctx.set("selected_index", sel_idx)?;
   ctx.set("current_len", app.current_entries.len() as u64)?;
+  // Include commonly used path fields for convenience in actions
+  if let Some(sel) = app.selected_entry() {
+    ctx.set("path", sel.path.to_string_lossy().to_string())?;
+    let parent = sel.path.parent().unwrap_or(&app.cwd).to_path_buf();
+    ctx.set("parent_dir", parent.to_string_lossy().to_string())?;
+    if let Some(name) = sel.path.file_name() { ctx.set("name", name.to_string_lossy().to_string())?; }
+  } else {
+    ctx.set("path", app.cwd.to_string_lossy().to_string())?;
+    ctx.set("parent_dir", app.cwd.to_string_lossy().to_string())?;
+    if let Some(name) = app.cwd.file_name() { ctx.set("name", name.to_string_lossy().to_string())?; }
+  }
   ui.set("context_note", "actions should use top-level context; kept for compatibility")?; // noop hint
   tbl.set("context", ctx.clone())?;
 

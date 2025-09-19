@@ -62,7 +62,7 @@ AA -> IN: Signal redraw/full-redraw as needed
 ```
 
 Notes:
-- `config.context` includes: `cwd`, `selected_index`, `current_len`.
+- `config.context` includes: `cwd`, `selected_index`, `current_len`, `path`, `parent_dir`, `name`.
 - `lsv` helpers can set fields like `output_text`, `output_title`, `messages`, or `redraw` in the config table; Rust applies them.
 
 ## lsv Helper Functions

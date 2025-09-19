@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-pub(crate) fn read_file_head(path: &Path, n: usize) -> io::Result<Vec<String>> {
+pub fn read_file_head(path: &Path, n: usize) -> io::Result<Vec<String>> {
   let file = File::open(path)?;
   let reader = BufReader::new(file);
   let mut lines = Vec::new();
@@ -13,7 +13,7 @@ pub(crate) fn read_file_head(path: &Path, n: usize) -> io::Result<Vec<String>> {
   Ok(lines)
 }
 
-pub(crate) fn sanitize_line(s: &str) -> String {
+pub fn sanitize_line(s: &str) -> String {
   let mut out = String::with_capacity(s.len());
   for ch in s.chars() {
     match ch {
@@ -26,7 +26,7 @@ pub(crate) fn sanitize_line(s: &str) -> String {
   out
 }
 
-pub(crate) fn shell_escape(s: &str) -> String {
+pub fn shell_escape(s: &str) -> String {
   if s.is_empty() {
     "''".to_string()
   } else {

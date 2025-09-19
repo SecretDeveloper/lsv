@@ -115,7 +115,11 @@ fn build_lsv_helpers(lua: &Lua, cfg_tbl: &Table, app: &App) -> io::Result<Table>
   let name_capture = name_str.clone();
 
   let os_run_fn = lua.create_function(move |_, cmd: String| {
-    trace::log(format!("[os_run] cmd='{}' cwd='{}' LSV_DIR='{}' LSV_NAME='{}'", cmd, cwd_capture, dir_capture, name_capture));
+    let rendered = render_cmd(&cmd, &path_capture, &dir_capture, &name_capture);
+    trace::log(format!(
+      "[os_run] cwd='{}' cmd='{}' rendered='{}' LSV_PATH='{}' LSV_DIR='{}' LSV_NAME='{}'",
+      cwd_capture, cmd, rendered, path_capture, dir_capture, name_capture
+    ));
     let out = std::process::Command::new("sh")
       .arg("-lc").arg(&cmd)
       .current_dir(&cwd_capture)
@@ -151,6 +155,11 @@ fn build_lsv_helpers(lua: &Lua, cfg_tbl: &Table, app: &App) -> io::Result<Table>
   let dir_str_i = dir_str.clone();
   let name_str_i = name_str.clone();
   let os_run_interactive_fn = lua.create_function(move |_, cmd: String| {
+    let rendered = render_cmd(&cmd, &path_str_i, &dir_str_i, &name_str_i);
+    trace::log(format!(
+      "[os_run_interactive] cwd='{}' cmd='{}' rendered='{}' LSV_PATH='{}' LSV_DIR='{}' LSV_NAME='{}'",
+      cwd_str_i, cmd, rendered, path_str_i, dir_str_i, name_str_i
+    ));
     let _ = disable_raw_mode();
     let mut out = std::io::stdout();
     let _ = execute!(out, LeaveAlternateScreen);
@@ -183,6 +192,20 @@ fn build_lsv_helpers(lua: &Lua, cfg_tbl: &Table, app: &App) -> io::Result<Table>
   tbl.set("os_run_interactive", os_run_interactive_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
   Ok(tbl)
+}
+
+fn render_cmd(cmd: &str, path: &str, dir: &str, name: &str) -> String {
+  // Best-effort env substitution for common patterns without running a shell
+  let mut s = cmd.to_string();
+  // ${VAR} first
+  s = s.replace("${LSV_PATH}", path)
+       .replace("${LSV_DIR}", dir)
+       .replace("${LSV_NAME}", name);
+  // Then $VAR
+  s = s.replace("$LSV_PATH", path)
+       .replace("$LSV_DIR", dir)
+       .replace("$LSV_NAME", name);
+  s
 }
 
 fn merge_tables(lua: &Lua, base: &Table, overlay: &Table) -> mlua::Result<Table> {
