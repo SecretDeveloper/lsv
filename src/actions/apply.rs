@@ -4,7 +4,7 @@
 //   output, redraw, quit).
 // - `apply_config_overlay` applies validated, structural changes coming
 //   from Lua (panes, theme, sort, etc.), computing minimal relist/redraw.
-use crate::{App};
+use crate::app::App;
 use super::effects::{ActionEffects, OverlayToggle};
 
 pub fn apply_effects(app: &mut App, fx: ActionEffects) {

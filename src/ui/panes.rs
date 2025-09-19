@@ -272,7 +272,10 @@ pub fn draw_whichkey_panel(
       spans.push(Span::styled(e.right.clone(), right_style));
       // pad to column width
       let pad = col_widths[c].saturating_sub(cw) as usize;
-      if pad > 0 { spans.push(Span::raw(" ".repeat(pad))); }
+      if pad > 0 {
+        let max_pad = 4096usize;
+        spans.push(Span::raw(" ".repeat(std::cmp::min(pad, max_pad))));
+      }
     }
     if consumed_any { lines.push(Line::from(spans)); }
   }
@@ -485,7 +488,10 @@ pub fn build_row_line(
   if space > 0 {
     // Right-align info text in remaining space
     let pad_before_right = space.saturating_sub(right_w) as usize;
-    if pad_before_right > 0 { spans.push(Span::styled(" ".repeat(pad_before_right), base_style)); }
+    if pad_before_right > 0 {
+      let max_pad = 4096usize;
+      spans.push(Span::styled(" ".repeat(std::cmp::min(pad_before_right, max_pad)), base_style));
+    }
     if right_w > 0 {
       let mut s = Style::default().fg(Color::Gray);
       if let Some(th) = app.config.ui.theme.as_ref() { if let Some(fg) = th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v)) { s = s.fg(fg); } }
@@ -592,7 +598,9 @@ fn fit_cell(text: &str, width: usize, align_right: bool) -> String {
   let w = UnicodeWidthStr::width(text);
   if w == width { return text.to_string(); }
   if w < width {
-    let pad = " ".repeat(width - w);
+    let need = width.saturating_sub(w);
+    let max_pad = 4096usize;
+    let pad = " ".repeat(std::cmp::min(need, max_pad));
     return if align_right { format!("{}{}", pad, text) } else { format!("{}{}", text, pad) };
   }
   if align_right { truncate_tail_to_width(text, width) } else { truncate_to_width(text, width) }
@@ -647,4 +655,54 @@ fn is_executable(path: &std::path::Path) -> bool {
 #[cfg(not(unix))]
 fn is_executable(_path: &std::path::Path) -> bool {
   false
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn human_size_formats_reasonably() {
+    assert_eq!(human_size(0), "0 B");
+    assert_eq!(human_size(1), "1 B");
+    assert_eq!(human_size(1024), "1.0 KB");
+    assert_eq!(human_size(1536), "1.5 KB");
+    assert_eq!(human_size(1024 * 1024), "1.0 MB");
+  }
+
+  #[test]
+  fn truncate_to_width_cuts_prefix() {
+    assert_eq!(truncate_to_width("abcd", 0), "");
+    assert_eq!(truncate_to_width("abcd", 2), "ab");
+    assert_eq!(truncate_to_width("abcd", 4), "abcd");
+  }
+
+  #[test]
+  fn truncate_tail_to_width_cuts_suffix() {
+    assert_eq!(truncate_tail_to_width("abcd", 0), "");
+    assert_eq!(truncate_tail_to_width("abcd", 2), "cd");
+    assert_eq!(truncate_tail_to_width("abcd", 4), "abcd");
+  }
+
+  #[test]
+  fn fit_cell_left_and_right_padding_and_clamp() {
+    // Left align: pad on the right
+    let s = fit_cell("ab", 5, false);
+    assert_eq!(s.len(), 5);
+    assert!(s.starts_with("ab"));
+    // Right align: pad on the left
+    let s2 = fit_cell("ab", 5, true);
+    assert_eq!(s2.len(), 5);
+    assert!(s2.ends_with("ab"));
+    // Excessive width should clamp padding to a sane maximum
+    let s3 = fit_cell("x", 10_000, false);
+    // length should be original + 4096 (clamp)
+    assert_eq!(s3.len(), 1 + 4096);
+  }
+
+  #[test]
+  fn replace_placeholders_substitutes_all() {
+    let out = replace_placeholders("{icon}{name}:{info} [{perms}]", "I", "NAME", "INFO", "PERMS");
+    assert_eq!(out, "INAME:INFO [PERMS]");
+  }
 }

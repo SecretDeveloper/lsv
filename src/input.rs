@@ -1,8 +1,9 @@
 use std::io;
+use crate::app::App;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool> {
+pub(crate) fn handle_key(app: &mut App, key: KeyEvent) -> io::Result<bool> {
   // First, try dynamic key mappings with simple sequence support
   // Quick toggle of which-key help
   if let KeyCode::Char('?') = key.code {
@@ -38,7 +39,7 @@ pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool
       app.pending_seq.push(ch);
       let seq = app.pending_seq.clone();
 
-      if let Some(action) = app.keymap_lookup.get(&seq).cloned() {
+      if let Some(action) = app.keymap_lookup.get(seq.as_str()).cloned() {
         // exact match
         app.pending_seq.clear();
         app.show_whichkey = false;
@@ -66,7 +67,7 @@ pub(crate) fn handle_key(app: &mut crate::App, key: KeyEvent) -> io::Result<bool
           ch.to_ascii_uppercase().to_string(),
         ] {
           if !tried.insert(k.clone()) { continue; }
-          if let Some(action) = app.keymap_lookup.get(&k).cloned() {
+          if let Some(action) = app.keymap_lookup.get(k.as_str()).cloned() {
             if crate::actions::dispatch_action(app, &action).unwrap_or(false) {
               if app.should_quit { return Ok(true); }
               return Ok(false);

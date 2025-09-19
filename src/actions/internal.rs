@@ -2,7 +2,7 @@
 // This module is a child of the crate root and can access crate-private items.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SortKey {
+pub enum SortKey {
   Name,
   Size,
   MTime,
@@ -52,7 +52,7 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
   None
 }
 
-pub(crate) fn execute_internal_action(app: &mut crate::App, action: InternalAction) {
+pub(crate) fn execute_internal_action(app: &mut crate::app::App, action: InternalAction) {
   match action {
     InternalAction::Quit => {
       app.should_quit = true;

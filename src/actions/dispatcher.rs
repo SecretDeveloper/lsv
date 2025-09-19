@@ -6,7 +6,7 @@
 // returned from Lua are applied immediately.
 use std::io;
 
-use crate::App;
+use crate::app::App;
 
 use super::{internal::{parse_internal_action, execute_internal_action}, apply::{apply_effects, apply_config_overlay}, lua_glue::call_lua_action};
 

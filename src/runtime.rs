@@ -5,9 +5,9 @@ use crossterm::{event, execute};
 use crossterm::event::Event;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::CrosstermBackend;
-use ratatui::Terminal;
+use ratatui::{Terminal};
 
-use crate::App;
+use crate::app::App;
 
 pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
   enable_raw_mode()?;
@@ -63,3 +63,4 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
   crate::ui::clear_owner_cache();
   res
 }
+

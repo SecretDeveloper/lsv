@@ -208,9 +208,17 @@ impl App {
     Ok(app)
   }
 
+  // Test helper: inject a Lua engine and action registry keys
+  pub fn inject_lua_engine_for_tests(&mut self, engine: crate::config::LuaEngine, action_keys: Vec<mlua::RegistryKey>) {
+    self.lua_engine = Some(engine);
+    self.lua_action_fns = Some(action_keys);
+  }
+
   pub(crate) fn selected_entry(&self) -> Option<&DirEntryInfo> {
     self.list_state.selected().and_then(|i| self.current_entries.get(i))
   }
+  pub fn test_entry_name(&self, idx: usize) -> Option<String> { self.current_entries.get(idx).map(|e| e.name.clone()) }
+  pub fn test_select_index(&mut self, idx: usize) { self.list_state.select(Some(idx)); self.refresh_preview(); }
 
   pub(crate) fn refresh_lists(&mut self) {
     self.parent = self.cwd.parent().map(|p| p.to_path_buf());
@@ -369,6 +377,62 @@ impl App {
       }
     }
   }
+
+  // Test helper: replace keymaps and rebuild lookup/prefix set
+  pub fn test_set_keymaps(&mut self, maps: Vec<crate::config::KeyMapping>) {
+    self.keymaps = maps;
+    self.rebuild_keymap_lookup();
+  }
+
+  // Test helper: resolve an action by sequence
+  pub fn test_resolve_action(&self, seq: &str) -> Option<String> {
+    self.keymap_lookup.get(seq).cloned()
+  }
+
+  // Test helper: check if a prefix is registered
+  pub fn test_has_prefix(&self, seq: &str) -> bool {
+    self.prefix_set.contains(seq)
+  }
+
+  // ---- Test accessors for internal state (read-only unless noted) ----
+  pub fn test_config_show_hidden(&self) -> bool { self.config.ui.show_hidden }
+  pub fn test_config_date_format(&self) -> Option<String> { self.config.ui.date_format.clone() }
+  pub fn test_config_preview_lines(&self) -> usize { self.config.ui.preview_lines }
+  pub fn test_set_force_full_redraw(&mut self, v: bool) { self.force_full_redraw = v; }
+  pub fn test_force_full_redraw(&self) -> bool { self.force_full_redraw }
+  pub fn test_show_messages(&self) -> bool { self.show_messages }
+  pub fn test_show_output(&self) -> bool { self.show_output }
+  pub fn test_show_whichkey(&self) -> bool { self.show_whichkey }
+  pub fn test_output_title(&self) -> &str { &self.output_title }
+  pub fn test_output_text(&self) -> String { self.output_lines.join("\n") }
+  pub fn test_has_entries(&self) -> bool { !self.current_entries.is_empty() }
+  pub fn test_selected_index(&self) -> Option<usize> { self.list_state.selected() }
+  pub fn test_should_quit(&self) -> bool { self.should_quit }
+  pub fn test_sort_reverse(&self) -> bool { self.sort_reverse }
+  pub fn test_set_sort_reverse(&mut self, v: bool) { self.sort_reverse = v; }
+  pub fn test_display_mode(&self) -> DisplayMode { self.display_mode }
+  pub fn test_info_mode(&self) -> InfoMode { self.info_mode }
+  pub fn test_get_entry(&self, idx: usize) -> Option<DirEntryInfo> { self.current_entries.get(idx).cloned() }
+  pub fn test_ui_row_format(&self) -> crate::config::UiRowFormat { self.config.ui.row.clone().unwrap_or_default() }
+  pub fn test_set_cwd(&mut self, path: &std::path::Path) {
+    self.cwd = path.to_path_buf();
+    self.refresh_lists();
+    if !self.current_entries.is_empty() {
+      self.list_state.select(Some(0));
+      self.refresh_preview();
+    }
+  }
+  pub fn test_theme_dir_fg(&self) -> Option<String> {
+    self.config.ui.theme.as_ref().and_then(|t| t.dir_fg.clone())
+  }
+  pub fn test_whichkey_prefix(&self) -> String { self.whichkey_prefix.clone() }
+  pub fn test_sort_key(&self) -> crate::actions::internal::SortKey { self.sort_key }
+  pub fn test_set_config(&mut self, cfg: crate::config::Config) { self.config = cfg; }
+  pub fn test_cwd_path(&self) -> std::path::PathBuf { self.cwd.clone() }
+  pub fn test_display_output(&mut self, title: &str, text: &str) { self.display_output(title, text) }
+  pub fn test_add_message(&mut self, msg: &str) { self.add_message(msg) }
+  pub fn test_preview_line_count(&self) -> usize { self.preview_lines.len() }
+  pub fn test_recent_messages_len(&self) -> usize { self.recent_messages.len() }
 
   pub(crate) fn add_default_keymaps(&mut self) {
     // Defaults are provided by builtin Lua (loaded before user config).

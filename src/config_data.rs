@@ -1,4 +1,5 @@
 use mlua::{Lua, Table, Value};
+use crate::app::App;
 
 // A values-only snapshot of configuration used for Lua round-tripping.
 // This excludes function fields (previewer/action fns) and keymaps.
@@ -60,7 +61,7 @@ pub struct ConfigData {
   pub show_field: crate::app::InfoMode,
 }
 
-pub fn to_lua_config_table(lua: &Lua, app: &crate::App) -> mlua::Result<Table> {
+pub fn to_lua_config_table(lua: &Lua, app: &App) -> mlua::Result<Table> {
   let tbl = lua.create_table()?;
 
   // keys

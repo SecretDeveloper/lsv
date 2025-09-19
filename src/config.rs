@@ -274,12 +274,87 @@ pub fn load_config(
   let maps = keymaps_acc.borrow().clone();
   let key_opt = previewer_key_acc.borrow_mut().take();
   let action_keys = std::mem::take(&mut *lua_action_keys_acc.borrow_mut());
-  let engine_opt = key_opt.map(|key| (engine, key, action_keys));
+  let engine_opt = if key_opt.is_some() || !action_keys.is_empty() {
+    // Ensure we always have a previewer key (no-op) if actions exist
+    let key = match key_opt {
+      Some(k) => k,
+      None => {
+        let f: mlua::Function = lua.create_function(|_, _ctx: mlua::Value| Ok(mlua::Value::Nil))
+          .map_err(|e| io_err(format!("create noop previewer failed: {e}")))?;
+        lua.create_registry_value(f)
+          .map_err(|e| io_err(format!("registry noop previewer failed: {e}")))?
+      }
+    };
+    Some((engine, key, action_keys))
+  } else { None };
   Ok((cfg, maps, engine_opt))
 }
 
 fn io_err(msg: String) -> std::io::Error {
   std::io::Error::new(std::io::ErrorKind::Other, msg)
+}
+
+/// Load configuration from a provided Lua source string for testing or
+/// programmatic injection. Defaults are loaded first, then `code` is
+/// executed as the user config overlay. The `root` controls the base
+/// directory for the restricted `require()` function; modules are
+/// resolved under `root/lua`.
+#[allow(dead_code)]
+pub fn load_config_from_code(
+  code: &str,
+  root: Option<&std::path::Path>,
+) -> std::io::Result<(Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>)> {
+  let engine = LuaEngine::new().map_err(|e| io_err(format!("lua init failed: {e}")))?;
+  let lua = engine.lua();
+
+  let config_acc = Rc::new(RefCell::new(Config::default()));
+  let keymaps_acc: Rc<RefCell<Vec<KeyMapping>>> = Rc::new(RefCell::new(Vec::new()));
+  let previewer_key_acc: Rc<RefCell<Option<RegistryKey>>> = Rc::new(RefCell::new(None));
+  let lua_action_keys_acc: Rc<RefCell<Vec<RegistryKey>>> = Rc::new(RefCell::new(Vec::new()));
+  install_lsv_api(
+    lua,
+    Rc::clone(&config_acc),
+    Rc::clone(&keymaps_acc),
+    Rc::clone(&previewer_key_acc),
+    Rc::clone(&lua_action_keys_acc),
+  )
+  .map_err(|e| io_err(format!("lsv api install failed: {e}")))?;
+
+  // install restricted require rooted at <root>/lua
+  let base = match root { Some(p) => p.to_path_buf(), None => std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")) };
+  install_require(lua, &base.join("lua")).map_err(|e| io_err(format!("require install failed: {e}")))?;
+
+  // 1) Execute built-in defaults
+  lua
+    .load(BUILTIN_DEFAULTS_LUA)
+    .set_name("builtin/defaults.lua")
+    .exec()
+    .map_err(|e| io_err(format!("defaults.lua execution failed: {e}")))?;
+
+  // 2) Execute provided code
+  lua
+    .load(code)
+    .set_name("inline/init.lua")
+    .exec()
+    .map_err(|e| io_err(format!("inline init.lua execution failed: {e}")))?;
+
+  let cfg = config_acc.borrow().clone();
+  let maps = keymaps_acc.borrow().clone();
+  let key_opt = previewer_key_acc.borrow_mut().take();
+  let action_keys = std::mem::take(&mut *lua_action_keys_acc.borrow_mut());
+  let engine_opt = if key_opt.is_some() || !action_keys.is_empty() {
+    let key = match key_opt {
+      Some(k) => k,
+      None => {
+        let f: mlua::Function = lua.create_function(|_, _ctx: mlua::Value| Ok(mlua::Value::Nil))
+          .map_err(|e| io_err(format!("create noop previewer failed: {e}")))?;
+        lua.create_registry_value(f)
+          .map_err(|e| io_err(format!("registry noop previewer failed: {e}")))?
+      }
+    };
+    Some((engine, key, action_keys))
+  } else { None };
+  Ok((cfg, maps, engine_opt))
 }
 
 fn install_lsv_api(

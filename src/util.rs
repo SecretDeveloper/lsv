@@ -42,4 +42,3 @@ pub(crate) fn shell_escape(s: &str) -> String {
     out
   }
 }
-

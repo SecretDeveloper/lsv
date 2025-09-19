@@ -6,7 +6,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScree
 use mlua::{Lua, Table, Value};
 
 use crate::trace;
-use crate::App;
+use crate::app::App;
 use super::effects::{ActionEffects, parse_effects_from_lua};
 
 pub fn call_lua_action(app: &mut App, idx: usize) -> io::Result<(ActionEffects, Option<crate::config_data::ConfigData>)> {
@@ -37,8 +37,14 @@ pub fn call_lua_action(app: &mut App, idx: usize) -> io::Result<(ActionEffects, 
     })?;
   trace::log(format!("[lua] action idx={} ok in {}ms", idx, started.elapsed().as_millis()));
 
+  // Prefer merging any returned partial table into the full snapshot to
+  // avoid losing required fields expected by the validator. This makes
+  // it safe for actions to return only the fields they changed.
   let candidate_tbl = match ret_val {
-    Value::Table(t) => t,
+    Value::Table(t) => {
+      merge_tables(lua, &cfg_tbl, &t)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("merge: {}", e)))?
+    }
     _ => cfg_tbl,
   };
 
@@ -177,6 +183,32 @@ fn build_lsv_helpers(lua: &Lua, cfg_tbl: &Table, app: &App) -> io::Result<Table>
   tbl.set("os_run_interactive", os_run_interactive_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
   Ok(tbl)
+}
+
+fn merge_tables(lua: &Lua, base: &Table, overlay: &Table) -> mlua::Result<Table> {
+  let out = lua.create_table()?;
+  // copy base first
+  for pair in base.clone().pairs::<Value, Value>() {
+    let (k, v) = pair?;
+    out.set(k, v)?;
+  }
+  // overlay keys
+  for pair in overlay.clone().pairs::<Value, Value>() {
+    let (k, v) = pair?;
+    match (&k, &v) {
+      (Value::String(ks), Value::Table(ot)) => {
+        // recursive merge for nested tables when base has a table
+        if let Ok(bt) = out.get::<Table>(ks.as_bytes()) {
+          let merged = merge_tables(lua, &bt, ot)?;
+          out.set(ks.as_bytes(), merged)?;
+        } else {
+          out.set(ks.as_bytes(), v)?;
+        }
+      }
+      _ => { out.set(k, v)?; }
+    }
+  }
+  Ok(out)
 }
 // Lua integration for action functions.
 //
