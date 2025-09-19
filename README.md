@@ -1,6 +1,6 @@
 # lsv — A Three‑Pane Terminal File Viewer
 
-![lsv screenshot](doc/lsv.jpeg)
+![lsv screenshot](docs/lsv.jpeg)
 
 lsv is a fast, curses‑based file viewer for the terminal. It presents three panes side by side:
 
