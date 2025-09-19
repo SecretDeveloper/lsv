@@ -1,4 +1,6 @@
 use std::io;
+use crossterm::execute;
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 
 use crate::App;
 
@@ -91,13 +93,18 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
     let path_str = sel_path.to_string_lossy().to_string();
     let dir_str = sel_dir.to_string_lossy().to_string();
     let name_str = sel_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let cwd_capture = cwd_str.clone();
+    let path_capture = path_str.clone();
+    let dir_capture = dir_str.clone();
+    let name_capture = name_str.clone();
     let os_run_fn = lua.create_function(move |_, cmd: String| {
+      crate::trace::log(format!("[os_run] cmd='{}' cwd='{}' LSV_DIR='{}' LSV_NAME='{}'", cmd, cwd_capture, dir_capture, name_capture));
       let out = std::process::Command::new("sh")
         .arg("-lc").arg(&cmd)
-        .current_dir(&cwd_str)
-        .env("LSV_PATH", &path_str)
-        .env("LSV_DIR", &dir_str)
-        .env("LSV_NAME", &name_str)
+        .current_dir(&cwd_capture)
+        .env("LSV_PATH", &path_capture)
+        .env("LSV_DIR", &dir_capture)
+        .env("LSV_NAME", &name_capture)
         .output();
       match out {
         Ok(output) => {
@@ -107,9 +114,11 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
           let text = String::from_utf8_lossy(&buf).to_string();
           cfg_ref5.set("output_text", text)?;
           cfg_ref5.set("output_title", format!("$ {}", cmd))?;
+          crate::trace::log(format!("[os_run] exit={:?} bytes_out={}", output.status.code(), buf.len()));
           Ok(true)
         }
         Err(e) => {
+          crate::trace::log(format!("[os_run] error: {}", e));
           cfg_ref5.set("output_text", format!("<error: {}>", e))?;
           cfg_ref5.set("output_title", format!("$ {}", cmd))?;
           Ok(true)
@@ -117,12 +126,60 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
       }
     }).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     tbl.set("os_run", os_run_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    // lsv.os_run_interactive(cmd)
+    let cfg_ref_i = cfg_tbl.clone();
+    let cwd_str_i = cwd_str.clone();
+    let path_str_i = path_str.clone();
+    let dir_str_i = dir_str.clone();
+    let name_str_i = name_str.clone();
+    let os_run_interactive_fn = lua.create_function(move |_, cmd: String| {
+      // leave TUI
+      let _ = disable_raw_mode();
+      let mut out = std::io::stdout();
+      let _ = execute!(out, LeaveAlternateScreen);
+      // run command attached to terminal
+      let status = std::process::Command::new("sh")
+        .arg("-lc").arg(&cmd)
+        .current_dir(&cwd_str_i)
+        .env("LSV_PATH", &path_str_i)
+        .env("LSV_DIR", &dir_str_i)
+        .env("LSV_NAME", &name_str_i)
+        .status();
+      // restore TUI
+      let _ = enable_raw_mode();
+      let mut out2 = std::io::stdout();
+      let _ = execute!(out2, EnterAlternateScreen);
+      // request a full redraw on return to ensure the UI repaints completely
+      let _ = cfg_ref_i.set("redraw", true);
+      // record status if non-zero
+      match status {
+        Ok(st) => {
+          if !st.success() {
+            let code = st.code().unwrap_or(-1);
+            let _ = cfg_ref_i.set("output_text", format!("<interactive exit {}> $ {}", code, cmd));
+            let _ = cfg_ref_i.set("output_title", String::from("Output"));
+          }
+        }
+        Err(e) => {
+          let _ = cfg_ref_i.set("output_text", format!("<interactive error: {}> $ {}", e, cmd));
+          let _ = cfg_ref_i.set("output_title", String::from("Output"));
+        }
+      }
+      Ok(true)
+    }).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    tbl.set("os_run_interactive", os_run_interactive_fn).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     tbl
   };
   // Call function(lsv, config): may return a table; if not, use mutated arg
+  crate::trace::log(format!("[lua] calling action idx={}...", idx));
+  let started = std::time::Instant::now();
   let ret_val: mlua::Value = func
     .call((lsv_tbl, cfg_tbl.clone()))
-    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("lua fn: {e}")))?;
+    .map_err(|e| {
+      crate::trace::log(format!("[lua] action idx={} error: {}", idx, e));
+      io::Error::new(io::ErrorKind::Other, format!("lua fn: {e}"))
+    })?;
+  crate::trace::log(format!("[lua] action idx={} ok in {}ms", idx, started.elapsed().as_millis()));
   let candidate_tbl = match ret_val {
     mlua::Value::Table(t) => t,
     _ => cfg_tbl,
@@ -171,6 +228,9 @@ fn run_lua_action(app: &mut App, idx: usize) -> io::Result<bool> {
   if let Ok(text) = candidate_tbl.get::<String>("output_text") {
     let title = candidate_tbl.get::<String>("output_title").unwrap_or_else(|_| String::from("Output"));
     app.display_output(&title, &text);
+  }
+  if candidate_tbl.get::<bool>("redraw").unwrap_or(false) {
+    app.force_full_redraw = true;
   }
   if let Ok(o) = candidate_tbl.get::<String>("output") {
     match o.as_str() {

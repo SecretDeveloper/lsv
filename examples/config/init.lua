@@ -57,10 +57,10 @@ lsv.map_action("gs", "Git Status", function(lsv, config)
 end)
 
 lsv.map_action("E", "Open in tmux pane", function(lsv, config)
-	local path = (config.context and config.context.cwd) or "."
-	lsv.os_run("&tmux split-window -h nvim " .. shquote(path))
+  local path = (config.context and config.context.cwd) or "."
+  lsv.os_run_interactive("&tmux split-window -h nvim " .. shquote(path))
 end)
 lsv.map_action("e", "Edit in nvim", function(lsv, config)
-	local path = (config.context and config.context.cwd) or "."
-	lsv.os_run("nvim " .. shquote(path))
+  local path = (config.context and config.context.cwd) or "."
+  lsv.os_run_interactive("nvim " .. shquote(path))
 end)

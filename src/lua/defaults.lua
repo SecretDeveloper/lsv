@@ -78,6 +78,9 @@ end)
 lsv.map_action("zn", "Info: none", function(lsv, config)
 	config.ui.show = "none"
 end)
+lsv.map_action("zh", "Toggle Show Hidden", function(lsv, config)
+	config.ui.show_hidden = not (config.ui.show_hidden == true)
+end)
 
 lsv.map_action("zs", "Info: size", function(lsv, config)
 	config.ui.show = "size"
