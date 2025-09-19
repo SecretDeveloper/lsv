@@ -34,9 +34,9 @@ See configuration guide in `docs/configuration.md` for setup and keybinding exam
 
 lsv loads a Lua config from the first of:
 
-1. `$LSV_CONFIG_DIR/lua/init.lua`
-2. `$XDG_CONFIG_HOME/lsv/lua/init.lua`
-3. `~/.config/lsv/lua/init.lua`
+1. `$LSV_CONFIG_DIR/init.lua`
+2. `$XDG_CONFIG_HOME/lsv/init.lua`
+3. `~/.config/lsv/init.lua`
 
 Top‑level Lua API:
 
@@ -61,7 +61,7 @@ Context data passed to actions via `config.context`:
 ### Minimal Example: Bind an external tool
 
 ```lua
--- Sample lsv config -- place in $HOME/.config/lsv/lua/init.lua
+-- Sample lsv config — place in $HOME/.config/lsv/init.lua
 lsv.config({
   config_version = 1,
   keys = { sequence_timeout_ms = 0 },

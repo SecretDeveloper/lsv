@@ -1,6 +1,6 @@
 [package]
 name = "lsv"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Three‑pane terminal file viewer (TUI) with preview and Lua configuration"
 license = "MIT"
@@ -13,6 +13,7 @@ categories = ["command-line-utilities", "filesystem"]
 rust-version = "1.85"
 include = [
   "src/**",
+  "src/actions/**",
   "src/lua/**",
   "README.md",
   "LICENSE",

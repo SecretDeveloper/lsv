@@ -53,7 +53,7 @@ The current context is available in `config.context`:
 - `selected_index` — current selection index
 - `current_len` — number of items in the current list
 
-## Minimal example `~/.config/lsv/lua/init.lua`
+## Minimal example `~/.config/lsv/init.lua`
 
 ```lua
 -- Overlay a few UI settings

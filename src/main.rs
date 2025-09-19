@@ -9,7 +9,6 @@ mod config_data;
 mod app;
 mod runtime;
 mod util;
-mod app_actions;
 
 pub use app::App;
 // helpers moved to dedicated modules

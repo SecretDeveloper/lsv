@@ -375,6 +375,7 @@ impl App {
     // No Rust-managed defaults here.
   }
 
+  #[allow(dead_code)]
   pub(crate) fn add_message(&mut self, msg: &str) {
     let m = msg.trim().to_string();
     if m.is_empty() { return; }
