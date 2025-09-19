@@ -1,5 +1,10 @@
 # lsv — A Three‑Pane Terminal File Viewer
 
+[![CI](https://github.com/SecretDeveloper/lsv/actions/workflows/ci.yml/badge.svg)](https://github.com/SecretDeveloper/lsv/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/lsv.svg)](https://crates.io/crates/lsv)
+[![docs.rs](https://img.shields.io/docsrs/lsv)](https://docs.rs/lsv)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ![lsv screenshot](docs/lsv.jpeg)
 
 lsv is a fast, curses‑based file viewer for the terminal. It presents three panes side by side:

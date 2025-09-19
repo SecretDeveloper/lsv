@@ -6,6 +6,7 @@ pub(crate) fn sort_key_to_str(k: crate::actions::SortKey) -> &'static str {
     crate::actions::SortKey::Name => "name",
     crate::actions::SortKey::Size => "size",
     crate::actions::SortKey::MTime => "mtime",
+    crate::actions::SortKey::CTime => "created",
   }
 }
 
@@ -14,7 +15,8 @@ pub(crate) fn sort_key_from_str(s: &str) -> Option<crate::actions::SortKey> {
   match low.as_str() {
     "name" | "n" => Some(crate::actions::SortKey::Name),
     "size" | "s" => Some(crate::actions::SortKey::Size),
-    "mtime" | "time" | "date" | "t" => Some(crate::actions::SortKey::MTime),
+    "mtime" | "modified" | "time" | "date" | "t" => Some(crate::actions::SortKey::MTime),
+    "created" | "ctime" | "birth" | "c" => Some(crate::actions::SortKey::CTime),
     _ => None,
   }
 }
@@ -56,4 +58,3 @@ pub(crate) fn display_mode_from_str(s: &str) -> Option<crate::app::DisplayMode> 
     _ => None,
   }
 }
-

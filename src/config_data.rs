@@ -240,7 +240,7 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String> {
   // sort (under ui)
   let sort_key_str = get_string(&ui_tbl, "sort")?;
   let sort_key = crate::enums::sort_key_from_str(&sort_key_str)
-    .ok_or_else(|| format!("sort.key must be one of name|size|mtime"))?;
+    .ok_or_else(|| format!("sort.key must be one of name|size|mtime|created"))?;
   let sort_reverse = get_bool(&ui_tbl, "sort_reverse")?;
 
   // show (under ui)

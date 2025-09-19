@@ -352,6 +352,15 @@ impl App {
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
           at.cmp(&bt)
         }
+        SortKey::CTime => {
+          let at = a
+            .ctime
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+          let bt = b
+            .ctime
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+          at.cmp(&bt)
+        }
       };
       if reverse { ord.reverse() } else { ord }
     });

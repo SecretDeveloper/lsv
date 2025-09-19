@@ -66,6 +66,15 @@ lsv.map_action("sr", "Toggle reverse sort", function(lsv, config)
 	config.ui.sort_reverse = not (config.ui.sort_reverse == true)
 end)
 
+-- Sort by modified (mtime) and created (ctime)
+lsv.map_action("sm", "Sort by modified time", function(lsv, config)
+	config.ui.sort = "mtime"
+end)
+
+lsv.map_action("sc", "Sort by created time", function(lsv, config)
+	config.ui.sort = "created"
+end)
+
 -- Navigation (use action tables; runtime interprets nav directive)
 lsv.map_action("gg", "Go to top", function(lsv, config)
 	lsv.select_item(0)

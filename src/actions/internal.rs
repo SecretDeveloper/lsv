@@ -6,6 +6,7 @@ pub enum SortKey {
   Name,
   Size,
   MTime,
+  CTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
