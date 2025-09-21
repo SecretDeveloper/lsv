@@ -44,16 +44,13 @@ pub fn call_lua_action(
   }
 
   let lua = engine.lua();
-  let func =
-    lua.registry_value::<mlua::Function>(&funcs[idx]).map_err(|e| {
-      io::Error::other(format!("lua fn lookup: {e}"))
-    })?;
+  let func = lua
+    .registry_value::<mlua::Function>(&funcs[idx])
+    .map_err(|e| io::Error::other(format!("lua fn lookup: {e}")))?;
 
   // Build config snapshot (mutable by Lua)
-  let cfg_tbl =
-    crate::config_data::to_lua_config_table(lua, app).map_err(|e| {
-      io::Error::other(format!("build config tbl: {e}"))
-    })?;
+  let cfg_tbl = crate::config_data::to_lua_config_table(lua, app)
+    .map_err(|e| io::Error::other(format!("build config tbl: {e}")))?;
 
   // Build lsv helpers table
   let lsv_tbl = build_lsv_helpers(lua, &cfg_tbl, app)?;
@@ -75,9 +72,8 @@ pub fn call_lua_action(
   // it safe for actions to return only the fields they changed.
   let candidate_tbl = match ret_val
   {
-    Value::Table(t) => merge_tables(lua, &cfg_tbl, &t).map_err(|e| {
-      io::Error::other(format!("merge: {}", e))
-    })?,
+    Value::Table(t) => merge_tables(lua, &cfg_tbl, &t)
+      .map_err(|e| io::Error::other(format!("merge: {}", e)))?,
     _ => cfg_tbl,
   };
 
@@ -95,9 +91,7 @@ fn build_lsv_helpers(
   app: &App,
 ) -> io::Result<Table>
 {
-  let tbl = lua
-    .create_table()
-    .map_err(|e| io::Error::other(e.to_string()))?;
+  let tbl = lua.create_table().map_err(|e| io::Error::other(e.to_string()))?;
 
   // select_item(index)
   let cfg_ref = cfg_tbl.clone();
@@ -149,9 +143,7 @@ fn build_lsv_helpers(
       Ok(true)
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("quit", quit_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("quit", quit_fn).map_err(|e| io::Error::other(e.to_string()))?;
 
   // display_output(text, title?)
   let cfg_ref4 = cfg_tbl.clone();
@@ -237,9 +229,7 @@ fn build_lsv_helpers(
       }
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("os_run", os_run_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("os_run", os_run_fn).map_err(|e| io::Error::other(e.to_string()))?;
 
   // os_run_interactive
   let cfg_ref_i = cfg_tbl.clone();

@@ -191,24 +191,24 @@ pub fn apply_config_overlay(
   let cur_theme = app.config.ui.theme.clone().unwrap_or_default();
   let new_theme = if let Some(th) = data.ui.theme.as_ref()
   {
-    let t = crate::config::UiTheme{
-    pane_bg : th.pane_bg.clone(),
-    border_fg : th.border_fg.clone(),
-    item_fg : th.item_fg.clone(),
-    item_bg : th.item_bg.clone(),
-    selected_item_fg : th.selected_item_fg.clone(),
-    selected_item_bg : th.selected_item_bg.clone(),
-    title_fg : th.title_fg.clone(),
-    title_bg : th.title_bg.clone(),
-    info_fg : th.info_fg.clone(),
-    dir_fg : th.dir_fg.clone(),
-    dir_bg : th.dir_bg.clone(),
-    file_fg : th.file_fg.clone(),
-    file_bg : th.file_bg.clone(),
-    hidden_fg : th.hidden_fg.clone(),
-    hidden_bg : th.hidden_bg.clone(),
-    exec_fg : th.exec_fg.clone(),
-    exec_bg : th.exec_bg.clone(),
+    let t = crate::config::UiTheme {
+      pane_bg:          th.pane_bg.clone(),
+      border_fg:        th.border_fg.clone(),
+      item_fg:          th.item_fg.clone(),
+      item_bg:          th.item_bg.clone(),
+      selected_item_fg: th.selected_item_fg.clone(),
+      selected_item_bg: th.selected_item_bg.clone(),
+      title_fg:         th.title_fg.clone(),
+      title_bg:         th.title_bg.clone(),
+      info_fg:          th.info_fg.clone(),
+      dir_fg:           th.dir_fg.clone(),
+      dir_bg:           th.dir_bg.clone(),
+      file_fg:          th.file_fg.clone(),
+      file_bg:          th.file_bg.clone(),
+      hidden_fg:        th.hidden_fg.clone(),
+      hidden_bg:        th.hidden_bg.clone(),
+      exec_fg:          th.exec_fg.clone(),
+      exec_bg:          th.exec_bg.clone(),
     };
     Some(t)
   }

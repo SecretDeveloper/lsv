@@ -196,31 +196,28 @@ fn run_previewer(
         let _ = ctx.set("preview_y", area.y as i64);
         if let Ok(Some(mut cmd)) = func.call::<Option<String>>(ctx)
         {
-            let name_str = path
-              .file_name()
-              .map(|s| s.to_string_lossy().to_string())
-              .unwrap_or_default();
-            let ext_str = path
-              .extension()
-              .and_then(|s| s.to_str())
-              .unwrap_or("")
-              .to_string();
-            cmd = cmd.replace("{path}", &crate::util::shell_escape(&path_str));
-            cmd =
-              cmd.replace("{directory}", &crate::util::shell_escape(&dir_str));
-            cmd = cmd.replace("{dir}", &crate::util::shell_escape(&dir_str));
-            cmd = cmd.replace("{name}", &crate::util::shell_escape(&name_str));
-            cmd =
-              cmd.replace("{extension}", &crate::util::shell_escape(&ext_str));
-            let w = area.width.saturating_sub(10);
-            let h = area.height.saturating_sub(10);
-            cmd = cmd.replace("{width}", &w.to_string());
-            cmd = cmd.replace("{height}", &h.to_string());
-            cmd = cmd.replace("{preview_x}", &area.x.to_string());
-            cmd = cmd.replace("{preview_y}", &area.y.to_string());
-            return run_previewer_command(
-              &cmd, &dir_str, &path_str, &name_str, limit,
-            );
+          let name_str = path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+          let ext_str =
+            path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+          cmd = cmd.replace("{path}", &crate::util::shell_escape(&path_str));
+          cmd =
+            cmd.replace("{directory}", &crate::util::shell_escape(&dir_str));
+          cmd = cmd.replace("{dir}", &crate::util::shell_escape(&dir_str));
+          cmd = cmd.replace("{name}", &crate::util::shell_escape(&name_str));
+          cmd =
+            cmd.replace("{extension}", &crate::util::shell_escape(&ext_str));
+          let w = area.width.saturating_sub(10);
+          let h = area.height.saturating_sub(10);
+          cmd = cmd.replace("{width}", &w.to_string());
+          cmd = cmd.replace("{height}", &h.to_string());
+          cmd = cmd.replace("{preview_x}", &area.x.to_string());
+          cmd = cmd.replace("{preview_y}", &area.y.to_string());
+          return run_previewer_command(
+            &cmd, &dir_str, &path_str, &name_str, limit,
+          );
         }
       }
     }
