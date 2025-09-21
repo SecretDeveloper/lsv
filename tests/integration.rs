@@ -392,22 +392,24 @@ mod dispatcher_tests
   }
 
   #[test]
-  fn dispatch_lua_action_by_index()
+  fn dispatch_lua_action_via_binding()
   {
-    // Map a single action at index 0 that sets quit
+    // Map a single action bound to 'x' that sets quit
     let code = r#"
 lsv.map_action('x', 'Quit', function(lsv, config)
   config.quit = true
   return config
 end)
 "#;
-    let (_cfg, _maps, engine_opt) =
+    let (_cfg, maps, engine_opt) =
       lsv::config::load_config_from_code(code, None).expect("load with action");
     let (engine, _prev, keys) = engine_opt.expect("engine present");
     let mut app = lsv::app::App::new().expect("app new");
     app.inject_lua_engine_for_tests(engine, keys);
-    let ran = lsv::actions::dispatch_action(&mut app, "run_lua:0")
-      .expect("dispatch lua");
+    app.test_set_keymaps(maps);
+    let action = app.test_resolve_action("x").expect("binding for x");
+    let ran =
+      lsv::actions::dispatch_action(&mut app, &action).expect("dispatch lua");
     assert!(ran);
     assert!(app.test_should_quit());
   }
@@ -422,15 +424,17 @@ lsv.map_action('x', 'Quit', function(lsv, config)
   return config
 end)
 "#;
-    let (_cfg, _maps, engine_opt) =
+    let (_cfg, maps, engine_opt) =
       lsv::config::load_config_from_code(code, None).expect("load with action");
     let (engine, _prev, keys) = engine_opt.expect("engine present");
     let mut app = lsv::app::App::new().expect("app new");
     app.inject_lua_engine_for_tests(engine, keys);
+    app.test_set_keymaps(maps);
+    let action = app.test_resolve_action("x").expect("binding for x");
     app.test_set_sort_reverse(false);
+    let seq = format!("{};sort:reverse:toggle", action);
     let ran =
-      lsv::actions::dispatch_action(&mut app, "run_lua:0;sort:reverse:toggle")
-        .expect("dispatch seq");
+      lsv::actions::dispatch_action(&mut app, &seq).expect("dispatch seq");
     assert!(ran);
     assert!(app.test_should_quit());
     // Should not have toggled since quit short-circuits
@@ -1266,14 +1270,16 @@ lsv.map_action('x', 'Partial', function(lsv, config)
   return { ui = { display_mode = 'friendly' } }
 end)
 "#;
-    let (_cfg, _maps, engine_opt) =
+    let (_cfg, maps, engine_opt) =
       lsv::config::load_config_from_code(code, None).expect("load with action");
     let (engine, _prev, keys) = engine_opt.expect("engine present");
     let mut app = lsv::app::App::new().expect("app new");
     app.inject_lua_engine_for_tests(engine, keys);
-    // Call the action by index 0 via dispatcher (covers merge path too)
-    let ran = lsv::actions::dispatch_action(&mut app, "run_lua:0")
-      .expect("dispatch lua");
+    app.test_set_keymaps(maps);
+    // Call the action via its mapped command (covers merge path too)
+    let action = app.test_resolve_action("x").expect("binding for x");
+    let ran =
+      lsv::actions::dispatch_action(&mut app, &action).expect("dispatch lua");
     assert!(ran);
     // Display mode should be Friendly after overlay is applied
     assert!(matches!(app.test_display_mode(), lsv::app::DisplayMode::Friendly));
