@@ -261,14 +261,11 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths>
   Ok(ConfigPaths { root, entry, exists })
 }
 
+type ConfigArtifacts =
+  (Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>);
+
 /// Load and parse configuration using a restricted Lua runtime.
-pub fn load_config(
-  paths: &ConfigPaths
-) -> std::io::Result<(
-  Config,
-  Vec<KeyMapping>,
-  Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>,
-)>
+pub fn load_config(paths: &ConfigPaths) -> std::io::Result<ConfigArtifacts>
 {
   let engine =
     LuaEngine::new().map_err(|e| io_err(format!("lua init failed: {e}")))?;
@@ -355,11 +352,7 @@ fn io_err(msg: String) -> std::io::Error
 pub fn load_config_from_code(
   code: &str,
   root: Option<&std::path::Path>,
-) -> std::io::Result<(
-  Config,
-  Vec<KeyMapping>,
-  Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>,
-)>
+) -> std::io::Result<ConfigArtifacts>
 {
   let engine =
     LuaEngine::new().map_err(|e| io_err(format!("lua init failed: {e}")))?;

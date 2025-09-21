@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
   if let Err(e) = runtime::run_app(&mut app)
   {
     trace::log(format!("[error] runtime::run_app: {e}"));
-    return Err(e.into());
+    return Err(e);
   }
   Ok(())
 }

@@ -330,22 +330,28 @@ mod apply_tests
     // (no setters: validate via effects changes below)
 
     // messages: toggle should show messages and hide others
-    let mut fx = lsv::actions::effects::ActionEffects::default();
-    fx.messages = lsv::actions::effects::OverlayToggle::Toggle;
+    let fx = lsv::actions::effects::ActionEffects {
+      messages: lsv::actions::effects::OverlayToggle::Toggle,
+      ..Default::default()
+    };
     lsv::actions::apply::apply_effects(&mut app, fx.clone());
     assert!(app.test_show_messages());
     assert!(!app.test_show_output() && !app.test_show_whichkey());
 
     // output overlay: show should hide others
-    fx.messages = lsv::actions::effects::OverlayToggle::None;
-    fx.output_overlay = lsv::actions::effects::OverlayToggle::Show;
+    let fx = lsv::actions::effects::ActionEffects {
+      output_overlay: lsv::actions::effects::OverlayToggle::Show,
+      ..Default::default()
+    };
     lsv::actions::apply::apply_effects(&mut app, fx.clone());
     assert!(app.test_show_output());
     assert!(!app.test_show_messages() && !app.test_show_whichkey());
 
     // output content should populate and turn on Output panel
-    fx.output_overlay = lsv::actions::effects::OverlayToggle::None;
-    fx.output = Some(("T".to_string(), "Body".to_string()));
+    let fx = lsv::actions::effects::ActionEffects {
+      output: Some(("T".to_string(), "Body".to_string())),
+      ..Default::default()
+    };
     lsv::actions::apply::apply_effects(&mut app, fx.clone());
     assert!(app.test_show_output());
     assert_eq!(app.test_output_title(), "T");
@@ -354,16 +360,20 @@ mod apply_tests
     // selection update within bounds
     if app.test_has_entries()
     {
-      fx.output = None;
-      fx.selection = Some(0);
+      let fx = lsv::actions::effects::ActionEffects {
+        selection: Some(0),
+        ..Default::default()
+      };
       lsv::actions::apply::apply_effects(&mut app, fx.clone());
       assert_eq!(app.test_selected_index(), Some(0));
     }
 
     // quit + redraw flags
-    fx.selection = None;
-    fx.redraw = true;
-    fx.quit = true;
+    let fx = lsv::actions::effects::ActionEffects {
+      redraw: true,
+      quit: true,
+      ..Default::default()
+    };
     lsv::actions::apply::apply_effects(&mut app, fx);
     assert!(app.test_force_full_redraw() && app.test_should_quit());
   }
@@ -424,7 +434,7 @@ end)
     assert!(ran);
     assert!(app.test_should_quit());
     // Should not have toggled since quit short-circuits
-    assert_eq!(app.test_sort_reverse(), false);
+    assert!(!app.test_sort_reverse());
   }
 
   #[test]
@@ -645,7 +655,7 @@ lsv.config({
       lsv::config::load_config_from_code("", None).expect("load defaults");
     // Spot-check a few defaults set in defaults.lua
     assert_eq!(cfg.keys.sequence_timeout_ms, 0);
-    assert_eq!(cfg.ui.show_hidden, false);
+    assert!(!cfg.ui.show_hidden);
     assert_eq!(cfg.ui.preview_lines, 100);
     assert_eq!(cfg.ui.max_list_items, 5000);
     assert_eq!(cfg.ui.row.as_ref().map(|r| r.left.as_str()), Some("{name}"));
@@ -797,7 +807,7 @@ lsv.config({
     let (_cfg, maps, _eng) =
       lsv::config::load_config_from_code(code, None).expect("load config");
     // No mapping for 'bad' should exist
-    assert!(maps.iter().find(|m| m.sequence == "bad").is_none());
+    assert!(!maps.iter().any(|m| m.sequence == "bad"));
   }
 }
 
@@ -857,10 +867,7 @@ mod config_data_tests
     assert_eq!(cfgd.ui.panes.preview, 70);
     assert!(cfgd.ui.show_hidden);
     assert_eq!(cfgd.ui.date_format.as_deref(), Some("%Y"));
-    assert_eq!(
-      matches!(cfgd.ui.display_mode, lsv::app::DisplayMode::Friendly),
-      true
-    );
+    assert!(matches!(cfgd.ui.display_mode, lsv::app::DisplayMode::Friendly));
     assert_eq!(cfgd.ui.preview_lines, 80);
     assert_eq!(cfgd.ui.max_list_items, 2345);
     assert_eq!(cfgd.ui.row.icon.as_str(), "X ");
@@ -1003,8 +1010,10 @@ mod input_tests
   {
     let mut app = lsv::app::App::new().expect("app new");
     // Turn on overlays via effects
-    let mut fx = lsv::actions::effects::ActionEffects::default();
-    fx.messages = lsv::actions::effects::OverlayToggle::Show;
+    let fx = lsv::actions::effects::ActionEffects {
+      messages: lsv::actions::effects::OverlayToggle::Show,
+      ..Default::default()
+    };
     lsv::actions::apply::apply_effects(&mut app, fx);
     // Now send ESC
     let _ = lsv::input::handle_key(

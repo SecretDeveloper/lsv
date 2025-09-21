@@ -367,7 +367,7 @@ pub fn draw_whichkey_panel(
     let rows_usize = row_count.max(1);
     let cols = entries.len().div_ceil(rows_usize).max(1);
     let mut col_widths = vec![0usize; cols];
-    for c in 0..cols
+    for (c, width) in col_widths.iter_mut().enumerate()
     {
       let mut w = 0usize;
       for r in 0..rows_usize
@@ -385,22 +385,21 @@ pub fn draw_whichkey_panel(
           w = cw;
         }
       }
-      col_widths[c] = w + 2; // inter-column gap
+      *width = w + 2; // inter-column gap
     }
     let total: usize = col_widths.iter().sum();
     (col_widths, total, cols)
   };
 
   let mut rows_usize = rows as usize;
-  let (mut col_widths, mut total_width, mut cols) = compute_widths(rows_usize);
+  let (mut col_widths, mut total_width, _) = compute_widths(rows_usize);
   while total_width > inner_width && (rows_usize as u16) + 2 < area.height
   {
     // Increase rows to reduce columns, then recompute
     rows_usize += 1;
-    let res = compute_widths(rows_usize);
-    col_widths = res.0;
-    total_width = res.1;
-    cols = res.2;
+    let (new_widths, new_total, _) = compute_widths(rows_usize);
+    col_widths = new_widths;
+    total_width = new_total;
   }
 
   // Build lines row-wise using final rows_usize
@@ -409,7 +408,7 @@ pub fn draw_whichkey_panel(
   {
     let mut spans: Vec<Span> = Vec::new();
     let mut consumed_any = false;
-    for c in 0..cols
+    for (c, col_width) in col_widths.iter().enumerate()
     {
       let idx = c * rows_usize + r;
       if idx >= entries.len()
@@ -434,7 +433,7 @@ pub fn draw_whichkey_panel(
       spans.push(Span::raw("  "));
       spans.push(Span::styled(e.right.clone(), right_style));
       // pad to column width
-      let pad = col_widths[c].saturating_sub(cw) as usize;
+      let pad = (*col_width).saturating_sub(cw);
       if pad > 0
       {
         let max_pad = 4096usize;
