@@ -6,17 +6,13 @@ max_width = 80
 hard_tabs = false
 tab_spaces = 2
 
+unstable_features = true
+
 # How aggressively to squeeze small items onto one line
 use_small_heuristics = "Max"
 
 # Align struct fields if there’s at most this many
 struct_field_align_threshold = 20
-
-# Keep imports grouped
-merge_imports = true
-
-# Preserve newlines inside function calls if they already exist
-preserve_try_format = true
 
 # Format code in doc comments + examples
 format_code_in_doc_comments = true

@@ -1,24 +1,42 @@
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
-use std::path::Path;
+use std::{
+  fs::File,
+  io::{
+    self,
+    BufRead,
+    BufReader,
+  },
+  path::Path,
+};
 
-pub fn read_file_head(path: &Path, n: usize) -> io::Result<Vec<String>> {
+pub fn read_file_head(
+  path: &Path,
+  n: usize,
+) -> io::Result<Vec<String>>
+{
   let file = File::open(path)?;
   let reader = BufReader::new(file);
   let mut lines = Vec::new();
-  for (i, line) in reader.lines().enumerate() {
-    if i >= n { break; }
+  for (i, line) in reader.lines().enumerate()
+  {
+    if i >= n
+    {
+      break;
+    }
     lines.push(line.unwrap_or_default());
   }
   Ok(lines)
 }
 
-pub fn sanitize_line(s: &str) -> String {
+pub fn sanitize_line(s: &str) -> String
+{
   let mut out = String::with_capacity(s.len());
-  for ch in s.chars() {
-    match ch {
+  for ch in s.chars()
+  {
+    match ch
+    {
       '\t' => out.push_str("    "),
-      '\r' => {}
+      '\r' =>
+      {}
       c if c.is_control() => out.push(' '),
       c => out.push(c),
     }
@@ -26,15 +44,23 @@ pub fn sanitize_line(s: &str) -> String {
   out
 }
 
-pub fn shell_escape(s: &str) -> String {
-  if s.is_empty() {
+pub fn shell_escape(s: &str) -> String
+{
+  if s.is_empty()
+  {
     "''".to_string()
-  } else {
+  }
+  else
+  {
     let mut out = String::from("'");
-    for ch in s.chars() {
-      if ch == '\'' {
+    for ch in s.chars()
+    {
+      if ch == '\''
+      {
         out.push_str("'\\''");
-      } else {
+      }
+      else
+      {
         out.push(ch);
       }
     }

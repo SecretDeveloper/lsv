@@ -23,6 +23,9 @@ See configuration guide in `docs/configuration.md` for setup and keybinding exam
 
 ## Build & Run (from source)
 
+- Requires the Rust nightly toolchain (repo pins via `rust-toolchain.toml`). Install with `rustup toolchain install nightly` if you don't have it yet.
+- Components `rustfmt` and `clippy` are listed in `rust-toolchain.toml`; `rustup` installs them automatically when you run the commands below.
+
 - Build: `cargo build`
 - Run: `cargo run`
 - Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run`
