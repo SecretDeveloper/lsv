@@ -4,6 +4,7 @@ use std::io;
 use crossterm::event::{
   KeyCode,
   KeyEvent,
+  KeyEventKind,
   KeyModifiers,
 };
 
@@ -12,6 +13,13 @@ pub fn handle_key(
   key: KeyEvent,
 ) -> io::Result<bool>
 {
+  // Ignore key release/repeat events to avoid double-processing (esp. on
+  // Windows)
+  if key.kind != KeyEventKind::Press
+  {
+    return Ok(false);
+  }
+
   // First, try dynamic key mappings with simple sequence support
   // Quick toggle of which-key help
   if let KeyCode::Char('?') = key.code
