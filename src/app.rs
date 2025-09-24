@@ -1,3 +1,10 @@
+//! Core application state, used both by the TUI and integration tests.
+//!
+//! The [`App`] struct models the in-memory view of the three-pane interface
+//! (current directory listing, preview cache, overlays, etc.). The binary owns
+//! an instance of `App`, but tests can create their own to simulate navigation
+//! or exercise Lua actions.
+
 use std::{
   cmp::min,
   env,
@@ -16,6 +23,9 @@ use ratatui::widgets::ListState;
 use crate::actions::SortKey;
 
 #[derive(Debug, Clone)]
+/// Runtime state for lsv, including directory listings, preview cache, overlay
+/// flags, and configuration. Methods prefixed with `test_` are convenience
+/// helpers for integration tests.
 pub struct DirEntryInfo
 {
   pub(crate) name:   String,
@@ -26,6 +36,7 @@ pub struct DirEntryInfo
   pub(crate) ctime:  Option<SystemTime>,
 }
 
+/// Mutable application state driving the three-pane UI.
 pub struct App
 {
   pub(crate) cwd:               PathBuf,
@@ -71,6 +82,8 @@ pub struct App
 
 impl App
 {
+  /// Construct a fresh [`App`] using the current working directory as the
+  /// starting point.
   pub fn new() -> io::Result<Self>
   {
     let cwd = env::current_dir()?;
@@ -255,7 +268,10 @@ impl App
     Ok(app)
   }
 
-  // Test helper: inject a Lua engine and action registry keys
+  /// Test helper: inject a prepared Lua engine and registered action keys.
+  ///
+  /// This lets integration tests execute Lua callbacks without loading files
+  /// from disk.
   pub fn inject_lua_engine_for_tests(
     &mut self,
     engine: crate::config::LuaEngine,
@@ -270,6 +286,7 @@ impl App
   {
     self.list_state.selected().and_then(|i| self.current_entries.get(i))
   }
+  #[doc(hidden)]
   pub fn test_entry_name(
     &self,
     idx: usize,
@@ -277,6 +294,7 @@ impl App
   {
     self.current_entries.get(idx).map(|e| e.name.clone())
   }
+  #[doc(hidden)]
   pub fn test_select_index(
     &mut self,
     idx: usize,
@@ -481,6 +499,7 @@ impl App
   }
 
   // Test helper: replace keymaps and rebuild lookup/prefix set
+  #[doc(hidden)]
   pub fn test_set_keymaps(
     &mut self,
     maps: Vec<crate::config::KeyMapping>,
@@ -491,6 +510,7 @@ impl App
   }
 
   // Test helper: resolve an action by sequence
+  #[doc(hidden)]
   pub fn test_resolve_action(
     &self,
     seq: &str,
@@ -500,6 +520,7 @@ impl App
   }
 
   // Test helper: check if a prefix is registered
+  #[doc(hidden)]
   pub fn test_has_prefix(
     &self,
     seq: &str,
@@ -509,18 +530,22 @@ impl App
   }
 
   // ---- Test accessors for internal state (read-only unless noted) ----
+  #[doc(hidden)]
   pub fn test_config_show_hidden(&self) -> bool
   {
     self.config.ui.show_hidden
   }
+  #[doc(hidden)]
   pub fn test_config_date_format(&self) -> Option<String>
   {
     self.config.ui.date_format.clone()
   }
+  #[doc(hidden)]
   pub fn test_config_preview_lines(&self) -> usize
   {
     self.config.ui.preview_lines
   }
+  #[doc(hidden)]
   pub fn test_set_force_full_redraw(
     &mut self,
     v: bool,
@@ -528,46 +553,57 @@ impl App
   {
     self.force_full_redraw = v;
   }
+  #[doc(hidden)]
   pub fn test_force_full_redraw(&self) -> bool
   {
     self.force_full_redraw
   }
+  #[doc(hidden)]
   pub fn test_show_messages(&self) -> bool
   {
     self.show_messages
   }
+  #[doc(hidden)]
   pub fn test_show_output(&self) -> bool
   {
     self.show_output
   }
+  #[doc(hidden)]
   pub fn test_show_whichkey(&self) -> bool
   {
     self.show_whichkey
   }
+  #[doc(hidden)]
   pub fn test_output_title(&self) -> &str
   {
     &self.output_title
   }
+  #[doc(hidden)]
   pub fn test_output_text(&self) -> String
   {
     self.output_lines.join("\n")
   }
+  #[doc(hidden)]
   pub fn test_has_entries(&self) -> bool
   {
     !self.current_entries.is_empty()
   }
+  #[doc(hidden)]
   pub fn test_selected_index(&self) -> Option<usize>
   {
     self.list_state.selected()
   }
+  #[doc(hidden)]
   pub fn test_should_quit(&self) -> bool
   {
     self.should_quit
   }
+  #[doc(hidden)]
   pub fn test_sort_reverse(&self) -> bool
   {
     self.sort_reverse
   }
+  #[doc(hidden)]
   pub fn test_set_sort_reverse(
     &mut self,
     v: bool,
@@ -575,14 +611,17 @@ impl App
   {
     self.sort_reverse = v;
   }
+  #[doc(hidden)]
   pub fn test_display_mode(&self) -> DisplayMode
   {
     self.display_mode
   }
+  #[doc(hidden)]
   pub fn test_info_mode(&self) -> InfoMode
   {
     self.info_mode
   }
+  #[doc(hidden)]
   pub fn test_get_entry(
     &self,
     idx: usize,
@@ -590,10 +629,12 @@ impl App
   {
     self.current_entries.get(idx).cloned()
   }
+  #[doc(hidden)]
   pub fn test_ui_row_format(&self) -> crate::config::UiRowFormat
   {
     self.config.ui.row.clone().unwrap_or_default()
   }
+  #[doc(hidden)]
   pub fn test_set_cwd(
     &mut self,
     path: &std::path::Path,
@@ -607,18 +648,22 @@ impl App
       self.refresh_preview();
     }
   }
+  #[doc(hidden)]
   pub fn test_theme_dir_fg(&self) -> Option<String>
   {
     self.config.ui.theme.as_ref().and_then(|t| t.dir_fg.clone())
   }
+  #[doc(hidden)]
   pub fn test_whichkey_prefix(&self) -> String
   {
     self.whichkey_prefix.clone()
   }
+  #[doc(hidden)]
   pub fn test_sort_key(&self) -> crate::actions::internal::SortKey
   {
     self.sort_key
   }
+  #[doc(hidden)]
   pub fn test_set_config(
     &mut self,
     cfg: crate::config::Config,
@@ -626,10 +671,12 @@ impl App
   {
     self.config = cfg;
   }
+  #[doc(hidden)]
   pub fn test_cwd_path(&self) -> std::path::PathBuf
   {
     self.cwd.clone()
   }
+  #[doc(hidden)]
   pub fn test_display_output(
     &mut self,
     title: &str,
@@ -638,6 +685,7 @@ impl App
   {
     self.display_output(title, text)
   }
+  #[doc(hidden)]
   pub fn test_add_message(
     &mut self,
     msg: &str,
@@ -645,10 +693,12 @@ impl App
   {
     self.add_message(msg)
   }
+  #[doc(hidden)]
   pub fn test_preview_line_count(&self) -> usize
   {
     self.preview_lines.len()
   }
+  #[doc(hidden)]
   pub fn test_recent_messages_len(&self) -> usize
   {
     self.recent_messages.len()

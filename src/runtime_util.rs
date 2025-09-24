@@ -1,8 +1,11 @@
+//! Utilities for driving the runtime event loop outside the main binary.
+
 use crate::app::App;
 use crossterm::event::Event;
 use std::io;
 
-// Process a single crossterm event and return true if the app should exit.
+/// Process a single crossterm event and return `Ok(true)` if the app should
+/// exit.
 pub fn process_event(
   app: &mut App,
   ev: Event,

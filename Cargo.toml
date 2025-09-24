@@ -1,6 +1,6 @@
 [package]
 name = "lsv"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 description = "Three‑pane terminal file viewer (TUI) with preview and Lua configuration"
 license = "MIT"
@@ -10,7 +10,7 @@ homepage = "https://github.com/SecretDeveloper/lsv"
 documentation = "https://docs.rs/lsv"
 keywords = ["tui", "terminal", "file", "preview"]
 categories = ["command-line-utilities", "filesystem"]
-rust-version = "1.85"
+rust-version = "1.90"
 include = [
   "src/**",
   "src/actions/**",

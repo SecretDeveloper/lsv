@@ -1,3 +1,10 @@
+//! Helper types that convert between Lua configuration tables and strongly
+//! typed Rust structures.
+//!
+//! These conversions are used when calling Lua actions: we build a snapshot of
+//! the current configuration/context, pass it to Lua, and then merge any
+//! returned changes back into Rust structs.
+
 use crate::app::App;
 use mlua::{
   Lua,
@@ -5,8 +12,7 @@ use mlua::{
   Value,
 };
 
-// A values-only snapshot of configuration used for Lua round-tripping.
-// This excludes function fields (previewer/action fns) and keymaps.
+/// Values-only snapshot of row formatting data used for Lua round-tripping.
 #[derive(Debug, Clone)]
 pub struct UiRowData
 {
@@ -17,6 +23,7 @@ pub struct UiRowData
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Theme data mirrored into Lua.
 pub struct UiThemeData
 {
   pub pane_bg:          Option<String>,
@@ -39,6 +46,7 @@ pub struct UiThemeData
 }
 
 #[derive(Debug, Clone)]
+/// Pane split proportions mirrored into Lua.
 pub struct UiPanesData
 {
   pub parent:  u16,
@@ -47,6 +55,7 @@ pub struct UiPanesData
 }
 
 #[derive(Debug, Clone)]
+/// User-interface block mirrored into Lua.
 pub struct UiData
 {
   pub panes:          UiPanesData,
@@ -61,6 +70,7 @@ pub struct UiData
 }
 
 #[derive(Debug, Clone)]
+/// Complete values-only configuration snapshot used during Lua calls.
 pub struct ConfigData
 {
   pub keys_sequence_timeout_ms: u64,
@@ -70,6 +80,7 @@ pub struct ConfigData
   pub show_field: crate::app::InfoMode,
 }
 
+/// Convert the current [`App`] state into a Lua table expected by actions.
 pub fn to_lua_config_table(
   lua: &Lua,
   app: &App,
@@ -251,6 +262,10 @@ pub fn to_lua_config_table(
   Ok(tbl)
 }
 
+/// Parse a Lua table produced by an action into [`ConfigData`].
+///
+/// The result captures the values-only configuration and can be validated or
+/// merged back into the main [`Config`](crate::config::Config).
 pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
 {
   // keys

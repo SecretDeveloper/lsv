@@ -1,9 +1,9 @@
-// Central action dispatcher.
-//
-// Accepts action strings, supports ';' separated sequences, routes
-// `run_lua:<idx>` to Lua via lua_glue, and executes native internal
-// actions parsed by `internal`. Effects and optional config overlays
-// returned from Lua are applied immediately.
+//! Central action dispatcher used by both the binary and integration tests.
+//!
+//! Accepts action strings (optionally `;`-separated sequences), routes
+//! `run_lua:<idx>` entries to [`lua_glue`](super::lua_glue), and executes
+//! built-in actions parsed by [`internal`](super::internal).
+//! Lua side-effects and configuration overlays are applied immediately.
 use std::io;
 
 use crate::app::App;
@@ -22,8 +22,10 @@ use super::{
 use crate::trace;
 
 /// Parse and execute an action string.
-/// Supports multiple actions separated by ';', Lua actions via `run_lua:<idx>`,
-/// and internal actions parsed by `internal`.
+///
+/// Returns `Ok(true)` when at least one action ran successfully. Supports
+/// multiple actions separated by `;`, Lua actions via `run_lua:<idx>`, and
+/// internal actions parsed by [`internal`](super::internal).
 pub fn dispatch_action(
   app: &mut App,
   action: &str,

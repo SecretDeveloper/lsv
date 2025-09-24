@@ -1,6 +1,6 @@
 # Lua Configuration and Action Flow in lsv
 
-This document explains how Lua configuration integrates with the Rust core. It covers what gets loaded at startup, how key bindings call Lua functions, how those functions communicate intent back to Rust, and how external commands and previewers are executed.
+This document explains how Lua configuration integrates with the Rust core. It covers what gets loaded at startup, how key bindings call Lua functions, how those functions communicate intent back to Rust, and how external commands and previewers are executed. For a navigation overview see [docs/README.md](README.md).
 
 The diagrams use PlantUML (sequence diagrams). You can paste the code blocks into any PlantUML renderer to visualize them.
 
@@ -159,6 +159,3 @@ This helps identify crashes or slow paths — especially when calling external t
 - Use quoting helpers in Lua (e.g., `shquote`) to avoid unintended shell expansion.
 - Prefer read-only tools in previewers to avoid accidental modification of files.
 
----
-
-If you have ideas or want to visualize additional flows, add new PlantUML snippets in this document.

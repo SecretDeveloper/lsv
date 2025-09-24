@@ -1,3 +1,5 @@
+//! Small utility helpers shared across the codebase.
+
 use std::{
   fs::File,
   io::{
@@ -8,6 +10,7 @@ use std::{
   path::Path,
 };
 
+/// Read at most `n` lines from the start of `path`.
 pub fn read_file_head(
   path: &Path,
   n: usize,
@@ -27,6 +30,8 @@ pub fn read_file_head(
   Ok(lines)
 }
 
+/// Expand tabs, strip carriage returns, and replace control characters with
+/// spaces.
 pub fn sanitize_line(s: &str) -> String
 {
   let mut out = String::with_capacity(s.len());
@@ -44,6 +49,7 @@ pub fn sanitize_line(s: &str) -> String
   out
 }
 
+/// Minimal POSIX shell-escaping helper used when building commands.
 pub fn shell_escape(s: &str) -> String
 {
   if s.is_empty()

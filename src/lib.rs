@@ -1,4 +1,10 @@
-// Public library interface for integration tests and embedding.
+//! Library interface for embedding lsv components and driving integration
+//! tests.
+//!
+//! The binary uses these modules internally; consumers can reuse them to
+//! configure an [`App`](crate::app::App), dispatch actions, or inspect state in
+//! tests. See the documentation under `docs/` for higher-level guides.
+
 pub mod actions;
 pub mod app;
 pub mod config;
@@ -8,4 +14,7 @@ pub mod input;
 pub mod runtime_util;
 pub mod trace;
 pub mod util;
-// ui and preview are only required for the binary; tests avoid drawing
+
+/// Dispatch a command string (single action or `;`-separated sequence)
+/// against an [`App`](crate::app::App) instance.
+pub use actions::dispatch_action;

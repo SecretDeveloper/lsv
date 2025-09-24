@@ -1,3 +1,10 @@
+//! Loading and translating configuration between Lua and Rust.
+//!
+//! The real application consumes Lua configuration files. This module exposes
+//! helpers to load them, merge user values with defaults, and convert between
+//! Lua tables and strongly typed Rust structures. Integration tests reuse these
+//! APIs to fabricate configurations dynamically.
+
 use mlua::{
   Error as LuaError,
   Function,
@@ -23,6 +30,7 @@ use std::{
 const BUILTIN_DEFAULTS_LUA: &str = include_str!("lua/defaults.lua");
 
 #[derive(Debug, Clone, Default)]
+/// Icon configuration flags. Icons are optional and require a compatible font.
 pub struct IconsConfig
 {
   pub enabled: bool,
@@ -31,12 +39,14 @@ pub struct IconsConfig
 }
 
 #[derive(Debug, Clone, Default)]
+/// Key-handling configuration (currently only sequence timeout).
 pub struct KeysConfig
 {
   pub sequence_timeout_ms: u64,
 }
 
 #[derive(Debug, Clone, Default)]
+/// Top-level configuration composed from Lua input.
 pub struct Config
 {
   pub config_version: u32,
@@ -47,6 +57,7 @@ pub struct Config
 }
 
 #[derive(Debug, Clone)]
+/// A single key mapping supplied by `lsv.map_action` or legacy bindings.
 pub struct KeyMapping
 {
   pub sequence:    String,
@@ -55,6 +66,7 @@ pub struct KeyMapping
 }
 
 #[derive(Debug, Clone, Default)]
+/// Pane split percentages for the parent/current/preview columns.
 pub struct UiPanes
 {
   pub parent:  u16,
@@ -63,6 +75,7 @@ pub struct UiPanes
 }
 
 #[derive(Debug, Clone)]
+/// User interface configuration block replicated from Lua.
 pub struct UiConfig
 {
   pub panes:          Option<UiPanes>,
@@ -101,6 +114,7 @@ impl Default for UiConfig
 }
 
 #[derive(Debug, Clone)]
+/// Template strings used to render each row in the directory panes.
 pub struct UiRowFormat
 {
   pub icon:   String,
@@ -123,6 +137,7 @@ impl Default for UiRowFormat
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Optional fixed column widths for the row layout.
 pub struct UiRowWidths
 {
   pub icon:   u16,
@@ -132,6 +147,7 @@ pub struct UiRowWidths
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Theme colours for the UI. Fields are optional and fall back to defaults.
 pub struct UiTheme
 {
   pub pane_bg:          Option<String>,
@@ -209,7 +225,7 @@ impl LuaEngine
   }
 }
 
-/// Discovered configuration locations for lsv
+/// Resolved configuration locations for lsv.
 #[derive(Debug, Clone)]
 pub struct ConfigPaths
 {
@@ -218,11 +234,11 @@ pub struct ConfigPaths
   pub exists: bool,
 }
 
-/// Discover the lsv config directory and entrypoint.
-/// Order:
-/// 1) $LSV_CONFIG_DIR (root) → expects `init.lua` inside
-/// 2) $XDG_CONFIG_HOME/lsv
-/// 3) $HOME/.config/lsv
+/// Discover the effective configuration directory and entry point.
+///
+/// Checks `LSV_CONFIG_DIR`, then `XDG_CONFIG_HOME/lsv`, then `~/.config/lsv`.
+/// The returned struct includes the root directory, the path to `init.lua`, and
+/// whether the file currently exists.
 pub fn discover_config_paths() -> std::io::Result<ConfigPaths>
 {
   // Helper to decide a config root
@@ -264,7 +280,10 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths>
 type ConfigArtifacts =
   (Config, Vec<KeyMapping>, Option<(LuaEngine, RegistryKey, Vec<RegistryKey>)>);
 
-/// Load and parse configuration using a restricted Lua runtime.
+/// Load and parse configuration using the restricted Lua runtime.
+///
+/// Returns the merged [`Config`], key mappings, and (optionally) the prepared
+/// Lua engine alongside registry keys for preview and action callbacks.
 pub fn load_config(paths: &ConfigPaths) -> std::io::Result<ConfigArtifacts>
 {
   let engine =
@@ -343,11 +362,11 @@ fn io_err(msg: String) -> std::io::Error
   std::io::Error::other(msg)
 }
 
-/// Load configuration from a provided Lua source string for testing or
-/// programmatic injection. Defaults are loaded first, then `code` is
-/// executed as the user config overlay. The `root` controls the base
-/// directory for the restricted `require()` function; modules are
-/// resolved under `root/lua`.
+/// Load configuration from a Lua source string for tests or programmatic use.
+///
+/// Defaults are loaded first, followed by the provided snippet. The `root`
+/// parameter controls the directory used for `require()` (modules are resolved
+/// under `root/lua`). Returns the same tuple as [`load_config`].
 #[allow(dead_code)]
 pub fn load_config_from_code(
   code: &str,

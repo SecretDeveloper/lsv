@@ -1,3 +1,9 @@
+//! Bridges Lua actions with the Rust application state.
+//!
+//! Provides helper wiring so Lua callbacks can mutate configuration, trigger
+//! side-effects, and receive contextual data while running inside the embedded
+//! Lua VM.
+
 use std::{
   io,
   time::Instant,
@@ -27,6 +33,11 @@ use crate::{
   trace,
 };
 
+/// Execute the Lua action identified by `idx` against the provided app.
+///
+/// Returns the lightweight [`ActionEffects`](super::effects::ActionEffects)
+/// produced during the call plus an optional configuration overlay to merge
+/// back into the runtime configuration.
 pub fn call_lua_action(
   app: &mut App,
   idx: usize,

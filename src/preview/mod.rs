@@ -236,12 +236,28 @@ fn run_previewer_command(
 ) -> Option<Vec<String>>
 {
   crate::trace::log(format!(
-    "[preview] cmd='{}' cwd='{}' file='{}'",
-    cmd, dir_str, path_str
+    "[preview] launching shell='{}' cmd='{}' cwd='{}' file='{}'",
+    if cfg!(windows) { "cmd" } else { "sh" },
+    cmd,
+    dir_str,
+    path_str
   ));
-  match Command::new("sh")
-    .arg("-lc")
-    .arg(cmd)
+
+  #[cfg(windows)]
+  let mut command = {
+    let mut c = Command::new("cmd");
+    c.arg("/C").arg(cmd);
+    c
+  };
+
+  #[cfg(not(windows))]
+  let mut command = {
+    let mut c = Command::new("sh");
+    c.arg("-lc").arg(cmd);
+    c
+  };
+
+  match command
     .current_dir(dir_str)
     .env("LSV_PATH", path_str)
     .env("LSV_DIR", dir_str)
@@ -261,10 +277,18 @@ fn run_previewer_command(
       }
       let text = String::from_utf8_lossy(&buf).replace('\r', "");
       crate::trace::log(format!(
-        "[preview] exit_code={:?} bytes_out={}",
+        "[preview] exit_code={:?} success={} bytes_out={}",
         out.status.code(),
+        out.status.success(),
         text.len()
       ));
+      if !out.status.success()
+      {
+        crate::trace::log(format!(
+          "[preview] non-zero status running '{}'",
+          cmd
+        ));
+      }
       let mut lines: Vec<String> = Vec::new();
       for l in text.lines()
       {
@@ -278,7 +302,19 @@ fn run_previewer_command(
     }
     Err(e) =>
     {
-      crate::trace::log(format!("[preview] error spawning: {}", e));
+      crate::trace::log(format!(
+        "[preview] error spawning via {}: {}",
+        if cfg!(windows) { "cmd" } else { "sh" },
+        e
+      ));
+      #[cfg(windows)]
+      {
+        crate::trace::log(
+          "[preview] hint: ensure the command is available in cmd.exe or \
+           adjust your previewer to use Windows-compatible tooling."
+            .to_string(),
+        );
+      }
       None
     }
   }

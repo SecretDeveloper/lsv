@@ -1,144 +1,178 @@
-# lsv Configuration Guide
+# Configuration Reference
 
-This document explains how to configure lsv via Lua, where the config file lives, and how to define key bindings that change lsv’s behavior or run external tools safely.
+This page documents everything you can configure in **lsv** via Lua. It complements the [Getting Started](getting_started.md) guide and the [Default Keybindings](keybindings.md) table.
 
-## Where the config lives
+## Config File Locations
 
-lsv loads a Lua config from the first location that exists:
+lsv searches for `init.lua` in the following order:
 
 1. `$LSV_CONFIG_DIR/init.lua`
 2. `$XDG_CONFIG_HOME/lsv/init.lua`
 3. `~/.config/lsv/init.lua`
 
-The default configuration shipped with lsv is embedded (see `src/lua/defaults.lua`) and loads before your `init.lua`. Your config overlays and overrides any values from the defaults.
+On Windows, `%USERPROFILE%\.config\lsv\init.lua` is the default fallback. Set `LSV_CONFIG_DIR` explicitly if you want to keep the config elsewhere.
 
-## The configuration shape
+## Lua API Overview
 
-Top‑level API you’ll use:
+Three entry points are injected into the Lua runtime:
 
-- `lsv.config({ ... })` — set config values (icons, keys, ui, etc.).
-- `lsv.set_previewer(function(ctx) ... end)` — return a shell command to render the preview for a file.
-- `lsv.map_action(key, description, function(lsv, config) ... end)` — bind keys to Lua functions.
+| Function | Purpose |
+|----------|---------|
+| `lsv.config({ ... })` | Override global configuration fields (UI, keys, icons…). |
+| `lsv.map_action(keys, description, fn)` | Bind keys to a Lua function. The function can mutate the config table or call helpers. |
+| `lsv.set_previewer(function(ctx) ... end)` | Provide a command to render the preview for the current file. Return `nil` to fall back to the built-in “head” preview. |
 
-### Useful fields in `config`
+### Action Helpers (`lsv` table)
 
-- `config.ui.panes = { parent = 20, current = 30, preview = 50 }`
-- `config.ui.show_hidden = true|false`
-- `config.ui.date_format = "%Y-%m-%d %H:%M"`
-- `config.ui.display_mode = "absolute" | "friendly"`
-- `config.ui.preview_lines = 100`
-- `config.ui.max_list_items = 5000`
-- `config.ui.sort = "name" | "size" | "mtime"`
-- `config.ui.sort_reverse = true|false`
-- `config.ui.show = "none" | "size" | "created" | "modified"`
-- `config.ui.row = { icon = "{icon} ", left = "{name}", middle = "", right = "{info}" }`
-- `config.ui.row_widths = { icon = 0, left = 0, middle = 0, right = 0 }` (0 = auto)
-- `config.ui.theme = { ... }` — colors (names or `#RRGGBB` hex)
+Available inside `lsv.map_action` handlers:
 
-Your `init.lua` only needs to set what you want to change — it overlays the defaults.
+| Helper | Description |
+|--------|-------------|
+| `lsv.select_item(index)` | Select the 0-based item. |
+| `lsv.select_last_item()` | Select the last item in the current pane. |
+| `lsv.quit()` | Request exit after the action completes. |
+| `lsv.display_output(text, title?)` | Show text in the Output panel. |
+| `lsv.os_run(cmd)` | Run `cmd` through the system shell (captured output). |
+| `lsv.os_run_interactive(cmd)` | Suspend the TUI, run `cmd` attached to the terminal, and resume.
 
-## Action helpers (available as `lsv` in map_action)
+`config.context` exposes runtime information such as `cwd`, `path`, `selected_index`, `current_len`, `parent_dir`, and `name`.
 
-Inside an action function `function(lsv, config) ... end`, these helpers are available:
+## Configuration Schema
 
-- `lsv.select_item(index)` — select the 0‑based list index.
-- `lsv.select_last_item()` — select the last item in the current list.
-- `lsv.quit()` — request the app to exit.
-- `lsv.display_output(text, title?)` — show text in a bottom Output panel.
-- `lsv.os_run(cmd)` — run a shell command and show the captured output in the Output panel (env: `LSV_PATH`, `LSV_DIR`, `LSV_NAME`).
-
-The current context is available in `config.context`:
-
-- `cwd` — current working directory
-- `selected_index` — current selection index
-- `current_len` — number of items in the current list
-- `path` — absolute path of the selected entry (falls back to `cwd`)
-- `parent_dir` — parent directory of the selected entry (falls back to `cwd`)
-- `name` — file name (basename) of the selected entry, when available
-
-## Minimal example `~/.config/lsv/init.lua`
+`lsv.config` accepts a nested table matching `src/config.rs`. The most useful fields are summarised here.
 
 ```lua
--- Overlay a few UI settings
 lsv.config({
-  ui = {
-    display_mode = "friendly",
-    preview_lines = 80,
-    row = { middle = "" },
-    row_widths = { icon = 2, left = 40, right = 14 },
+  icons = { enabled = false, preset = nil, font = nil },
+  keys  = { sequence_timeout_ms = 0 },
+  ui    = {
+    panes         = { parent = 20, current = 30, preview = 50 },
+    show_hidden   = false,
+    date_format   = "%Y-%m-%d %H:%M",
+    display_mode  = "absolute",   -- or "friendly"
+    preview_lines = 100,
+    max_list_items = 5000,
+    sort          = "name",
+    sort_reverse  = false,
+    show          = "none",       -- info column (size|created|modified …)
+    row = {
+      icon   = "{icon} ",
+      left   = "{name}",
+      middle = "",
+      right  = "{info}",
+    },
+    row_widths = { icon = 0, left = 0, middle = 0, right = 0 },
+    theme = {
+      pane_bg = "#101114",
+      border_fg = "gray",
+      item_fg = "white",
+      selected_item_fg = "black",
+      selected_item_bg = "cyan",
+      title_fg = "gray",
+      info_fg = "gray",
+      dir_fg = "cyan",
+      hidden_fg = "darkgray",
+      exec_fg = "green",
+      -- *_bg options accept colour names or `#RRGGBB`; use `nil` for default.
+    },
   },
 })
-
--- Change default "ss" to also show sizes in the info column
-lsv.map_action("ss", "Sort by size + show size", function(lsv, config)
-  config.ui.sort = "size"
-  config.ui.show = "size"
-end)
-
--- Safe shell quoting helper
-local function shquote(s)
-  return "'" .. tostring(s):gsub("'", "'\''") .. "'"
-end
-
--- Open a new tmux window in the current directory
-lsv.map_action("t", "New tmux window here", function(lsv, config)
-  local dir = (config.context and config.context.cwd) or "."
-  lsv.os_run("tmux new-window -c " .. shquote(dir))
-end)
-
--- Git status in the current directory
-lsv.map_action("gs", "Git Status", function(lsv, config)
-  local dir = (config.context and config.context.cwd) or "."
-  lsv.os_run("git -C " .. shquote(dir) .. " status")
-end)
 ```
 
-## Previewer
+Only provide the fields you want to override; omitted values inherit from the defaults embedded in the binary.
 
-The previewer receives a `ctx` table and should return a shell command string or `nil` to use the default head preview:
+### Placeholders & Environment
 
-Fields in `ctx`:
+When building commands (either in actions or previewers), you can substitute:
 
-- `path`, `directory`, `extension`
-- `is_binary` (simple heuristic)
-- `height`, `width`, `preview_x`, `preview_y` — pane geometry
+- Placeholders: `{path}`, `{directory}`, `{name}`, `{extension}`, `{width}`, `{height}`, `{preview_x}`, `{preview_y}`.
+- Environment variables: `LSV_PATH`, `LSV_DIR`, `LSV_NAME` (set automatically before each command).
 
-Example previewer snippet (Markdown via glow; images via viu; text via bat):
+Use a quoting helper to avoid shell injection. Example:
+
+```lua
+local function shquote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+```
+
+## Previewer Commands
+
+`lsv.set_previewer(function(ctx) ... end)` receives:
+
+```lua
+ctx = {
+  path = "/abs/path/to/file",
+  directory = "/abs/path",
+  name = "file.ext",
+  extension = "ext",
+  is_binary = true|false,
+  width = 80, height = 24,
+  preview_x = 40, preview_y = 0,
+}
+```
+
+Return a shell command string or `nil`. Example with platform-specific fallbacks:
 
 ```lua
 lsv.set_previewer(function(ctx)
-  if ctx.extension == "md" or ctx.extension == "markdown" then
-    return "glow --style=dark --width=" .. tostring(ctx.width) .. " {path}"
+  if ctx.extension == "md" then
+    if package.config:sub(1,1) == "\\" then
+      return "glow.exe --width=" .. tostring(ctx.width) .. " {path}"
+    else
+      return "glow --width=" .. tostring(ctx.width) .. " {path}"
+    end
   end
-  if ctx.extension == "png" or ctx.extension == "jpg" or ctx.extension == "jpeg"
-     or ctx.extension == "gif" or ctx.extension == "bmp" or ctx.extension == "tiff" then
+  if ctx.extension == "png" or ctx.extension == "jpg" then
     return "viu --width '{width}' --height '{height}' '{path}'"
   end
   if not ctx.is_binary then
-    return "bat --color=always --style=numbers --paging=never --wrap=never --line-range=:120 {path}"
+    return "bat --color=always --style=numbers --paging=never --wrap=never {path}"
   end
   return nil
 end)
 ```
 
-## Overlays and panels
+When tracing is enabled (`LSV_TRACE=1`), lsv logs the resolved command, working directory, exit code, and byte counts. On Windows the command is executed via `cmd /C`; on POSIX it uses `sh -lc`.
 
-- `?` — which‑key overlay (grouped prefixes; multiple columns; 20% default height, expands as needed)
-- `zm` — toggle Messages panel (error/info messages; 20% default height)
-- `zo` — toggle Output panel (captured output from actions)
-- `Esc` — hides any overlay
+## Example: Custom Keybinding
 
-Overlays are mutually exclusive; opening one hides the others.
-
-## Tips
-
-- Actions are preferred over legacy strings. Bind everything with `lsv.map_action`.
-- Use `lsv.os_run` with proper quoting (see `shquote`) to avoid breaking paths.
-- Start with the defaults in `src/lua/defaults.lua` to understand all config values you can override.
-- Consider using friendly display mode for dates/sizes: `config.ui.display_mode = "friendly"`.
-
-If something doesn’t behave as expected, enable tracing:
-
-```bash
-LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log lsv
+```lua
+lsv.map_action("gs", "Git Status", function(lsv, config)
+  local dir = (config.context and config.context.cwd) or "."
+  local quoted = "'" .. dir:gsub("'", "'\\''") .. "'"
+  lsv.os_run("git -C " .. quoted .. " status")
+end)
 ```
+
+`lsv.os_run` captures stdout/stderr and displays it in the Output panel. Use `lsv.display_output` for purely textual messages.
+
+## Context & Effects Returned from Actions
+
+Inside your action function, mutate `config` (it will be merged into the live config) or return direct effect flags, e.g.:
+
+```lua
+return {
+  messages = "show",            -- toggle Message overlay
+  output = "toggle",            -- toggle Output overlay
+  output_text = "Finished",     -- also sets the Output panel
+  output_title = "My Action",
+  quit = true,
+  redraw = true,
+}
+```
+
+See `src/actions/effects.rs` for the full list of flags parsed by the engine.
+
+## Windows-Specific Tips
+
+- Preview commands run under `cmd.exe`; ensure you install Windows builds of CLI tools (`bat.exe`, `glow.exe`, etc.) and they are on `PATH`.
+- Paths are passed as UTF-8 strings; wrap them in quotes in Lua (`shquote`) to survive spaces.
+- Install a terminal emulator that supports ANSI escape codes (Windows Terminal recommended). 
+- If a preview command fails, enable tracing and inspect the `[preview]` logs for exit codes/errors.
+
+## Additional Resources
+
+- [Lua Integration](lua_integration.md) — deep dive into the Rust/Lua bridge and action flow.
+- [Default Keybindings](keybindings.md) — full list of shipped shortcuts.
+- [Troubleshooting](troubleshooting.md) — platform quirks and diagnostic steps.

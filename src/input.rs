@@ -1,3 +1,5 @@
+//! Input handling for keyboard events.
+
 use crate::app::App;
 use std::io;
 
@@ -8,6 +10,11 @@ use crossterm::event::{
   KeyModifiers,
 };
 
+/// Accept a terminal key event and mutate the [`App`] accordingly.
+///
+/// Returns `Ok(true)` when the caller should exit. Multi-key sequences are
+/// resolved via the keymap; unrecognised keys fall back to built-in
+/// navigation behaviour.
 pub fn handle_key(
   app: &mut App,
   key: KeyEvent,

@@ -1,3 +1,5 @@
+//! Light-weight side effects returned from Lua actions.
+
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OverlayToggle
 {

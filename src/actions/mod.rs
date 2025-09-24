@@ -1,3 +1,5 @@
+//! Action dispatching and helpers used by the lsv runtime.
+
 pub mod apply;
 mod dispatcher;
 pub mod effects;

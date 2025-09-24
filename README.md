@@ -19,7 +19,7 @@ The app is keyboard‑driven, configurable via Lua, and supports rich, ANSI‑co
 
 - From crates.io: `cargo install lsv`
 
-See configuration guide in `docs/configuration.md` for setup and keybinding examples.
+See the [documentation overview](docs/README.md) for setup guides, configuration reference, keybindings, and troubleshooting tips.
 
 ## Build & Run (from source)
 

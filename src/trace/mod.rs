@@ -1,3 +1,5 @@
+//! Simple tracing utilities used for diagnostics and integration tests.
+
 use std::{
   fs::OpenOptions,
   path::PathBuf,
@@ -8,6 +10,7 @@ fn enabled() -> bool
   std::env::var("LSV_TRACE").map(|v| !v.is_empty() && v != "0").unwrap_or(false)
 }
 
+/// Append a line to the trace log when tracing is enabled (`LSV_TRACE=1`).
 pub fn log<S: AsRef<str>>(s: S)
 {
   if !enabled()
