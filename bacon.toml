@@ -83,3 +83,6 @@ background = true
 [keybindings]
 # alt-m = "job:my-job"
 c = "job:clippy-all" # comment this to have 'c' run clippy on only the default target
+
+[jobs.check-win]
+command = ["cargo", "check", "--target", "x86_64-pc-windows-gnu"]

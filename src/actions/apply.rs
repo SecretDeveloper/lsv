@@ -233,9 +233,9 @@ pub fn apply_config_overlay(
     theme_changed = true;
   }
   let new_theme_path =
-    data.ui.theme_path.as_ref().map(|p| std::path::PathBuf::from(p));
+    data.ui.theme_path.as_ref().map(std::path::PathBuf::from);
   if app.config.ui.theme_path.as_ref().map(|p| p.as_path())
-    != new_theme_path.as_ref().map(|p| p.as_path())
+    != new_theme_path.as_deref()
   {
     app.config.ui.theme_path = new_theme_path;
   }
