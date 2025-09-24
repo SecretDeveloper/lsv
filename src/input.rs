@@ -27,6 +27,40 @@ pub fn handle_key(
     return Ok(false);
   }
 
+  if app.is_theme_picker_active()
+  {
+    match key.code
+    {
+      KeyCode::Esc =>
+      {
+        app.cancel_theme_picker();
+      }
+      KeyCode::Enter =>
+      {
+        app.confirm_theme_picker();
+      }
+      KeyCode::Up | KeyCode::Char('k') =>
+      {
+        app.theme_picker_move(-1);
+      }
+      KeyCode::Down | KeyCode::Char('j') =>
+      {
+        app.theme_picker_move(1);
+      }
+      KeyCode::PageUp =>
+      {
+        app.theme_picker_move(-5);
+      }
+      KeyCode::PageDown =>
+      {
+        app.theme_picker_move(5);
+      }
+      _ =>
+      {}
+    }
+    return Ok(false);
+  }
+
   // First, try dynamic key mappings with simple sequence support
   // Quick toggle of which-key help
   if let KeyCode::Char('?') = key.code
@@ -175,6 +209,14 @@ pub fn handle_key(
         {
           app.cwd = entry.path.clone();
           app.refresh_lists();
+          if app.current_entries.is_empty()
+          {
+            app.list_state.select(None);
+          }
+          else
+          {
+            app.list_state.select(Some(0));
+          }
           app.refresh_preview();
         }
       }

@@ -19,6 +19,7 @@ pub struct ActionEffects
   pub messages:       OverlayToggle,
   pub output_overlay: OverlayToggle,
   pub output:         Option<(String, String)>, // (title, text)
+  pub theme_picker:   ThemePickerCommand,
 }
 use mlua::Table;
 
@@ -66,5 +67,27 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
   // redraw/quit
   fx.redraw = tbl.get::<bool>("redraw").unwrap_or(false);
   fx.quit = tbl.get::<bool>("quit").unwrap_or(false);
+  if let Ok(tp) = tbl.get::<String>("theme_picker")
+  {
+    if tp == "open"
+    {
+      fx.theme_picker = ThemePickerCommand::Open;
+    }
+  }
   fx
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemePickerCommand
+{
+  None,
+  Open,
+}
+
+impl Default for ThemePickerCommand
+{
+  fn default() -> Self
+  {
+    ThemePickerCommand::None
+  }
 }

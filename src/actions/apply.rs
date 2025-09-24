@@ -7,6 +7,7 @@
 use super::effects::{
   ActionEffects,
   OverlayToggle,
+  ThemePickerCommand,
 };
 use crate::app::App;
 
@@ -65,6 +66,16 @@ pub fn apply_effects(
   if let Some((title, text)) = fx.output
   {
     app.display_output(&title, &text);
+  }
+
+  match fx.theme_picker
+  {
+    ThemePickerCommand::Open =>
+    {
+      app.open_theme_picker();
+    }
+    ThemePickerCommand::None =>
+    {}
   }
 
   if fx.redraw
@@ -220,6 +231,13 @@ pub fn apply_config_overlay(
   {
     app.config.ui.theme = new_theme;
     theme_changed = true;
+  }
+  let new_theme_path =
+    data.ui.theme_path.as_ref().map(|p| std::path::PathBuf::from(p));
+  if app.config.ui.theme_path.as_ref().map(|p| p.as_path())
+    != new_theme_path.as_ref().map(|p| p.as_path())
+  {
+    app.config.ui.theme_path = new_theme_path;
   }
   if theme_changed
   {

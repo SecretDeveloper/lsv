@@ -20,6 +20,7 @@ The table below mirrors the bindings installed by `src/lua/defaults.lua`. User c
 | `za` | Absolute display | set `config.ui.display_mode` = `"absolute"` |
 | `zm` | Toggle messages panel | `messages = "toggle"` |
 | `zo` | Toggle output panel | `output = "toggle"` |
+| `ut` | UI theme picker | `lsv.open_theme_picker()` |
 | `?` | Show which-key overlay | built-in handler |
 | `Up / k` | Move up one item | handled in Rust input loop |
 | `Down / j` | Move down one item | handled in Rust input loop |

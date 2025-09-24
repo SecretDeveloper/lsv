@@ -36,6 +36,23 @@ pub struct DirEntryInfo
   pub(crate) ctime:  Option<SystemTime>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ThemePickerEntry
+{
+  pub name:  String,
+  pub path:  PathBuf,
+  pub theme: crate::config::UiTheme,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ThemePickerState
+{
+  pub entries:             Vec<ThemePickerEntry>,
+  pub selected:            usize,
+  pub original_theme:      Option<crate::config::UiTheme>,
+  pub original_theme_path: Option<PathBuf>,
+}
+
 /// Mutable application state driving the three-pane UI.
 pub struct App
 {
@@ -78,6 +95,9 @@ pub struct App
   // Which-key panel state
   pub(crate) show_whichkey:     bool,
   pub(crate) whichkey_prefix:   String,
+  // Theme picker overlay
+  pub(crate) show_theme_picker: bool,
+  pub(crate) theme_picker:      Option<ThemePickerState>,
 }
 
 impl App
@@ -196,6 +216,8 @@ impl App
       prefix_set: std::collections::HashSet::new(),
       show_whichkey: false,
       whichkey_prefix: String::new(),
+      show_theme_picker: false,
+      theme_picker: None,
     };
     // Discover configuration paths (entry not executed yet)
     if let Ok(paths) = crate::config::discover_config_paths()
@@ -584,6 +606,11 @@ impl App
     self.output_lines.join("\n")
   }
   #[doc(hidden)]
+  pub fn test_theme_path(&self) -> Option<PathBuf>
+  {
+    self.config.ui.theme_path.clone()
+  }
+  #[doc(hidden)]
   pub fn test_has_entries(&self) -> bool
   {
     !self.current_entries.is_empty()
@@ -728,6 +755,237 @@ impl App
       let _ = self.recent_messages.drain(0..self.recent_messages.len() - 100);
     }
     self.force_full_redraw = true;
+  }
+
+  fn theme_root_dir(&self) -> Option<PathBuf>
+  {
+    if let Some(paths) = self.config_paths.as_ref()
+    {
+      return Some(paths.root.clone());
+    }
+    crate::config::discover_config_paths().ok().map(|p| p.root)
+  }
+
+  pub(crate) fn open_theme_picker(&mut self)
+  {
+    let root = match self.theme_root_dir()
+    {
+      Some(p) => p,
+      None =>
+      {
+        self.add_message("Theme picker: unable to determine config directory");
+        return;
+      }
+    };
+    let themes_dir = root.join("themes");
+    let read_dir = match fs::read_dir(&themes_dir)
+    {
+      Ok(rd) => rd,
+      Err(_) =>
+      {
+        self.add_message(&format!(
+          "Theme picker: no themes directory at {}",
+          themes_dir.display()
+        ));
+        return;
+      }
+    };
+
+    let mut entries: Vec<ThemePickerEntry> = Vec::new();
+    for entry in read_dir
+    {
+      match entry
+      {
+        Ok(dir_entry) =>
+        {
+          let path = dir_entry.path();
+          if !path.is_file()
+          {
+            continue;
+          }
+          if let Some(ext) = path.extension().and_then(|s| s.to_str())
+          {
+            if !ext.eq_ignore_ascii_case("lua")
+            {
+              continue;
+            }
+          }
+          else
+          {
+            continue;
+          }
+          match crate::config::load_theme_from_file(&path)
+          {
+            Ok(theme) =>
+            {
+              let name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| path.display().to_string());
+              entries.push(ThemePickerEntry { name, path, theme });
+            }
+            Err(e) =>
+            {
+              self.add_message(&format!(
+                "Theme picker: failed to load {} ({})",
+                path.display(),
+                e
+              ));
+            }
+          }
+        }
+        Err(e) =>
+        {
+          self.add_message(&format!(
+            "Theme picker: error reading themes directory ({})",
+            e
+          ));
+        }
+      }
+    }
+
+    if entries.is_empty()
+    {
+      self.add_message(&format!(
+        "Theme picker: no .lua themes found in {}",
+        themes_dir.display()
+      ));
+      return;
+    }
+
+    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    let current_path = self.config.ui.theme_path.clone();
+    let mut selected = 0usize;
+    if let Some(cur) = current_path.as_ref()
+    {
+      if let Some(idx) = entries.iter().position(|e| e.path == *cur)
+      {
+        selected = idx;
+      }
+    }
+
+    let state = ThemePickerState {
+      entries,
+      selected,
+      original_theme: self.config.ui.theme.clone(),
+      original_theme_path: current_path,
+    };
+
+    self.pending_seq.clear();
+    self.last_seq_time = None;
+    self.show_whichkey = false;
+    self.whichkey_prefix.clear();
+    self.show_messages = false;
+    self.show_output = false;
+    self.theme_picker = Some(state);
+    self.show_theme_picker = true;
+    self.force_full_redraw = true;
+  }
+
+  fn apply_theme_entry(
+    &mut self,
+    entry: ThemePickerEntry,
+  )
+  {
+    self.config.ui.theme = Some(entry.theme);
+    self.config.ui.theme_path = Some(entry.path);
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn theme_picker_move(
+    &mut self,
+    delta: isize,
+  )
+  {
+    let entry = {
+      let state = match self.theme_picker.as_mut()
+      {
+        Some(s) => s,
+        None => return,
+      };
+      if state.entries.is_empty()
+      {
+        return;
+      }
+      let len = state.entries.len() as isize;
+      let mut new_idx = state.selected as isize + delta;
+      new_idx = new_idx.clamp(0, len.saturating_sub(1));
+      if new_idx as usize == state.selected
+      {
+        None
+      }
+      else
+      {
+        state.selected = new_idx as usize;
+        Some(state.entries[state.selected].clone())
+      }
+    };
+    if let Some(entry) = entry
+    {
+      self.apply_theme_entry(entry);
+    }
+  }
+
+  pub(crate) fn confirm_theme_picker(&mut self)
+  {
+    self.show_theme_picker = false;
+    self.theme_picker = None;
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn cancel_theme_picker(&mut self)
+  {
+    if let Some(state) = self.theme_picker.take()
+    {
+      self.config.ui.theme = state.original_theme;
+      self.config.ui.theme_path = state.original_theme_path;
+      self.force_full_redraw = true;
+    }
+    self.show_theme_picker = false;
+  }
+
+  pub(crate) fn is_theme_picker_active(&self) -> bool
+  {
+    self.show_theme_picker && self.theme_picker.is_some()
+  }
+
+  #[doc(hidden)]
+  pub fn test_theme_picker_active(&self) -> bool
+  {
+    self.is_theme_picker_active()
+  }
+
+  #[doc(hidden)]
+  pub fn test_theme_picker_entries(&self) -> Vec<String>
+  {
+    self
+      .theme_picker
+      .as_ref()
+      .map(|tp| tp.entries.iter().map(|e| e.name.clone()).collect())
+      .unwrap_or_default()
+  }
+
+  #[doc(hidden)]
+  pub fn test_theme_picker_move(
+    &mut self,
+    delta: isize,
+  )
+  {
+    self.theme_picker_move(delta);
+  }
+
+  #[doc(hidden)]
+  pub fn test_theme_picker_confirm(&mut self)
+  {
+    self.confirm_theme_picker();
+  }
+
+  #[doc(hidden)]
+  pub fn test_theme_picker_cancel(&mut self)
+  {
+    self.cancel_theme_picker();
   }
 
   pub(crate) fn display_output(

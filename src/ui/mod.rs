@@ -63,6 +63,10 @@ pub fn draw(
   {
     panes::draw_output_panel(f, f.area(), app);
   }
+  if app.is_theme_picker_active()
+  {
+    panes::draw_theme_picker_panel(f, f.area(), app);
+  }
 }
 
 fn draw_header(

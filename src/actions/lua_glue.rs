@@ -172,6 +172,17 @@ fn build_lsv_helpers(
     .set("display_output", display_output_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
+  let cfg_ref6 = cfg_tbl.clone();
+  let open_theme_picker_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref6.set("theme_picker", "open")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("open_theme_picker", open_theme_picker_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
   // os_run (captured)
   let cfg_ref5 = cfg_tbl.clone();
   let cwd_str = app.cwd.to_string_lossy().to_string();

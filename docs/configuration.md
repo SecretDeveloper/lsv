@@ -21,6 +21,7 @@ Three entry points are injected into the Lua runtime:
 | `lsv.config({ ... })` | Override global configuration fields (UI, keys, icons…). |
 | `lsv.map_action(keys, description, fn)` | Bind keys to a Lua function. The function can mutate the config table or call helpers. |
 | `lsv.set_previewer(function(ctx) ... end)` | Provide a command to render the preview for the current file. Return `nil` to fall back to the built-in “head” preview. |
+| `lsv.open_theme_picker()` | Show the interactive theme picker modal for the current session. |
 
 ### Action Helpers (`lsv` table)
 
@@ -62,6 +63,7 @@ lsv.config({
       right  = "{info}",
     },
     row_widths = { icon = 0, left = 0, middle = 0, right = 0 },
+    theme_path = "themes/dark.lua",  -- load from a Lua module (relative to config root)
     theme = {
       pane_bg = "#101114",
       border_fg = "gray",
@@ -80,6 +82,8 @@ lsv.config({
 ```
 
 Only provide the fields you want to override; omitted values inherit from the defaults embedded in the binary.
+
+- `ui.theme_path` points to a Lua file that must `return` a table of theme colours. Paths resolve relative to the config root (e.g. `themes/dark.lua`). The returned table is merged first, and any inline `ui.theme` block in `init.lua` can further override individual fields. The repository ships reference palettes (`dark.lua`, `light.lua`, `tokyonight.lua`, `gruvbox.lua`, `catppuccin.lua`, `onedark.lua`, `dracula.lua`, `everforest.lua`, `kanagawa.lua`, `solarized.lua`) under `examples/config/themes/`.
 
 ### Placeholders & Environment
 

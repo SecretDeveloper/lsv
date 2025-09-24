@@ -89,6 +89,7 @@ pub struct UiConfig
   pub sort:           Option<String>,
   pub sort_reverse:   Option<bool>,
   pub show:           Option<String>,
+  pub theme_path:     Option<PathBuf>,
   pub theme:          Option<UiTheme>,
 }
 
@@ -108,6 +109,7 @@ impl Default for UiConfig
       sort:           None,
       sort_reverse:   None,
       show:           None,
+      theme_path:     None,
       theme:          None,
     }
   }
@@ -167,6 +169,143 @@ pub struct UiTheme
   pub hidden_bg:        Option<String>,
   pub exec_fg:          Option<String>,
   pub exec_bg:          Option<String>,
+}
+
+pub(crate) fn merge_theme_table(
+  theme_tbl: &Table,
+  theme: &mut UiTheme,
+)
+{
+  if let Ok(s) = theme_tbl.get::<String>("pane_bg")
+  {
+    theme.pane_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("border_fg")
+  {
+    theme.border_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("item_fg")
+  {
+    theme.item_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("item_bg")
+  {
+    theme.item_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("selected_item_fg")
+  {
+    theme.selected_item_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("selected_item_bg")
+  {
+    theme.selected_item_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("title_fg")
+  {
+    theme.title_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("title_bg")
+  {
+    theme.title_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("info_fg")
+  {
+    theme.info_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("dir_fg")
+  {
+    theme.dir_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("dir_bg")
+  {
+    theme.dir_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("file_fg")
+  {
+    theme.file_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("file_bg")
+  {
+    theme.file_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("hidden_fg")
+  {
+    theme.hidden_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("hidden_bg")
+  {
+    theme.hidden_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("exec_fg")
+  {
+    theme.exec_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("exec_bg")
+  {
+    theme.exec_bg = Some(s);
+  }
+}
+
+fn resolve_theme_path(
+  theme_path: &str,
+  root: Option<&Path>,
+) -> PathBuf
+{
+  let candidate = Path::new(theme_path);
+  if candidate.is_absolute()
+  {
+    candidate.to_path_buf()
+  }
+  else if let Some(base) = root
+  {
+    base.join(candidate)
+  }
+  else
+  {
+    candidate.to_path_buf()
+  }
+}
+
+pub(crate) fn load_theme_table_from_path(
+  lua: &Lua,
+  path: &Path,
+) -> mlua::Result<Table>
+{
+  let code = fs::read_to_string(path).map_err(|e| {
+    LuaError::RuntimeError(format!(
+      "read theme '{}' failed: {}",
+      path.display(),
+      e
+    ))
+  })?;
+  let chunk = lua.load(&code).set_name(path.to_string_lossy());
+  let value = chunk.eval::<Value>()?;
+  match value
+  {
+    Value::Table(t) => Ok(t),
+    other => Err(LuaError::RuntimeError(format!(
+      "theme file '{}' must return a table (got {:?})",
+      path.display(),
+      other.type_name()
+    ))),
+  }
+}
+
+/// Load a standalone theme file from disk.
+///
+/// The theme is returned as a [`UiTheme`] without mutating any global state.
+pub fn load_theme_from_file(path: &Path) -> std::io::Result<UiTheme>
+{
+  let lua = Lua::new_with(
+    StdLib::STRING | StdLib::TABLE | StdLib::MATH,
+    LuaOptions::default(),
+  )
+  .map_err(|e| io_err(format!("lua init failed: {e}")))?;
+  let tbl = load_theme_table_from_path(&lua, path)
+    .map_err(|e| io_err(format!("load theme '{}': {e}", path.display())))?;
+  let mut theme = UiTheme::default();
+  merge_theme_table(&tbl, &mut theme);
+  Ok(theme)
 }
 
 // No ShellCmd in action-first config
@@ -304,6 +443,7 @@ pub fn load_config(paths: &ConfigPaths) -> std::io::Result<ConfigArtifacts>
     Rc::clone(&keymaps_acc),
     Rc::clone(&previewer_key_acc),
     Rc::clone(&lua_action_keys_acc),
+    Some(paths.root.clone()),
   )
   .map_err(|e| io_err(format!("lsv api install failed: {e}")))?;
   install_require(lua, &paths.root.join("lua"))
@@ -384,20 +524,22 @@ pub fn load_config_from_code(
     Rc::new(RefCell::new(None));
   let lua_action_keys_acc: Rc<RefCell<Vec<RegistryKey>>> =
     Rc::new(RefCell::new(Vec::new()));
+  let config_root = root.map(|p| p.to_path_buf());
   install_lsv_api(
     lua,
     Rc::clone(&config_acc),
     Rc::clone(&keymaps_acc),
     Rc::clone(&previewer_key_acc),
     Rc::clone(&lua_action_keys_acc),
+    config_root.clone(),
   )
   .map_err(|e| io_err(format!("lsv api install failed: {e}")))?;
 
   // install restricted require rooted at <root>/lua
   let base =
-    match root
+    match config_root.as_ref()
     {
-      Some(p) => p.to_path_buf(),
+      Some(p) => p.clone(),
       None => std::env::current_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from(".")),
     };
@@ -452,6 +594,7 @@ fn install_lsv_api(
   maps: Rc<RefCell<Vec<KeyMapping>>>,
   previewer_key_out: Rc<RefCell<Option<RegistryKey>>>,
   lua_action_keys_out: Rc<RefCell<Vec<RegistryKey>>>,
+  config_root: Option<PathBuf>,
 ) -> mlua::Result<()>
 {
   let globals = lua.globals();
@@ -460,6 +603,7 @@ fn install_lsv_api(
     Ok(Value::Table(t)) => t,
     _ => lua.create_table()?,
   };
+  let theme_root = config_root;
 
   // lsv.config(table)
   let cfg_clone = Rc::clone(&cfg);
@@ -581,77 +725,26 @@ fn install_lsv_api(
         }
         cfg_mut.ui.row_widths = Some(rw);
       }
+      if let Ok(theme_path_str) = ui_tbl.get::<String>("theme_path")
+      {
+        if theme_path_str.trim().is_empty()
+        {
+          return Err(LuaError::RuntimeError(
+            "ui.theme_path must be a non-empty string".to_string(),
+          ));
+        }
+        let resolved_path =
+          resolve_theme_path(&theme_path_str, theme_root.as_deref());
+        let theme_tbl = load_theme_table_from_path(lua, &resolved_path)?;
+        let mut th = cfg_mut.ui.theme.clone().unwrap_or_default();
+        merge_theme_table(&theme_tbl, &mut th);
+        cfg_mut.ui.theme = Some(th);
+        cfg_mut.ui.theme_path = Some(resolved_path);
+      }
       if let Ok(theme_tbl) = ui_tbl.get::<Table>("theme")
       {
         let mut th = cfg_mut.ui.theme.clone().unwrap_or_default();
-        if let Ok(s) = theme_tbl.get::<String>("pane_bg")
-        {
-          th.pane_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("border_fg")
-        {
-          th.border_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("item_fg")
-        {
-          th.item_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("item_bg")
-        {
-          th.item_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("selected_item_fg")
-        {
-          th.selected_item_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("selected_item_bg")
-        {
-          th.selected_item_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("title_fg")
-        {
-          th.title_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("title_bg")
-        {
-          th.title_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("info_fg")
-        {
-          th.info_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("dir_fg")
-        {
-          th.dir_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("dir_bg")
-        {
-          th.dir_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("file_fg")
-        {
-          th.file_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("file_bg")
-        {
-          th.file_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("hidden_fg")
-        {
-          th.hidden_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("hidden_bg")
-        {
-          th.hidden_bg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("exec_fg")
-        {
-          th.exec_fg = Some(s);
-        }
-        if let Ok(s) = theme_tbl.get::<String>("exec_bg")
-        {
-          th.exec_bg = Some(s);
-        }
+        merge_theme_table(&theme_tbl, &mut th);
         cfg_mut.ui.theme = Some(th);
       }
       if let Ok(s) = ui_tbl.get::<String>("display_mode")

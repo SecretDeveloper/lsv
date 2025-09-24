@@ -66,6 +66,7 @@ pub struct UiData
   pub max_list_items: usize,
   pub row:            UiRowData,
   pub row_widths:     Option<super::config::UiRowWidths>,
+  pub theme_path:     Option<String>,
   pub theme:          Option<UiThemeData>,
 }
 
@@ -242,6 +243,10 @@ pub fn to_lua_config_table(
     }
     ui.set("theme", theme_tbl)?;
   }
+  if let Some(path) = app.config.ui.theme_path.as_ref()
+  {
+    ui.set("theme_path", path.to_string_lossy().to_string())?;
+  }
 
   tbl.set("ui", ui.clone())?;
 
@@ -296,6 +301,7 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
     middle: get_string(&row_tbl, "middle")?,
     right:  get_string(&row_tbl, "right")?,
   };
+  let theme_path = get_opt_str(&ui_tbl, "theme_path")?;
   let theme = match ui_tbl.get::<Value>("theme")
   {
     Ok(Value::Table(t)) =>
@@ -345,6 +351,7 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
       }
       _ => None,
     },
+    theme_path,
     theme,
   };
 

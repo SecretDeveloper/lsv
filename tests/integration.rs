@@ -783,6 +783,87 @@ lsv.config({
   }
 
   #[test]
+  fn theme_path_loads_theme_table()
+  {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    let themes_dir = root.join("themes");
+    std::fs::create_dir_all(&themes_dir).expect("mkdir themes");
+    let theme_file = themes_dir.join("dark.lua");
+    std::fs::write(
+      &theme_file,
+      "return { item_fg = 'white', dir_fg = 'cyan' }\n",
+    )
+    .expect("write theme");
+
+    let code = r#"
+lsv.config({
+  ui = {
+    theme_path = "themes/dark.lua"
+  }
+})
+"#;
+
+    let (cfg, _maps, _eng) =
+      lsv::config::load_config_from_code(code, Some(root))
+        .expect("load config");
+
+    assert_eq!(
+      cfg.ui.theme.as_ref().and_then(|t| t.item_fg.as_deref()),
+      Some("white")
+    );
+    assert_eq!(
+      cfg.ui.theme.as_ref().and_then(|t| t.dir_fg.as_deref()),
+      Some("cyan")
+    );
+    assert_eq!(
+      cfg.ui.theme_path.as_ref().map(|p| p.as_path()),
+      Some(theme_file.as_path())
+    );
+  }
+
+  #[test]
+  fn theme_path_is_overlaid_by_inline_theme()
+  {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    let themes_dir = root.join("themes");
+    std::fs::create_dir_all(&themes_dir).expect("mkdir themes");
+    let theme_file = themes_dir.join("base.lua");
+    std::fs::write(
+      &theme_file,
+      "return { item_fg = 'white', dir_fg = 'blue' }\n",
+    )
+    .expect("write theme");
+
+    let code = r#"
+lsv.config({
+  ui = {
+    theme_path = "themes/base.lua",
+    theme = { dir_fg = "magenta" }
+  }
+})
+"#;
+
+    let (cfg, _maps, _eng) =
+      lsv::config::load_config_from_code(code, Some(root))
+        .expect("load config");
+
+    assert_eq!(
+      cfg.ui.theme.as_ref().and_then(|t| t.item_fg.as_deref()),
+      Some("white")
+    );
+    assert_eq!(
+      cfg.ui.theme.as_ref().and_then(|t| t.dir_fg.as_deref()),
+      Some("magenta")
+    );
+    assert_eq!(
+      cfg.ui.theme_path.as_ref().map(|p| p.as_path()),
+      Some(theme_file.as_path())
+    );
+  }
+
+  #[test]
   fn set_previewer_wrong_type_errors()
   {
     let code = r#" lsv.set_previewer(123) "#;
@@ -858,6 +939,7 @@ mod config_data_tests
     theme.set("dir_fg", "cyan").unwrap();
     theme.set("item_fg", "white").unwrap();
     ui.set("theme", theme).unwrap();
+    ui.set("theme_path", "/tmp/themes/dark.lua").unwrap();
     // sort/show
     ui.set("sort", "size").unwrap();
     ui.set("sort_reverse", true).unwrap();
@@ -889,6 +971,7 @@ mod config_data_tests
       cfgd.ui.theme.as_ref().and_then(|t| t.item_fg.as_deref()),
       Some("white")
     );
+    assert_eq!(cfgd.ui.theme_path.as_deref(), Some("/tmp/themes/dark.lua"));
     assert!(matches!(cfgd.sort_key, lsv::actions::internal::SortKey::Size));
     assert!(cfgd.sort_reverse);
     assert!(matches!(cfgd.show_field, lsv::app::InfoMode::Modified));
@@ -1036,6 +1119,7 @@ mod input_tests
     let temp = tempfile::tempdir().expect("tempdir");
     let dir = temp.path();
     fs::create_dir(dir.join("sub")).unwrap();
+    fs::write(dir.join("sub").join("inner.txt"), b"inner").unwrap();
     fs::write(dir.join("a.txt"), b"a").unwrap();
     let mut app = lsv::app::App::new().expect("app new");
     app.test_set_cwd(dir);
@@ -1061,6 +1145,8 @@ mod input_tests
         )
         .unwrap();
         assert_ne!(app.test_cwd_path(), prev);
+        assert_eq!(app.test_selected_index(), Some(0));
+        assert_eq!(app.test_entry_name(0).as_deref(), Some("inner.txt"));
         // Go back up
         let _ = lsv::input::handle_key(
           &mut app,
@@ -1497,6 +1583,100 @@ end)
     assert!(text.contains("Body"));
     lsv::actions::apply::apply_effects(&mut app, fx);
     assert_eq!(app.test_output_title(), "Output");
+  }
+
+  #[test]
+  fn theme_picker_open_and_selection_preview()
+  {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    let themes_dir = root.join("themes");
+    std::fs::create_dir_all(&themes_dir).expect("mkdir themes");
+    std::fs::write(
+      themes_dir.join("delta.lua"),
+      "return { item_fg = 'white' }\n",
+    )
+    .expect("write delta");
+    std::fs::write(
+      themes_dir.join("alpha.lua"),
+      "return { item_fg = 'gray' }\n",
+    )
+    .expect("write alpha");
+
+    let prev = std::env::var_os("LSV_CONFIG_DIR");
+    unsafe {
+      std::env::set_var("LSV_CONFIG_DIR", root);
+    }
+
+    let code = r#"
+lsv.map_action('ut', 'Theme picker', function(lsv, config)
+  lsv.open_theme_picker()
+end)
+"#;
+    let (mut app, idx) = make_app_with_actions(code, "ut");
+
+    let (fx, overlay) =
+      lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
+    lsv::actions::apply::apply_effects(&mut app, fx);
+    if let Some(data) = overlay
+    {
+      lsv::actions::apply::apply_config_overlay(&mut app, &data);
+    }
+
+    assert!(app.test_theme_picker_active());
+    let names = app.test_theme_picker_entries();
+    assert_eq!(names, vec!["alpha", "delta"]);
+    assert!(app.test_theme_path().is_none());
+
+    app.test_theme_picker_move(1);
+    let selected_path = app
+      .test_theme_path()
+      .map(|p| p.to_string_lossy().to_string())
+      .unwrap_or_default();
+    assert!(selected_path.ends_with("delta.lua"));
+
+    app.test_theme_picker_confirm();
+    assert!(!app.test_theme_picker_active());
+    let confirmed_path = app
+      .test_theme_path()
+      .map(|p| p.to_string_lossy().to_string())
+      .unwrap_or_default();
+    assert!(confirmed_path.ends_with("delta.lua"));
+
+    let (fx2, overlay2) =
+      lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("reopen");
+    lsv::actions::apply::apply_effects(&mut app, fx2);
+    if let Some(data) = overlay2
+    {
+      lsv::actions::apply::apply_config_overlay(&mut app, &data);
+    }
+    assert!(app.test_theme_picker_active());
+    app.test_theme_picker_move(-1);
+    let preview_path = app
+      .test_theme_path()
+      .map(|p| p.to_string_lossy().to_string())
+      .unwrap_or_default();
+    assert!(preview_path.ends_with("alpha.lua"));
+    app.test_theme_picker_cancel();
+    assert!(!app.test_theme_picker_active());
+    let final_path = app
+      .test_theme_path()
+      .map(|p| p.to_string_lossy().to_string())
+      .unwrap_or_default();
+    assert!(final_path.ends_with("delta.lua"));
+
+    if let Some(val) = prev
+    {
+      unsafe {
+        std::env::set_var("LSV_CONFIG_DIR", val);
+      }
+    }
+    else
+    {
+      unsafe {
+        std::env::remove_var("LSV_CONFIG_DIR");
+      }
+    }
   }
 
   #[test]

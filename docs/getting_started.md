@@ -47,6 +47,10 @@ Create the directory if it doesn’t exist and copy a starter config:
 ```bash
 mkdir -p ~/.config/lsv
 cp examples/config/init.lua ~/.config/lsv/init.lua
+mkdir -p ~/.config/lsv/themes
+cp examples/config/themes/dark.lua ~/.config/lsv/themes/dark.lua
+cp examples/config/themes/light.lua ~/.config/lsv/themes/light.lua
+# Optional: copy any other palette from `examples/config/themes/` (tokyonight, gruvbox, catppuccin, onedark, dracula, everforest, kanagawa, solarized, …).
 ```
 
 ## 4. Minimal Customisation
@@ -67,6 +71,8 @@ lsv.map_action("gs", "Git Status", function(lsv, config)
   lsv.os_run("git -C " .. shquote(dir) .. " status")
 end)
 ```
+
+Keep themes in separate Lua modules if you like to switch between them: create modules under `~/.config/lsv/themes/` (the examples ship `dark.lua`, `light.lua`, plus palettes like `tokyonight.lua`, `gruvbox.lua`, `catppuccin.lua`, `onedark.lua`, `dracula.lua`, `everforest.lua`, `kanagawa.lua`, and `solarized.lua`) and set `ui.theme_path` to whichever file you want. Any inline `ui.theme` block still layers on top for quick tweaks.
 
 See the [Configuration Reference](configuration.md) for all available fields and helpers.
 

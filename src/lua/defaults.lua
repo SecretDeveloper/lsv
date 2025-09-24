@@ -116,3 +116,7 @@ end)
 lsv.map_action("zo", "Show output", function(lsv, config)
 	return { output = "toggle" }
 end)
+
+lsv.map_action("ut", "UI Theme picker", function(lsv, config)
+	lsv.open_theme_picker()
+end)

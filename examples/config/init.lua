@@ -5,13 +5,10 @@ lsv.config({
 		preview_lines = 80,
 		row = { middle = "" },
 		row_widths = { icon = 2, left = 40, right = 14 },
+		theme_path = "themes/light.lua", -- change to "themes/light.lua" for light mode
+		-- Optional tweaks still overlay on top of the theme module
 		theme = {
-			pane_bg = "#0b0d10",
-			border_fg = "cyan",
-			item_fg = "white",
-			selected_item_bg = "magenta",
-			dir_fg = "cyan",
-			exec_fg = "yellow",
+			selected_item_fg = "#1b1d2b",
 		},
 	},
 })
