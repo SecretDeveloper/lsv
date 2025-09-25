@@ -247,11 +247,9 @@ impl App
           // Re-apply lists to honor config (e.g., show_hidden)
           // Also apply optional initial sort/show from config.ui
           if let Some(ref srt) = app.config.ui.sort
+            && let Some(k) = crate::enums::sort_key_from_str(srt)
           {
-            if let Some(k) = crate::enums::sort_key_from_str(srt)
-            {
-              app.sort_key = k;
-            }
+            app.sort_key = k;
           }
           if let Some(b) = app.config.ui.sort_reverse
           {
@@ -271,11 +269,9 @@ impl App
           app.refresh_lists();
           // Apply display_mode from config if present
           if let Some(dm) = app.config.ui.display_mode.as_deref()
+            && let Some(mode) = crate::enums::display_mode_from_str(dm)
           {
-            if let Some(mode) = crate::enums::display_mode_from_str(dm)
-            {
-              app.display_mode = mode;
-            }
+            app.display_mode = mode;
           }
         }
         Err(e) =>
@@ -859,11 +855,9 @@ impl App
     let current_path = self.config.ui.theme_path.clone();
     let mut selected = 0usize;
     if let Some(cur) = current_path.as_ref()
+      && let Some(idx) = entries.iter().position(|e| e.path == *cur)
     {
-      if let Some(idx) = entries.iter().position(|e| e.path == *cur)
-      {
-        selected = idx;
-      }
+      selected = idx;
     }
 
     let state = ThemePickerState {

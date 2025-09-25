@@ -6,6 +6,11 @@
 
 use std::{
   io,
+  io::{
+    Write,
+    stdin,
+    stdout,
+  },
   time::Instant,
 };
 
@@ -155,6 +160,20 @@ fn build_lsv_helpers(
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
   tbl.set("quit", quit_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
+  // prompt(message, default?)
+  let prompt_fn = lua
+    .create_function(move |_, (msg, def): (String, Option<String>)| {
+      let mut out = stdout();
+      write!(out, "{}", msg)?;
+      out.flush()?;
+      let mut input = String::new();
+      stdin().read_line(&mut input)?;
+      let input = input.trim_end().to_string();
+      Ok(if input.is_empty() { def.unwrap_or_default() } else { input })
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("prompt", prompt_fn).map_err(|e| io::Error::other(e.to_string()))?;
 
   // display_output(text, title?)
   let cfg_ref4 = cfg_tbl.clone();

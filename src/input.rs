@@ -90,16 +90,13 @@ pub fn handle_key(
       let now = std::time::Instant::now();
       // reset pending_seq on timeout
       if app.config.keys.sequence_timeout_ms > 0
+        && let Some(last) = app.last_seq_time
       {
-        if let Some(last) = app.last_seq_time
+        let timeout =
+          std::time::Duration::from_millis(app.config.keys.sequence_timeout_ms);
+        if now.duration_since(last) > timeout
         {
-          let timeout = std::time::Duration::from_millis(
-            app.config.keys.sequence_timeout_ms,
-          );
-          if now.duration_since(last) > timeout
-          {
-            app.pending_seq.clear();
-          }
+          app.pending_seq.clear();
         }
       }
       app.last_seq_time = Some(now);
@@ -147,15 +144,13 @@ pub fn handle_key(
             continue;
           }
           if let Some(action) = app.keymap_lookup.get(k.as_str()).cloned()
+            && crate::actions::dispatch_action(app, &action).unwrap_or(false)
           {
-            if crate::actions::dispatch_action(app, &action).unwrap_or(false)
+            if app.should_quit
             {
-              if app.should_quit
-              {
-                return Ok(true);
-              }
-              return Ok(false);
+              return Ok(true);
             }
+            return Ok(false);
           }
         }
       }
@@ -177,12 +172,10 @@ pub fn handle_key(
     (KeyCode::Up, _) | (KeyCode::Char('k'), _) =>
     {
       if let Some(sel) = app.list_state.selected()
+        && sel > 0
       {
-        if sel > 0
-        {
-          app.list_state.select(Some(sel - 1));
-          app.refresh_preview();
-        }
+        app.list_state.select(Some(sel - 1));
+        app.refresh_preview();
       }
     }
     (KeyCode::Down, _) | (KeyCode::Char('j'), _) =>
@@ -204,21 +197,19 @@ pub fn handle_key(
     (KeyCode::Enter, _) | (KeyCode::Right, _) =>
     {
       if let Some(entry) = app.selected_entry()
+        && entry.is_dir
       {
-        if entry.is_dir
+        app.cwd = entry.path.clone();
+        app.refresh_lists();
+        if app.current_entries.is_empty()
         {
-          app.cwd = entry.path.clone();
-          app.refresh_lists();
-          if app.current_entries.is_empty()
-          {
-            app.list_state.select(None);
-          }
-          else
-          {
-            app.list_state.select(Some(0));
-          }
-          app.refresh_preview();
+          app.list_state.select(None);
         }
+        else
+        {
+          app.list_state.select(Some(0));
+        }
+        app.refresh_preview();
       }
     }
     (KeyCode::Backspace, _)
@@ -233,12 +224,10 @@ pub fn handle_key(
         app.cwd = parent.to_path_buf();
         app.refresh_lists();
         if let Some(name) = just_left
-        {
-          if let Some(idx) =
+          && let Some(idx) =
             app.current_entries.iter().position(|e| e.name == name)
-          {
-            app.list_state.select(Some(idx));
-          }
+        {
+          app.list_state.select(Some(idx));
         }
         app.refresh_preview();
       }

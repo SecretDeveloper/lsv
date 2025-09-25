@@ -96,12 +96,10 @@ pub(crate) fn execute_internal_action(
       app.sort_key = key;
       app.refresh_lists();
       if let Some(name) = current_name
-      {
-        if let Some(idx) =
+        && let Some(idx) =
           app.current_entries.iter().position(|e| e.name == name)
-        {
-          app.list_state.select(Some(idx));
-        }
+      {
+        app.list_state.select(Some(idx));
       }
       app.refresh_preview();
     }
@@ -111,12 +109,10 @@ pub(crate) fn execute_internal_action(
       app.sort_reverse = !app.sort_reverse;
       app.refresh_lists();
       if let Some(name) = current_name
-      {
-        if let Some(idx) =
+        && let Some(idx) =
           app.current_entries.iter().position(|e| e.name == name)
-        {
-          app.list_state.select(Some(idx));
-        }
+      {
+        app.list_state.select(Some(idx));
       }
       app.refresh_preview();
     }

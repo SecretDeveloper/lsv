@@ -816,10 +816,7 @@ lsv.config({
       cfg.ui.theme.as_ref().and_then(|t| t.dir_fg.as_deref()),
       Some("cyan")
     );
-    assert_eq!(
-      cfg.ui.theme_path.as_ref().map(|p| p.as_path()),
-      Some(theme_file.as_path())
-    );
+    assert_eq!(cfg.ui.theme_path.as_deref(), Some(theme_file.as_path()));
   }
 
   #[test]
@@ -857,10 +854,7 @@ lsv.config({
       cfg.ui.theme.as_ref().and_then(|t| t.dir_fg.as_deref()),
       Some("magenta")
     );
-    assert_eq!(
-      cfg.ui.theme_path.as_ref().map(|p| p.as_path()),
-      Some(theme_file.as_path())
-    );
+    assert_eq!(cfg.ui.theme_path.as_deref(), Some(theme_file.as_path()));
   }
 
   #[test]

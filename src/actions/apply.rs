@@ -234,8 +234,7 @@ pub fn apply_config_overlay(
   }
   let new_theme_path =
     data.ui.theme_path.as_ref().map(std::path::PathBuf::from);
-  if app.config.ui.theme_path.as_ref().map(|p| p.as_path())
-    != new_theme_path.as_deref()
+  if app.config.ui.theme_path.as_deref() != new_theme_path.as_deref()
   {
     app.config.ui.theme_path = new_theme_path;
   }
@@ -264,12 +263,10 @@ pub fn apply_config_overlay(
   {
     app.refresh_lists();
     if let Some(name) = selected_name.as_ref()
-    {
-      if let Some(idx) =
+      && let Some(idx) =
         app.current_entries.iter().position(|e| &e.name == name)
-      {
-        app.list_state.select(Some(idx));
-      }
+    {
+      app.list_state.select(Some(idx));
     }
     app.refresh_preview();
     app.force_full_redraw = true;

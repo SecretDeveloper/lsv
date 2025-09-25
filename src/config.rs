@@ -384,11 +384,9 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths>
   fn root_from_env() -> Option<PathBuf>
   {
     if let Ok(dir) = env::var("LSV_CONFIG_DIR")
+      && !dir.trim().is_empty()
     {
-      if !dir.trim().is_empty()
-      {
-        return Some(PathBuf::from(dir));
-      }
+      return Some(PathBuf::from(dir));
     }
     None
   }

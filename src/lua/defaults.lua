@@ -112,6 +112,18 @@ lsv.map_action("za", "Display: absolute", function(lsv, config)
 	config.ui.display_mode = "absolute"
 end)
 
+-- Add file/folder action
+lsv.map_action("a", "Add file/folder", function(lsv, config)
+  local cwd = (config.context and config.context.cwd) or "."
+  local name = lsv.prompt("Name (end with '/' for folder): ", nil)
+  if not name or name == "" then return end
+  if name:sub(-1) == "/" then
+    lsv.os_run_interactive("mkdir -p " .. cwd .. "/" .. name)
+  else
+    lsv.os_run_interactive("touch " .. cwd .. "/" .. name)
+  end
+end)
+
 -- Toggle last command output panel
 lsv.map_action("zo", "Show output", function(lsv, config)
 	return { output = "toggle" }

@@ -60,17 +60,15 @@ pub fn dispatch_action(
     {
       if let (Some(_), Some(funcs)) =
         (app.lua_engine.as_ref(), app.lua_action_fns.as_ref())
+        && idx < funcs.len()
       {
-        if idx < funcs.len()
+        let (fx, overlay) = call_lua_action(app, idx)?;
+        apply_effects(app, fx);
+        if let Some(data) = overlay
         {
-          let (fx, overlay) = call_lua_action(app, idx)?;
-          apply_effects(app, fx);
-          if let Some(data) = overlay
-          {
-            apply_config_overlay(app, &data);
-          }
-          return Ok(true);
+          apply_config_overlay(app, &data);
         }
+        return Ok(true);
       }
       return Ok(false);
     }

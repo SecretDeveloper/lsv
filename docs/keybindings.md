@@ -26,6 +26,7 @@ The table below mirrors the bindings installed by `src/lua/defaults.lua`. User c
 | `Down / j` | Move down one item | handled in Rust input loop |
 | `Left / Backspace / h` | Go to parent directory | handled in Rust input loop |
 | `Right / Enter / l` | Enter directory / open | handled in Rust input loop |
+| `a` | Add file/folder | prompt for name; touch or mkdir in `cwd` |
 
 ## Notes
 

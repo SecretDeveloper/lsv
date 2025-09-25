@@ -19,11 +19,9 @@ pub fn ansi_spans(s: &str) -> Vec<Span<'_>>
     if bytes[i] == 0x1B && i + 1 < bytes.len()
     {
       if seg_start < i
+        && let Some(seg) = s.get(seg_start..i)
       {
-        if let Some(seg) = s.get(seg_start..i)
-        {
-          spans.push(Span::styled(seg.to_string(), style));
-        }
+        spans.push(Span::styled(seg.to_string(), style));
       }
       match bytes[i + 1]
       {
@@ -94,11 +92,9 @@ pub fn ansi_spans(s: &str) -> Vec<Span<'_>>
     }
   }
   if seg_start < bytes.len()
+    && let Some(seg) = s.get(seg_start..bytes.len())
   {
-    if let Some(seg) = s.get(seg_start..bytes.len())
-    {
-      spans.push(Span::styled(seg.to_string(), style));
-    }
+    spans.push(Span::styled(seg.to_string(), style));
   }
   spans
 }

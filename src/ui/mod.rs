@@ -190,11 +190,9 @@ fn lookup_user_name(uid: u32) -> Option<String>
 {
   // Fast path: check cache
   if let Ok(map) = uid_cache().read()
+    && let Some(v) = map.get(&uid)
   {
-    if let Some(v) = map.get(&uid)
-    {
-      return Some(v.clone());
-    }
+    return Some(v.clone());
   }
   // Parse /etc/passwd to resolve uid -> name
   let found = if let Ok(text) = std::fs::read_to_string("/etc/passwd")
@@ -223,11 +221,9 @@ fn lookup_user_name(uid: u32) -> Option<String>
     None
   };
   if let Some(ref name) = found
+    && let Ok(mut map) = uid_cache().write()
   {
-    if let Ok(mut map) = uid_cache().write()
-    {
-      map.insert(uid, name.clone());
-    }
+    map.insert(uid, name.clone());
   }
   found
 }
@@ -236,11 +232,9 @@ fn lookup_user_name(uid: u32) -> Option<String>
 fn lookup_group_name(gid: u32) -> Option<String>
 {
   if let Ok(map) = gid_cache().read()
+    && let Some(v) = map.get(&gid)
   {
-    if let Some(v) = map.get(&gid)
-    {
-      return Some(v.clone());
-    }
+    return Some(v.clone());
   }
   let found = if let Ok(text) = std::fs::read_to_string("/etc/group")
   {
@@ -268,11 +262,9 @@ fn lookup_group_name(gid: u32) -> Option<String>
     None
   };
   if let Some(ref name) = found
+    && let Ok(mut map) = gid_cache().write()
   {
-    if let Ok(mut map) = gid_cache().write()
-    {
-      map.insert(gid, name.clone());
-    }
+    map.insert(gid, name.clone());
   }
   found
 }
@@ -281,18 +273,14 @@ fn lookup_group_name(gid: u32) -> Option<String>
 pub fn clear_owner_cache()
 {
   if let Some(lock) = UID_CACHE.get()
+    && let Ok(mut m) = lock.write()
   {
-    if let Ok(mut m) = lock.write()
-    {
-      m.clear();
-    }
+    m.clear();
   }
   if let Some(lock) = GID_CACHE.get()
+    && let Ok(mut m) = lock.write()
   {
-    if let Ok(mut m) = lock.write()
-    {
-      m.clear();
-    }
+    m.clear();
   }
 }
 

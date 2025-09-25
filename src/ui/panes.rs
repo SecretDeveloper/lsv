@@ -714,12 +714,10 @@ pub fn draw_theme_picker_panel(
     let info_area = chunks[1];
     let mut info_style = Style::default().fg(Color::DarkGray);
     if let Some(th) = app.config.ui.theme.as_ref()
-    {
-      if let Some(fg) =
+      && let Some(fg) =
         th.info_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
-      {
-        info_style = info_style.fg(fg);
-      }
+    {
+      info_style = info_style.fg(fg);
     }
     let hint = Paragraph::new("↑/↓ preview  Enter apply  Esc cancel")
       .style(info_style)
@@ -894,12 +892,10 @@ pub fn build_row_line(
       {
         let mut s = Style::default().fg(Color::Gray);
         if let Some(th) = app.config.ui.theme.as_ref()
-        {
-          if let Some(fg) =
+          && let Some(fg) =
             th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v))
-          {
-            s = s.fg(fg);
-          }
+        {
+          s = s.fg(fg);
         }
         spans.push(Span::styled(right_cell, s));
       }
@@ -942,12 +938,10 @@ pub fn build_row_line(
     {
       let mut s = Style::default().fg(Color::Gray);
       if let Some(th) = app.config.ui.theme.as_ref()
-      {
-        if let Some(fg) =
+        && let Some(fg) =
           th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v))
-        {
-          s = s.fg(fg);
-        }
+      {
+        s = s.fg(fg);
       }
       spans.push(Span::styled(right_txt, s));
     }
