@@ -45,11 +45,6 @@ pub fn draw(
   panes::draw_current_panel(f, chunks[1], app);
   crate::preview::draw_preview_panel(f, chunks[2], app);
 
-  if let Some(msg) = &app.status_error
-  {
-    panes::draw_error_bar(f, f.area(), msg);
-  }
-
   // which-key overlay (draw last so it appears on top)
   if app.show_whichkey
   {

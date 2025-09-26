@@ -197,29 +197,6 @@ pub fn draw_current_panel(
   f.render_stateful_widget(list, list_area, &mut app.list_state);
 }
 
-pub fn draw_error_bar(
-  f: &mut ratatui::Frame,
-  area: Rect,
-  msg: &str,
-)
-{
-  let layout = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([Constraint::Min(0), Constraint::Length(1)])
-    .split(area);
-  let bar = layout[1];
-  let text = Line::from(Span::styled(
-    msg.to_string(),
-    Style::default()
-      .fg(Color::Black)
-      .bg(Color::Red)
-      .add_modifier(Modifier::BOLD),
-  ));
-  let para = Paragraph::new(text);
-  f.render_widget(Clear, bar);
-  f.render_widget(para, bar);
-}
-
 pub fn draw_whichkey_panel(
   f: &mut ratatui::Frame,
   area: Rect,

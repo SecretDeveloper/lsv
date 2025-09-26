@@ -41,8 +41,7 @@ pub fn apply_effects(
       app.show_output = false;
       app.show_whichkey = false;
     }
-    OverlayToggle::Hide | OverlayToggle::None =>
-    {}
+    OverlayToggle::Hide | OverlayToggle::None => {}
   }
 
   match fx.output_overlay
@@ -59,8 +58,7 @@ pub fn apply_effects(
       app.show_messages = false;
       app.show_whichkey = false;
     }
-    OverlayToggle::Hide | OverlayToggle::None =>
-    {}
+    OverlayToggle::Hide | OverlayToggle::None => {}
   }
 
   if let Some((title, text)) = fx.output
@@ -70,22 +68,12 @@ pub fn apply_effects(
 
   match fx.theme_picker
   {
-    ThemePickerCommand::Open =>
-    {
-      app.open_theme_picker();
-    }
-    ThemePickerCommand::None =>
-    {}
+    ThemePickerCommand::Open => { app.open_theme_picker(); }
+    ThemePickerCommand::None => {}
   }
 
-  if fx.redraw
-  {
-    app.force_full_redraw = true;
-  }
-  if fx.quit
-  {
-    app.should_quit = true;
-  }
+  if fx.redraw { app.force_full_redraw = true; }
+  if fx.quit { app.should_quit = true; }
 }
 
 // Apply a validated config overlay to the App, computing the minimal

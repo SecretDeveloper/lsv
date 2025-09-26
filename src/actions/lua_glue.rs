@@ -396,21 +396,3 @@ fn merge_tables(
   }
   Ok(out)
 }
-// Lua integration for action functions.
-//
-// Builds the `lsv` helpers table and a mutable `config` table snapshot,
-// calls the selected Lua action, then returns a tuple of:
-// - ActionEffects: lightweight side-effects parsed from the table
-// - Option<ConfigData>: a validated configuration overlay to apply
-//
-// Helpers exposed to Lua:
-// - lsv.select_item(index)
-// - lsv.select_last_item()
-// - lsv.quit()
-// - lsv.display_output(text, title?)
-// - lsv.os_run(cmd): runs via `sh -lc`, captures stdout+stderr, sets
-//   output_title=`$ cmd`, and logs timing/exit info. Env provided: LSV_PATH,
-//   LSV_DIR, LSV_NAME (derived from current selection).
-// - lsv.os_run_interactive(cmd): suspends TUI (leave alt screen + disable raw
-//   mode), runs attached to terminal, then restores TUI and requests a full
-//   redraw. On non-zero exit, it writes a short note to Output.

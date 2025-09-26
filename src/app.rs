@@ -24,8 +24,7 @@ use crate::actions::SortKey;
 
 #[derive(Debug, Clone)]
 /// Runtime state for lsv, including directory listings, preview cache, overlay
-/// flags, and configuration. Methods prefixed with `test_` are convenience
-/// helpers for integration tests.
+/// flags, and configuration. 
 pub struct DirEntryInfo
 {
   pub(crate) name:   String,
@@ -77,7 +76,6 @@ pub struct App
   pub(crate) keymaps:           Vec<crate::config::KeyMapping>,
   pub(crate) keymap_lookup:     std::collections::HashMap<String, String>,
   pub(crate) force_full_redraw: bool,
-  pub(crate) status_error:      Option<String>,
   pub(crate) lua_engine:        Option<crate::config::LuaEngine>,
   pub(crate) previewer_fn:      Option<RegistryKey>,
   pub(crate) lua_action_fns:    Option<Vec<RegistryKey>>,
@@ -202,7 +200,6 @@ impl App
       keymaps: Vec::new(),
       keymap_lookup: std::collections::HashMap::new(),
       force_full_redraw: false,
-      status_error: None,
       lua_engine: None,
       previewer_fn: None,
       lua_action_fns: None,
@@ -229,9 +226,7 @@ impl App
           app.config_paths = Some(paths);
           app.config = cfg;
           app.keymaps = maps;
-          app.add_default_keymaps();
           app.rebuild_keymap_lookup();
-          app.status_error = None;
           if let Some((eng, key, action_keys)) = engine_opt
           {
             app.lua_engine = Some(eng);
@@ -278,7 +273,6 @@ impl App
         {
           eprintln!("lsv: config load error: {}", e);
           app.config_paths = Some(paths);
-          app.status_error = Some(format!("Config error: {}", e));
         }
       }
     }
@@ -304,8 +298,9 @@ impl App
   {
     self.list_state.selected().and_then(|i| self.current_entries.get(i))
   }
+
   #[doc(hidden)]
-  pub fn test_entry_name(
+  pub fn get_current_entry_name(
     &self,
     idx: usize,
   ) -> Option<String>
@@ -313,7 +308,7 @@ impl App
     self.current_entries.get(idx).map(|e| e.name.clone())
   }
   #[doc(hidden)]
-  pub fn test_select_index(
+  pub fn select_index(
     &mut self,
     idx: usize,
   )
@@ -516,9 +511,7 @@ impl App
     }
   }
 
-  // Test helper: replace keymaps and rebuild lookup/prefix set
-  #[doc(hidden)]
-  pub fn test_set_keymaps(
+  pub fn set_keymaps(
     &mut self,
     maps: Vec<crate::config::KeyMapping>,
   )
@@ -527,9 +520,7 @@ impl App
     self.rebuild_keymap_lookup();
   }
 
-  // Test helper: resolve an action by sequence
-  #[doc(hidden)]
-  pub fn test_resolve_action(
+  pub fn get_keymap_action(
     &self,
     seq: &str,
   ) -> Option<String>
@@ -537,9 +528,7 @@ impl App
     self.keymap_lookup.get(seq).cloned()
   }
 
-  // Test helper: check if a prefix is registered
-  #[doc(hidden)]
-  pub fn test_has_prefix(
+  pub fn has_prefix(
     &self,
     seq: &str,
   ) -> bool
@@ -547,118 +536,90 @@ impl App
     self.prefix_set.contains(seq)
   }
 
-  // ---- Test accessors for internal state (read-only unless noted) ----
-  #[doc(hidden)]
-  pub fn test_config_show_hidden(&self) -> bool
+  pub fn show_hidden(&self) -> bool
   {
     self.config.ui.show_hidden
   }
-  #[doc(hidden)]
-  pub fn test_config_date_format(&self) -> Option<String>
+  pub fn get_date_format(&self) -> Option<String>
   {
     self.config.ui.date_format.clone()
   }
-  #[doc(hidden)]
-  pub fn test_config_preview_lines(&self) -> usize
+  pub fn get_preview_lines(&self) -> usize
   {
     self.config.ui.preview_lines
   }
-  #[doc(hidden)]
-  pub fn test_set_force_full_redraw(
+  pub fn set_force_full_redraw(
     &mut self,
     v: bool,
   )
   {
     self.force_full_redraw = v;
   }
-  #[doc(hidden)]
-  pub fn test_force_full_redraw(&self) -> bool
+  pub fn get_force_full_redraw(&self) -> bool
   {
     self.force_full_redraw
   }
-  #[doc(hidden)]
-  pub fn test_show_messages(&self) -> bool
+  pub fn get_show_messages(&self) -> bool
   {
     self.show_messages
   }
-  #[doc(hidden)]
-  pub fn test_show_output(&self) -> bool
+  pub fn get_show_output(&self) -> bool
   {
     self.show_output
   }
-  #[doc(hidden)]
-  pub fn test_show_whichkey(&self) -> bool
+  pub fn get_show_whichkey(&self) -> bool
   {
     self.show_whichkey
   }
-  #[doc(hidden)]
-  pub fn test_output_title(&self) -> &str
+  pub fn get_output_title(&self) -> &str
   {
     &self.output_title
   }
-  #[doc(hidden)]
-  pub fn test_output_text(&self) -> String
+  pub fn get_output_text(&self) -> String
   {
     self.output_lines.join("\n")
   }
-  #[doc(hidden)]
-  pub fn test_theme_path(&self) -> Option<PathBuf>
-  {
-    self.config.ui.theme_path.clone()
-  }
-  #[doc(hidden)]
-  pub fn test_has_entries(&self) -> bool
+  pub fn current_has_entries(&self) -> bool
   {
     !self.current_entries.is_empty()
   }
-  #[doc(hidden)]
-  pub fn test_selected_index(&self) -> Option<usize>
+  pub fn get_list_selected_index(&self) -> Option<usize>
   {
     self.list_state.selected()
   }
-  #[doc(hidden)]
-  pub fn test_should_quit(&self) -> bool
+  pub fn get_quit(&self) -> bool
   {
     self.should_quit
   }
-  #[doc(hidden)]
-  pub fn test_sort_reverse(&self) -> bool
+  pub fn get_sort_reverse(&self) -> bool
   {
     self.sort_reverse
   }
-  #[doc(hidden)]
-  pub fn test_set_sort_reverse(
+  pub fn set_sort_reverse(
     &mut self,
     v: bool,
   )
   {
     self.sort_reverse = v;
   }
-  #[doc(hidden)]
-  pub fn test_display_mode(&self) -> DisplayMode
+  pub fn get_display_mode(&self) -> DisplayMode
   {
     self.display_mode
   }
-  #[doc(hidden)]
-  pub fn test_info_mode(&self) -> InfoMode
+  pub fn get_info_mode(&self) -> InfoMode
   {
     self.info_mode
   }
-  #[doc(hidden)]
-  pub fn test_get_entry(
+
+  pub fn get_entry(
     &self,
     idx: usize,
   ) -> Option<DirEntryInfo>
   {
     self.current_entries.get(idx).cloned()
   }
-  #[doc(hidden)]
-  pub fn test_ui_row_format(&self) -> crate::config::UiRowFormat
-  {
-    self.config.ui.row.clone().unwrap_or_default()
-  }
-  #[doc(hidden)]
-  pub fn test_set_cwd(
+
+  pub fn set_cwd(
     &mut self,
     path: &std::path::Path,
   )
@@ -671,70 +632,42 @@ impl App
       self.refresh_preview();
     }
   }
-  #[doc(hidden)]
-  pub fn test_theme_dir_fg(&self) -> Option<String>
-  {
-    self.config.ui.theme.as_ref().and_then(|t| t.dir_fg.clone())
-  }
-  #[doc(hidden)]
-  pub fn test_whichkey_prefix(&self) -> String
+
+  pub fn get_whichkey_prefix(&self) -> String
   {
     self.whichkey_prefix.clone()
   }
-  #[doc(hidden)]
-  pub fn test_sort_key(&self) -> crate::actions::internal::SortKey
+  pub fn get_sort_key(&self) -> crate::actions::internal::SortKey
   {
     self.sort_key
   }
-  #[doc(hidden)]
-  pub fn test_set_config(
+  pub fn set_config(
     &mut self,
     cfg: crate::config::Config,
   )
   {
     self.config = cfg;
   }
-  #[doc(hidden)]
-  pub fn test_cwd_path(&self) -> std::path::PathBuf
+  pub fn get_config( &mut self) -> crate::config::Config
+  {
+    self.config.clone()
+  }
+  pub fn get_cwd_path(&self) -> std::path::PathBuf
   {
     self.cwd.clone()
   }
-  #[doc(hidden)]
-  pub fn test_display_output(
-    &mut self,
-    title: &str,
-    text: &str,
-  )
-  {
-    self.display_output(title, text)
-  }
-  #[doc(hidden)]
-  pub fn test_add_message(
-    &mut self,
-    msg: &str,
-  )
-  {
-    self.add_message(msg)
-  }
-  #[doc(hidden)]
-  pub fn test_preview_line_count(&self) -> usize
+
+  pub fn preview_line_count(&self) -> usize
   {
     self.preview_lines.len()
   }
-  #[doc(hidden)]
-  pub fn test_recent_messages_len(&self) -> usize
+
+  pub fn recent_messages_len(&self) -> usize
   {
     self.recent_messages.len()
   }
 
-  pub(crate) fn add_default_keymaps(&mut self)
-  {
-    // Defaults are provided by builtin Lua (loaded before user config).
-    // No Rust-managed defaults here.
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn add_message(
+  pub fn add_message(
     &mut self,
     msg: &str,
   )
@@ -744,7 +677,6 @@ impl App
     {
       return;
     }
-    self.status_error = Some(m.clone());
     self.recent_messages.push(m);
     if self.recent_messages.len() > 100
     {
@@ -795,21 +727,14 @@ impl App
         Ok(dir_entry) =>
         {
           let path = dir_entry.path();
-          if !path.is_file()
-          {
-            continue;
-          }
+          if !path.is_file() { continue };
+
           if let Some(ext) = path.extension().and_then(|s| s.to_str())
           {
-            if !ext.eq_ignore_ascii_case("lua")
-            {
-              continue;
-            }
+            if !ext.eq_ignore_ascii_case("lua") { continue; }
           }
-          else
-          {
-            continue;
-          }
+          else { continue; }
+
           match crate::config::load_theme_from_file(&path)
           {
             Ok(theme) =>
@@ -823,8 +748,7 @@ impl App
             }
             Err(e) =>
             {
-              self.add_message(&format!(
-                "Theme picker: failed to load {} ({})",
+              self.add_message(&format!( "Theme picker: failed to load {} ({})",
                 path.display(),
                 e
               ));
@@ -945,44 +869,7 @@ impl App
     self.show_theme_picker && self.theme_picker.is_some()
   }
 
-  #[doc(hidden)]
-  pub fn test_theme_picker_active(&self) -> bool
-  {
-    self.is_theme_picker_active()
-  }
-
-  #[doc(hidden)]
-  pub fn test_theme_picker_entries(&self) -> Vec<String>
-  {
-    self
-      .theme_picker
-      .as_ref()
-      .map(|tp| tp.entries.iter().map(|e| e.name.clone()).collect())
-      .unwrap_or_default()
-  }
-
-  #[doc(hidden)]
-  pub fn test_theme_picker_move(
-    &mut self,
-    delta: isize,
-  )
-  {
-    self.theme_picker_move(delta);
-  }
-
-  #[doc(hidden)]
-  pub fn test_theme_picker_confirm(&mut self)
-  {
-    self.confirm_theme_picker();
-  }
-
-  #[doc(hidden)]
-  pub fn test_theme_picker_cancel(&mut self)
-  {
-    self.cancel_theme_picker();
-  }
-
-  pub(crate) fn display_output(
+  pub fn display_output(
     &mut self,
     title: &str,
     text: &str,
