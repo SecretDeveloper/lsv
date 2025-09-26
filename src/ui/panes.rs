@@ -206,13 +206,17 @@ pub fn draw_whichkey_panel(
   // Build lookup: last mapping wins for duplicate sequences
   use std::collections::HashMap;
   let mut map: HashMap<&str, (&str, &str)> = HashMap::new();
-  for km in &app.keymaps
+  for km in &app.keys.maps
   {
     let label = km.description.as_deref().unwrap_or(km.action.as_str());
     map.insert(km.sequence.as_str(), (km.sequence.as_str(), label));
   }
 
-  let prefix = app.whichkey_prefix.as_str();
+  let prefix = match app.overlay
+  {
+    crate::app::Overlay::WhichKey { ref prefix } => prefix.as_str(),
+    _ => "",
+  };
   // Bucket by next-prefix (prefix + next char)
   let mut buckets: HashMap<String, Vec<(&str, &str)>> = HashMap::new();
   for (seq, (_, label)) in map.into_iter()
@@ -498,13 +502,18 @@ pub fn draw_output_panel(
   app: &crate::App,
 )
 {
+  let (title, lines): (String, Vec<String>) = match app.overlay.clone()
+  {
+    crate::app::Overlay::Output { title, lines } => (title, lines),
+    _ => (String::new(), Vec::new()),
+  };
   let min_h = ((area.height as u32 * 20) / 100).max(3) as u16;
   let max_h = ((area.height as u32 * 60) / 100).max(min_h as u32) as u16;
-  let needed = (app.output_lines.len() as u16).saturating_add(2).max(3);
+  let needed = (lines.len() as u16).saturating_add(2).max(3);
   let panel_h = needed.min(max_h).max(min_h).min(area.height);
 
   let mut block = Block::default().borders(Borders::ALL).title(Span::styled(
-    app.output_title.clone(),
+    title,
     Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
   ));
   if let Some(th) = app.config.ui.theme.as_ref()
@@ -528,8 +537,8 @@ pub fn draw_output_panel(
   f.render_widget(Clear, panel);
 
   let avail_rows = panel_h.saturating_sub(2) as usize;
-  let start = app.output_lines.len().saturating_sub(avail_rows);
-  let slice = &app.output_lines[start..];
+  let start = lines.len().saturating_sub(avail_rows);
+  let slice = &lines[start..];
   let mut lines: Vec<Line> = Vec::new();
   for m in slice
   {
@@ -545,10 +554,10 @@ pub fn draw_theme_picker_panel(
   app: &crate::App,
 )
 {
-  let state = match app.theme_picker.as_ref()
+  let state = match app.overlay
   {
-    Some(s) => s,
-    None => return,
+    crate::app::Overlay::ThemePicker(ref s) => s.as_ref(),
+    _ => return,
   };
   if state.entries.is_empty()
   {

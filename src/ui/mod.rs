@@ -46,21 +46,25 @@ pub fn draw(
   crate::preview::draw_preview_panel(f, chunks[2], app);
 
   // which-key overlay (draw last so it appears on top)
-  if app.show_whichkey
+  match app.overlay
   {
-    panes::draw_whichkey_panel(f, f.area(), app);
-  }
-  if app.show_messages
-  {
-    panes::draw_messages_panel(f, f.area(), app);
-  }
-  if app.show_output
-  {
-    panes::draw_output_panel(f, f.area(), app);
-  }
-  if app.is_theme_picker_active()
-  {
-    panes::draw_theme_picker_panel(f, f.area(), app);
+    crate::app::Overlay::WhichKey { .. } =>
+    {
+      panes::draw_whichkey_panel(f, f.area(), app);
+    }
+    crate::app::Overlay::Messages =>
+    {
+      panes::draw_messages_panel(f, f.area(), app);
+    }
+    crate::app::Overlay::Output { .. } =>
+    {
+      panes::draw_output_panel(f, f.area(), app);
+    }
+    crate::app::Overlay::ThemePicker(_) =>
+    {
+      panes::draw_theme_picker_panel(f, f.area(), app);
+    }
+    crate::app::Overlay::None => {}
   }
 }
 

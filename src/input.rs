@@ -65,17 +65,11 @@ pub fn handle_key(
   // Quick toggle of which-key help
   if let KeyCode::Char('?') = key.code
   {
-    if app.show_whichkey
+    app.overlay = match app.overlay
     {
-      app.show_whichkey = false;
-      app.whichkey_prefix.clear();
-    }
-    else
-    {
-      app.show_whichkey = true;
-      // Show for current pending prefix if any; otherwise root
-      app.whichkey_prefix = app.pending_seq.clone();
-    }
+      crate::app::Overlay::WhichKey { .. } => crate::app::Overlay::None,
+      _ => crate::app::Overlay::WhichKey { prefix: app.keys.pending.clone() },
+    };
     return Ok(false);
   }
 
@@ -90,26 +84,28 @@ pub fn handle_key(
       let now = std::time::Instant::now();
       // reset pending_seq on timeout
       if app.config.keys.sequence_timeout_ms > 0
-        && let Some(last) = app.last_seq_time
+        && let Some(last) = app.keys.last_at
       {
         let timeout =
           std::time::Duration::from_millis(app.config.keys.sequence_timeout_ms);
         if now.duration_since(last) > timeout
         {
-          app.pending_seq.clear();
+          app.keys.pending.clear();
         }
       }
-      app.last_seq_time = Some(now);
+      app.keys.last_at = Some(now);
 
-      app.pending_seq.push(ch);
-      let seq = app.pending_seq.clone();
+      app.keys.pending.push(ch);
+      let seq = app.keys.pending.clone();
 
-      if let Some(action) = app.keymap_lookup.get(seq.as_str()).cloned()
+      if let Some(action) = app.keys.lookup.get(seq.as_str()).cloned()
       {
         // exact match
-        app.pending_seq.clear();
-        app.show_whichkey = false;
-        app.whichkey_prefix.clear();
+        app.keys.pending.clear();
+        if matches!(app.overlay, crate::app::Overlay::WhichKey { .. })
+        {
+          app.overlay = crate::app::Overlay::None;
+        }
         if crate::actions::dispatch_action(app, &action).unwrap_or(false)
         {
           if app.should_quit
@@ -119,19 +115,20 @@ pub fn handle_key(
           return Ok(false);
         }
       }
-      else if app.prefix_set.contains(&seq)
+      else if app.keys.prefixes.contains(&seq)
       {
         // keep gathering keys
-        app.show_whichkey = true;
-        app.whichkey_prefix = seq;
+        app.overlay = crate::app::Overlay::WhichKey { prefix: seq };
         return Ok(false);
       }
       else
       {
         // no sequence match, try single-key fallbacks (normalize case variants)
-        app.pending_seq.clear();
-        app.show_whichkey = false;
-        app.whichkey_prefix.clear();
+        app.keys.pending.clear();
+        if matches!(app.overlay, crate::app::Overlay::WhichKey { .. })
+        {
+          app.overlay = crate::app::Overlay::None;
+        }
         let mut tried = std::collections::HashSet::new();
         for k in [
           ch.to_string(),
@@ -143,7 +140,7 @@ pub fn handle_key(
           {
             continue;
           }
-          if let Some(action) = app.keymap_lookup.get(k.as_str()).cloned()
+          if let Some(action) = app.keys.lookup.get(k.as_str()).cloned()
             && crate::actions::dispatch_action(app, &action).unwrap_or(false)
           {
             if app.should_quit
@@ -162,11 +159,8 @@ pub fn handle_key(
     (KeyCode::Esc, _) =>
     {
       // cancel pending sequences and which-key
-      app.pending_seq.clear();
-      app.show_whichkey = false;
-      app.whichkey_prefix.clear();
-      app.show_messages = false;
-      app.show_output = false;
+      app.keys.pending.clear();
+      app.overlay = crate::app::Overlay::None;
       return Ok(false);
     }
     (KeyCode::Up, _) | (KeyCode::Char('k'), _) =>

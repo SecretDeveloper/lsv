@@ -31,15 +31,15 @@ pub fn apply_effects(
   {
     OverlayToggle::Toggle =>
     {
-      app.show_messages = !app.show_messages;
-      app.show_output = false;
-      app.show_whichkey = false;
+      app.overlay = match app.overlay
+      {
+        crate::app::Overlay::Messages => crate::app::Overlay::None,
+        _ => crate::app::Overlay::Messages,
+      };
     }
     OverlayToggle::Show =>
     {
-      app.show_messages = true;
-      app.show_output = false;
-      app.show_whichkey = false;
+      app.overlay = crate::app::Overlay::Messages;
     }
     OverlayToggle::Hide | OverlayToggle::None => {}
   }
@@ -48,15 +48,15 @@ pub fn apply_effects(
   {
     OverlayToggle::Toggle =>
     {
-      app.show_output = !app.show_output;
-      app.show_messages = false;
-      app.show_whichkey = false;
+      app.overlay = match app.overlay
+      {
+        crate::app::Overlay::Output { .. } => crate::app::Overlay::None,
+        _ => crate::app::Overlay::Output { title: String::from("Output"), lines: Vec::new() },
+      };
     }
     OverlayToggle::Show =>
     {
-      app.show_output = true;
-      app.show_messages = false;
-      app.show_whichkey = false;
+      app.overlay = crate::app::Overlay::Output { title: String::from("Output"), lines: Vec::new() };
     }
     OverlayToggle::Hide | OverlayToggle::None => {}
   }

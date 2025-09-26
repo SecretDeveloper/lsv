@@ -58,9 +58,8 @@ pub fn dispatch_action(
     trace::log(format!("[dispatch] action='{}'", action));
     if let Ok(idx) = rest.parse::<usize>()
     {
-      if let (Some(_), Some(funcs)) =
-        (app.lua_engine.as_ref(), app.lua_action_fns.as_ref())
-        && idx < funcs.len()
+      if let Some(lua) = app.lua.as_ref()
+        && idx < lua.actions.len()
       {
         let (fx, overlay) = call_lua_action(app, idx)?;
         apply_effects(app, fx);

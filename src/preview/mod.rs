@@ -40,22 +40,22 @@ pub fn draw_preview_panel(
     if !sel.is_dir
     {
       let key = (sel.path.clone(), area.width, area.height);
-      if app.preview_dyn_key.as_ref() == Some(&key)
+      if app.preview.cache_key.as_ref() == Some(&key)
       {
-        dynamic_lines = app.preview_dyn_lines.clone();
+        dynamic_lines = app.preview.cache_lines.clone();
       }
       else
       {
         dynamic_lines =
           run_previewer(app, &sel.path, area, app.config.ui.preview_lines);
-        app.preview_dyn_key = Some(key);
-        app.preview_dyn_lines = dynamic_lines.clone();
+        app.preview.cache_key = Some(key);
+        app.preview.cache_lines = dynamic_lines.clone();
       }
     }
     else
     {
-      app.preview_dyn_key = None;
-      app.preview_dyn_lines = None;
+      app.preview.cache_key = None;
+      app.preview.cache_lines = None;
     }
   }
   let mut block = Block::default().borders(Borders::ALL);
@@ -104,7 +104,7 @@ pub fn draw_preview_panel(
         lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
       }
     }
-    else if app.preview_lines.is_empty()
+    else if app.preview.static_lines.is_empty()
     {
       vec![Line::from(Span::styled(
         "<no selection>",
@@ -113,7 +113,7 @@ pub fn draw_preview_panel(
     }
     else
     {
-      app.preview_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+      app.preview.static_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
     }
   }
   else if let Some(lines) = dynamic_lines.as_ref()
@@ -130,7 +130,7 @@ pub fn draw_preview_panel(
       lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
     }
   }
-  else if app.preview_lines.is_empty()
+  else if app.preview.static_lines.is_empty()
   {
     vec![Line::from(Span::styled(
       "<no selection>",
@@ -139,7 +139,7 @@ pub fn draw_preview_panel(
   }
   else
   {
-    app.preview_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+    app.preview.static_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
   };
 
   let mut para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
@@ -169,8 +169,8 @@ fn run_previewer(
 ) -> Option<Vec<String>>
 {
   // 1) Lua previewer function (if configured)
-  if let (Some(engine), Some(key)) =
-    (app.lua_engine.as_ref(), app.previewer_fn.as_ref())
+  if let Some(lua) = app.lua.as_ref()
+    && let (engine, Some(key)) = (&lua.engine, lua.previewer.as_ref())
   {
     let lua = engine.lua();
     if let Ok(func) = lua.registry_value::<mlua::Function>(key)

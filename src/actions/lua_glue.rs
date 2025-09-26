@@ -48,12 +48,11 @@ pub fn call_lua_action(
   idx: usize,
 ) -> io::Result<(ActionEffects, Option<crate::config_data::ConfigData>)>
 {
-  let (engine, funcs) =
-    match (app.lua_engine.as_ref(), app.lua_action_fns.as_ref())
-    {
-      (Some(eng), Some(vec)) => (eng, vec),
-      _ => return Ok((ActionEffects::default(), None)),
-    };
+  let (engine, funcs) = match app.lua.as_ref()
+  {
+    Some(lua) => (&lua.engine, &lua.actions),
+    None => return Ok((ActionEffects::default(), None)),
+  };
   if idx >= funcs.len()
   {
     return Ok((ActionEffects::default(), None));
