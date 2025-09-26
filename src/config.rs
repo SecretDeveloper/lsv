@@ -171,27 +171,27 @@ pub struct UiRowWidths
 /// Theme colours for the UI. Fields are optional and fall back to defaults.
 pub struct UiTheme
 {
-  pub pane_bg:          Option<String>,
-  pub border_fg:        Option<String>,
-  pub item_fg:          Option<String>,
-  pub item_bg:          Option<String>,
-  pub selected_item_fg: Option<String>,
-  pub selected_item_bg: Option<String>,
-  pub title_fg:         Option<String>,
-  pub title_bg:         Option<String>,
-  pub info_fg:          Option<String>,
-  pub dir_fg:           Option<String>,
-  pub dir_bg:           Option<String>,
-  pub file_fg:          Option<String>,
-  pub file_bg:          Option<String>,
-  pub hidden_fg:        Option<String>,
-  pub hidden_bg:        Option<String>,
-  pub exec_fg:          Option<String>,
-  pub exec_bg:          Option<String>,
+  pub pane_bg:               Option<String>,
+  pub border_fg:             Option<String>,
+  pub item_fg:               Option<String>,
+  pub item_bg:               Option<String>,
+  pub selected_item_fg:      Option<String>,
+  pub selected_item_bg:      Option<String>,
+  pub title_fg:              Option<String>,
+  pub title_bg:              Option<String>,
+  pub info_fg:               Option<String>,
+  pub dir_fg:                Option<String>,
+  pub dir_bg:                Option<String>,
+  pub file_fg:               Option<String>,
+  pub file_bg:               Option<String>,
+  pub hidden_fg:             Option<String>,
+  pub hidden_bg:             Option<String>,
+  pub exec_fg:               Option<String>,
+  pub exec_bg:               Option<String>,
   // Selection indicator (bar) colours
-  pub selection_bar_fg:       Option<String>,
-  pub selection_bar_copy_fg:  Option<String>,
-  pub selection_bar_move_fg:  Option<String>,
+  pub selection_bar_fg:      Option<String>,
+  pub selection_bar_copy_fg: Option<String>,
+  pub selection_bar_move_fg: Option<String>,
 }
 
 pub(crate) fn merge_theme_table(
@@ -806,22 +806,40 @@ fn install_lsv_api(
         if let Ok(p_tbl) = modals_tbl.get::<Table>("prompt")
         {
           let mut p = modals.prompt;
-          if let Ok(v) = p_tbl.get::<u64>("width_pct") { p.width_pct = v as u16; }
-          if let Ok(v) = p_tbl.get::<u64>("height_pct") { p.height_pct = v as u16; }
+          if let Ok(v) = p_tbl.get::<u64>("width_pct")
+          {
+            p.width_pct = v as u16;
+          }
+          if let Ok(v) = p_tbl.get::<u64>("height_pct")
+          {
+            p.height_pct = v as u16;
+          }
           modals.prompt = p;
         }
         if let Ok(c_tbl) = modals_tbl.get::<Table>("confirm")
         {
           let mut c = modals.confirm;
-          if let Ok(v) = c_tbl.get::<u64>("width_pct") { c.width_pct = v as u16; }
-          if let Ok(v) = c_tbl.get::<u64>("height_pct") { c.height_pct = v as u16; }
+          if let Ok(v) = c_tbl.get::<u64>("width_pct")
+          {
+            c.width_pct = v as u16;
+          }
+          if let Ok(v) = c_tbl.get::<u64>("height_pct")
+          {
+            c.height_pct = v as u16;
+          }
           modals.confirm = c;
         }
         if let Ok(t_tbl) = modals_tbl.get::<Table>("theme")
         {
           let mut t = modals.theme;
-          if let Ok(v) = t_tbl.get::<u64>("width_pct") { t.width_pct = v as u16; }
-          if let Ok(v) = t_tbl.get::<u64>("height_pct") { t.height_pct = v as u16; }
+          if let Ok(v) = t_tbl.get::<u64>("width_pct")
+          {
+            t.width_pct = v as u16;
+          }
+          if let Ok(v) = t_tbl.get::<u64>("height_pct")
+          {
+            t.height_pct = v as u16;
+          }
           modals.theme = t;
         }
         cfg_mut.ui.modals = Some(modals);
@@ -929,7 +947,8 @@ fn install_lsv_api(
             }
           }
         }
-        _ => {}
+        _ =>
+        {}
       }
       Ok(true)
     },
@@ -942,18 +961,17 @@ fn install_lsv_api(
   // Add metatable to error on unknown lsv.* at config time
   let mt = lua.create_table()?;
   let idx = lua.create_function(move |lua, (_tbl, key): (Table, Value)| {
-    let name = match key {
-      Value::String(s) => match s.to_str() {
+    let name = match key
+    {
+      Value::String(s) => match s.to_str()
+      {
         Ok(v) => v.to_string(),
         Err(_) => "?".to_string(),
       },
       other => format!("{:?}", other),
     };
     let func = lua.create_function(move |_, ()| -> mlua::Result<()> {
-      Err(mlua::Error::RuntimeError(format!(
-        "unknown lsv function: {}",
-        name
-      )))
+      Err(mlua::Error::RuntimeError(format!("unknown lsv function: {}", name)))
     })?;
     Ok(func)
   })?;

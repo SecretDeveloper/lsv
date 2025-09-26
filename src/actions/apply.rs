@@ -41,7 +41,8 @@ pub fn apply_effects(
     {
       app.overlay = crate::app::Overlay::Messages;
     }
-    OverlayToggle::Hide | OverlayToggle::None => {}
+    OverlayToggle::Hide | OverlayToggle::None =>
+    {}
   }
 
   match fx.output_overlay
@@ -51,14 +52,21 @@ pub fn apply_effects(
       app.overlay = match app.overlay
       {
         crate::app::Overlay::Output { .. } => crate::app::Overlay::None,
-        _ => crate::app::Overlay::Output { title: String::from("Output"), lines: Vec::new() },
+        _ => crate::app::Overlay::Output {
+          title: String::from("Output"),
+          lines: Vec::new(),
+        },
       };
     }
     OverlayToggle::Show =>
     {
-      app.overlay = crate::app::Overlay::Output { title: String::from("Output"), lines: Vec::new() };
+      app.overlay = crate::app::Overlay::Output {
+        title: String::from("Output"),
+        lines: Vec::new(),
+      };
     }
-    OverlayToggle::Hide | OverlayToggle::None => {}
+    OverlayToggle::Hide | OverlayToggle::None =>
+    {}
   }
 
   if let Some((title, text)) = fx.output
@@ -68,8 +76,12 @@ pub fn apply_effects(
 
   match fx.theme_picker
   {
-    ThemePickerCommand::Open => { app.open_theme_picker(); }
-    ThemePickerCommand::None => {}
+    ThemePickerCommand::Open =>
+    {
+      app.open_theme_picker();
+    }
+    ThemePickerCommand::None =>
+    {}
   }
 
   // Prompt overlay
@@ -83,7 +95,8 @@ pub fn apply_effects(
     {
       app.open_rename_entry_prompt();
     }
-    crate::actions::effects::PromptCommand::None => {}
+    crate::actions::effects::PromptCommand::None =>
+    {}
   }
 
   // Confirmations
@@ -91,10 +104,13 @@ pub fn apply_effects(
   {
     crate::actions::effects::ConfirmCommand::DeleteSelected =>
     {
-      crate::trace::log("[apply] confirm=delete_selected -> request_delete_selected(all)");
+      crate::trace::log(
+        "[apply] confirm=delete_selected -> request_delete_selected(all)",
+      );
       app.request_delete_selected();
     }
-    crate::actions::effects::ConfirmCommand::None => {}
+    crate::actions::effects::ConfirmCommand::None =>
+    {}
   }
 
   // Selection commands
@@ -108,7 +124,8 @@ pub fn apply_effects(
     {
       app.clear_all_selected();
     }
-    crate::actions::effects::SelectCommand::None => {}
+    crate::actions::effects::SelectCommand::None =>
+    {}
   }
 
   // Clipboard commands
@@ -118,11 +135,18 @@ pub fn apply_effects(
     crate::actions::effects::ClipboardCommand::MoveArm => app.move_selection(),
     crate::actions::effects::ClipboardCommand::Paste => app.paste_clipboard(),
     crate::actions::effects::ClipboardCommand::Clear => app.clear_clipboard(),
-    crate::actions::effects::ClipboardCommand::None => {}
+    crate::actions::effects::ClipboardCommand::None =>
+    {}
   }
 
-  if fx.redraw { app.force_full_redraw = true; }
-  if fx.quit { app.should_quit = true; }
+  if fx.redraw
+  {
+    app.force_full_redraw = true;
+  }
+  if fx.quit
+  {
+    app.should_quit = true;
+  }
 }
 
 // Apply a validated config overlay to the App, computing the minimal
@@ -246,23 +270,23 @@ pub fn apply_config_overlay(
   let new_theme = if let Some(th) = data.ui.theme.as_ref()
   {
     let t = crate::config::UiTheme {
-      pane_bg:          th.pane_bg.clone(),
-      border_fg:        th.border_fg.clone(),
-      item_fg:          th.item_fg.clone(),
-      item_bg:          th.item_bg.clone(),
-      selected_item_fg: th.selected_item_fg.clone(),
-      selected_item_bg: th.selected_item_bg.clone(),
-      title_fg:         th.title_fg.clone(),
-      title_bg:         th.title_bg.clone(),
-      info_fg:          th.info_fg.clone(),
-      dir_fg:           th.dir_fg.clone(),
-      dir_bg:           th.dir_bg.clone(),
-      file_fg:          th.file_fg.clone(),
-      file_bg:          th.file_bg.clone(),
-      hidden_fg:        th.hidden_fg.clone(),
-      hidden_bg:        th.hidden_bg.clone(),
-      exec_fg:          th.exec_fg.clone(),
-      exec_bg:          th.exec_bg.clone(),
+      pane_bg:               th.pane_bg.clone(),
+      border_fg:             th.border_fg.clone(),
+      item_fg:               th.item_fg.clone(),
+      item_bg:               th.item_bg.clone(),
+      selected_item_fg:      th.selected_item_fg.clone(),
+      selected_item_bg:      th.selected_item_bg.clone(),
+      title_fg:              th.title_fg.clone(),
+      title_bg:              th.title_bg.clone(),
+      info_fg:               th.info_fg.clone(),
+      dir_fg:                th.dir_fg.clone(),
+      dir_bg:                th.dir_bg.clone(),
+      file_fg:               th.file_fg.clone(),
+      file_bg:               th.file_bg.clone(),
+      hidden_fg:             th.hidden_fg.clone(),
+      hidden_bg:             th.hidden_bg.clone(),
+      exec_fg:               th.exec_fg.clone(),
+      exec_bg:               th.exec_bg.clone(),
       selection_bar_fg:      th.selection_bar_fg.clone(),
       selection_bar_copy_fg: th.selection_bar_copy_fg.clone(),
       selection_bar_move_fg: th.selection_bar_move_fg.clone(),

@@ -27,7 +27,6 @@ pub fn handle_key(
     return Ok(false);
   }
 
-
   if app.is_theme_picker_active()
   {
     match key.code
@@ -66,7 +65,10 @@ pub fn handle_key(
   if let crate::app::Overlay::Prompt(ref mut st_box) = app.overlay
   {
     use crossterm::event::KeyEventKind;
-    if key.kind != KeyEventKind::Press { return Ok(false); }
+    if key.kind != KeyEventKind::Press
+    {
+      return Ok(false);
+    }
     let st = st_box.as_mut();
     match key.code
     {
@@ -92,7 +94,10 @@ pub fn handle_key(
               }
               else
               {
-                let _ = std::fs::OpenOptions::new().create_new(true).write(true).open(&path);
+                let _ = std::fs::OpenOptions::new()
+                  .create_new(true)
+                  .write(true)
+                  .open(&path);
               }
               app.refresh_lists();
             }
@@ -105,7 +110,8 @@ pub fn handle_key(
               let dest = app.cwd.join(new_name);
               if std::fs::rename(from, &dest).is_ok()
               {
-                // Keep item selected after rename (update selection to new path)
+                // Keep item selected after rename (update selection to new
+                // path)
                 if app.selected.remove(from)
                 {
                   app.selected.insert(dest.clone());
@@ -114,26 +120,33 @@ pub fn handle_key(
               app.refresh_lists();
             }
           }
-          crate::app::PromptKind::RenameMany { ref items, ref pre, ref suf } =>
+          crate::app::PromptKind::RenameMany {
+            ref items,
+            ref pre,
+            ref suf,
+          } =>
           {
             let tpl = st.input.trim().to_string();
             // Require exactly one {}
             if let Some(pos) = tpl.find("{}")
               && tpl.matches("{}").count() == 1
             {
-              let (new_pre, new_suf) = (tpl[..pos].to_string(), tpl[pos+2..].to_string());
+              let (new_pre, new_suf) =
+                (tpl[..pos].to_string(), tpl[pos + 2..].to_string());
               for p in items.iter()
               {
                 if let Some(name_os) = p.file_name()
                   && let Some(name) = name_os.to_str()
                 {
                   // Extract variable segment using original pre/suf
-                  let var = name.strip_prefix(pre.as_str()).unwrap_or(name)
-                    .strip_suffix(suf.as_str()).unwrap_or(name);
+                  let var = name
+                    .strip_prefix(pre.as_str())
+                    .unwrap_or(name)
+                    .strip_suffix(suf.as_str())
+                    .unwrap_or(name);
                   let new_name = format!("{}{}{}", new_pre, var, new_suf);
                   let dst = app.cwd.join(new_name);
-                  if std::fs::rename(p, &dst).is_ok()
-                    && app.selected.remove(p)
+                  if std::fs::rename(p, &dst).is_ok() && app.selected.remove(p)
                   {
                     app.selected.insert(dst.clone());
                   }
@@ -143,7 +156,9 @@ pub fn handle_key(
             }
             else
             {
-              app.add_message("Rename: template must contain exactly one {} placeholder");
+              app.add_message(
+                "Rename: template must contain exactly one {} placeholder",
+              );
             }
           }
         }
@@ -161,19 +176,29 @@ pub fn handle_key(
       }
       KeyCode::Left =>
       {
-        if st.cursor > 0 { st.cursor -= 1; app.force_full_redraw = true; }
+        if st.cursor > 0
+        {
+          st.cursor -= 1;
+          app.force_full_redraw = true;
+        }
       }
       KeyCode::Right =>
       {
-        if st.cursor < st.input.len() { st.cursor += 1; app.force_full_redraw = true; }
+        if st.cursor < st.input.len()
+        {
+          st.cursor += 1;
+          app.force_full_redraw = true;
+        }
       }
       KeyCode::Home =>
       {
-        st.cursor = 0; app.force_full_redraw = true;
+        st.cursor = 0;
+        app.force_full_redraw = true;
       }
       KeyCode::End =>
       {
-        st.cursor = st.input.len(); app.force_full_redraw = true;
+        st.cursor = st.input.len();
+        app.force_full_redraw = true;
       }
       KeyCode::Char(ch) =>
       {
@@ -186,7 +211,8 @@ pub fn handle_key(
           app.force_full_redraw = true;
         }
       }
-      _ => {}
+      _ =>
+      {}
     }
     return Ok(false);
   }
@@ -195,9 +221,16 @@ pub fn handle_key(
   if let crate::app::Overlay::Confirm(ref mut st_box) = app.overlay
   {
     use crossterm::event::KeyEventKind;
-    if key.kind != KeyEventKind::Press { return Ok(false); }
+    if key.kind != KeyEventKind::Press
+    {
+      return Ok(false);
+    }
     let st = st_box.as_ref();
-    enum Act { None, DeleteAll }
+    enum Act
+    {
+      None,
+      DeleteAll,
+    }
     let mut act = Act::None;
     match key.code
     {
@@ -209,7 +242,10 @@ pub fn handle_key(
       KeyCode::Enter =>
       {
         // ENTER only confirms if default_yes
-        if st.default_yes { act = Act::DeleteAll; }
+        if st.default_yes
+        {
+          act = Act::DeleteAll;
+        }
       }
       KeyCode::Char('y') | KeyCode::Char('Y') =>
       {
@@ -220,14 +256,20 @@ pub fn handle_key(
         crate::trace::log("[confirm] key='n' -> cancel");
         act = Act::None;
       }
-      _ => {}
+      _ =>
+      {}
     }
     // Drop borrow before mutating app
     let kind = st.kind.clone();
     app.overlay = crate::app::Overlay::None;
     app.force_full_redraw = true;
-    if let (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) = (act, &kind) {
-      for p in list.iter() { app.perform_delete_path(p); }
+    if let (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) =
+      (act, &kind)
+    {
+      for p in list.iter()
+      {
+        app.perform_delete_path(p);
+      }
     }
     return Ok(false);
   }
@@ -272,10 +314,26 @@ pub fn handle_key(
       {
         tok.push('<');
         let mut _first = true;
-        if ctrl { tok.push_str("C-"); _first = false; }
-        if alt { tok.push_str("M-"); _first = false; }
-        if superm { tok.push_str("S-"); _first = false; }
-        if shift && !ch.is_ascii_alphabetic() { tok.push_str("Sh-"); _first = false; }
+        if ctrl
+        {
+          tok.push_str("C-");
+          _first = false;
+        }
+        if alt
+        {
+          tok.push_str("M-");
+          _first = false;
+        }
+        if superm
+        {
+          tok.push_str("S-");
+          _first = false;
+        }
+        if shift && !ch.is_ascii_alphabetic()
+        {
+          tok.push_str("Sh-");
+          _first = false;
+        }
         tok.push(ch);
         tok.push('>');
       }
@@ -330,7 +388,10 @@ pub fn handle_key(
       if let Some(action) = app.keys.lookup.get(esc_seq.as_str()).cloned()
       {
         let _ = crate::actions::dispatch_action(app, &action);
-        if app.should_quit { return Ok(true); }
+        if app.should_quit
+        {
+          return Ok(true);
+        }
       }
       // cancel pending sequences and which-key
       app.keys.pending.clear();

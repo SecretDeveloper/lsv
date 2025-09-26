@@ -91,7 +91,9 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
     {
       "delete" | "remove" | "rm" =>
       {
-        crate::trace::log("[effects] confirm request 'delete_selected' (mapped)");
+        crate::trace::log(
+          "[effects] confirm request 'delete_selected' (mapped)",
+        );
         fx.confirm = ConfirmCommand::DeleteSelected;
       }
       "delete_all" | "delete_selected" =>
@@ -99,7 +101,8 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
         crate::trace::log("[effects] confirm request 'delete_selected'");
         fx.confirm = ConfirmCommand::DeleteSelected;
       }
-      _ => {}
+      _ =>
+      {}
     }
   }
 
@@ -109,7 +112,8 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
     {
       "toggle" => fx.select = SelectCommand::ToggleCurrent,
       "clear" => fx.select = SelectCommand::ClearAll,
-      _ => {}
+      _ =>
+      {}
     }
   }
 

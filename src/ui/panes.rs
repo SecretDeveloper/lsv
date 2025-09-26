@@ -1,4 +1,4 @@
-  use crate::ui::ansi::ansi_spans;
+use crate::ui::ansi::ansi_spans;
 use ratatui::{
   layout::{
     Alignment,
@@ -27,9 +27,7 @@ use ratatui::{
     Wrap,
   },
 };
-use unicode_width::{
-  UnicodeWidthStr,
-};
+use unicode_width::UnicodeWidthStr;
 
 pub fn pane_constraints(app: &crate::App) -> [Constraint; 3]
 {
@@ -562,9 +560,11 @@ pub fn draw_prompt_panel(
   // Popup centered (configurable)
   let (width, height) = if let Some(m) = app.config.ui.modals.as_ref()
   {
-    let w = (area.width.saturating_mul(m.prompt.width_pct.clamp(10, 100)) / 100)
+    let w = (area.width.saturating_mul(m.prompt.width_pct.clamp(10, 100))
+      / 100)
       .max(30);
-    let h = (area.height.saturating_mul(m.prompt.height_pct.clamp(10, 100)) / 100)
+    let h = (area.height.saturating_mul(m.prompt.height_pct.clamp(10, 100))
+      / 100)
       .max(5);
     (w, h)
   }
@@ -594,18 +594,15 @@ pub fn draw_prompt_panel(
       block = block.border_style(Style::default().fg(bfg));
     }
   }
-  let title_style = Style::default()
-    .fg(Color::Yellow)
-    .add_modifier(Modifier::BOLD);
+  let title_style =
+    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
   block = block.title(Span::styled(state.title.clone(), title_style));
 
   let inner = block.inner(popup);
   f.render_widget(block, popup);
 
-  let lines: Vec<Line> = vec![
-    Line::from(""),
-    Line::from(Span::raw(state.input.clone())),
-  ];
+  let lines: Vec<Line> =
+    vec![Line::from(""), Line::from(Span::raw(state.input.clone()))];
   let para = Paragraph::new(lines).wrap(Wrap { trim: false });
   f.render_widget(para, inner);
 
@@ -619,7 +616,10 @@ pub fn draw_prompt_panel(
     state.input.as_str()
   };
   let mut xoff = UnicodeWidthStr::width(pre) as u16;
-  if xoff >= inner.width { xoff = inner.width.saturating_sub(1); }
+  if xoff >= inner.width
+  {
+    xoff = inner.width.saturating_sub(1);
+  }
   let cur_x = inner.x.saturating_add(xoff);
   let cur_y = inner.y.saturating_add(1); // second line (after blank)
   f.set_cursor_position((cur_x, cur_y));
@@ -638,9 +638,11 @@ pub fn draw_confirm_panel(
   };
   let (width, height) = if let Some(m) = app.config.ui.modals.as_ref()
   {
-    let w = (area.width.saturating_mul(m.confirm.width_pct.clamp(10, 100)) / 100)
+    let w = (area.width.saturating_mul(m.confirm.width_pct.clamp(10, 100))
+      / 100)
       .max(30);
-    let h = (area.height.saturating_mul(m.confirm.height_pct.clamp(10, 100)) / 100)
+    let h = (area.height.saturating_mul(m.confirm.height_pct.clamp(10, 100))
+      / 100)
       .max(5);
     (w, h)
   }
@@ -674,10 +676,8 @@ pub fn draw_confirm_panel(
   block = block.title(Span::styled(state.title.clone(), title_style));
   let inner = block.inner(popup);
   f.render_widget(block, popup);
-  let lines: Vec<Line> = vec![
-    Line::from(""),
-    Line::from(Span::raw(state.question.clone())),
-  ];
+  let lines: Vec<Line> =
+    vec![Line::from(""), Line::from(Span::raw(state.question.clone()))];
   let para = Paragraph::new(lines).wrap(Wrap { trim: true });
   f.render_widget(para, inner);
 }
@@ -704,11 +704,13 @@ pub fn draw_theme_picker_panel(
     .map(|e| UnicodeWidthStr::width(e.name.as_str()))
     .max()
     .unwrap_or(0);
-  let (popup_width, popup_height) = if let Some(m) = app.config.ui.modals.as_ref()
+  let (popup_width, popup_height) = if let Some(m) =
+    app.config.ui.modals.as_ref()
   {
     let w = (area.width.saturating_mul(m.theme.width_pct.clamp(10, 100)) / 100)
       .max(20);
-    let h = (area.height.saturating_mul(m.theme.height_pct.clamp(10, 100)) / 100)
+    let h = (area.height.saturating_mul(m.theme.height_pct.clamp(10, 100))
+      / 100)
       .max(5);
     (w, h)
   }
@@ -988,11 +990,15 @@ pub fn build_row_line(
   let mut bar_style = Style::default().fg(Color::Cyan);
   if let Some(th) = app.config.ui.theme.as_ref()
   {
-    if let Some(fg) = th.selection_bar_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    if let Some(fg) = th
+      .selection_bar_fg
+      .as_ref()
+      .and_then(|s| crate::ui::colors::parse_color(s))
     {
       bar_style = bar_style.fg(fg);
     }
-    else if let Some(fg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    else if let Some(fg) =
+      th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
       bar_style = bar_style.fg(fg);
     }
@@ -1011,31 +1017,37 @@ pub fn build_row_line(
     && cb.items.iter().any(|p| p == &e.path)
     && let Some(th) = app.config.ui.theme.as_ref()
   {
-      match cb.op
+    match cb.op
+    {
+      crate::app::ClipboardOp::Copy =>
       {
-        crate::app::ClipboardOp::Copy =>
+        if let Some(fg) = th
+          .selection_bar_copy_fg
+          .as_ref()
+          .and_then(|s| crate::ui::colors::parse_color(s))
         {
-          if let Some(fg) = th.selection_bar_copy_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
-          {
-            sel_style = Style::default().fg(fg);
-          }
-          else
-          {
-            sel_style = Style::default().fg(Color::Green);
-          }
+          sel_style = Style::default().fg(fg);
         }
-        crate::app::ClipboardOp::Move =>
+        else
         {
-          if let Some(fg) = th.selection_bar_move_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
-          {
-            sel_style = Style::default().fg(fg);
-          }
-          else
-          {
-            sel_style = Style::default().fg(Color::Yellow);
-          }
+          sel_style = Style::default().fg(Color::Green);
         }
       }
+      crate::app::ClipboardOp::Move =>
+      {
+        if let Some(fg) = th
+          .selection_bar_move_fg
+          .as_ref()
+          .and_then(|s| crate::ui::colors::parse_color(s))
+        {
+          sel_style = Style::default().fg(fg);
+        }
+        else
+        {
+          sel_style = Style::default().fg(Color::Yellow);
+        }
+      }
+    }
   }
 
   // Left/Right composition with truncation and right alignment
@@ -1103,7 +1115,6 @@ pub fn build_row_line(
   Line::from(spans)
 }
 
-
 fn compute_icon(
   _app: &crate::App,
   e: &crate::app::DirEntryInfo,
@@ -1113,18 +1124,33 @@ fn compute_icon(
   if e.is_dir { "📁".to_string() } else { "📄".to_string() }
 }
 
-fn truncate_with_tilde(s: &str, max_w: usize) -> String
+fn truncate_with_tilde(
+  s: &str,
+  max_w: usize,
+) -> String
 {
-  if max_w == 0 { return String::new(); }
+  if max_w == 0
+  {
+    return String::new();
+  }
   let w = UnicodeWidthStr::width(s);
-  if w <= max_w { return s.to_string(); }
-  if max_w == 1 { return "~".to_string(); }
+  if w <= max_w
+  {
+    return s.to_string();
+  }
+  if max_w == 1
+  {
+    return "~".to_string();
+  }
   let mut out = String::new();
   let mut used = 0usize;
   for ch in s.chars()
   {
     let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-    if used + cw + 1 > max_w { break; }
+    if used + cw + 1 > max_w
+    {
+      break;
+    }
     out.push(ch);
     used += cw;
   }

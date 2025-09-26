@@ -113,7 +113,12 @@ pub fn draw_preview_panel(
     }
     else
     {
-      app.preview.static_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+      app
+        .preview
+        .static_lines
+        .iter()
+        .map(|l| Line::from(ansi_spans(l)))
+        .collect()
     }
   }
   else if let Some(lines) = dynamic_lines.as_ref()

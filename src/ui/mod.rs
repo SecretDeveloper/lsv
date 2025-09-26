@@ -72,7 +72,8 @@ pub fn draw(
     {
       panes::draw_theme_picker_panel(f, f.area(), app);
     }
-    crate::app::Overlay::None => {}
+    crate::app::Overlay::None =>
+    {}
   }
 }
 
@@ -227,7 +228,8 @@ fn lookup_user_name(uid: u32) -> Option<String>
   {
     None
   }
-  // Fallback: try `id -nu <uid>` on Unix systems where /etc/passwd is not authoritative (e.g., macOS)
+  // Fallback: try `id -nu <uid>` on Unix systems where /etc/passwd is not
+  // authoritative (e.g., macOS)
   .or_else(|| {
     use std::process::Command;
     let out = Command::new("id").arg("-nu").arg(uid.to_string()).output();

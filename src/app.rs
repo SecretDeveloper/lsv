@@ -24,7 +24,7 @@ use crate::actions::SortKey;
 
 #[derive(Debug, Clone)]
 /// Runtime state for lsv, including directory listings, preview cache, overlay
-/// flags, and configuration. 
+/// flags, and configuration.
 pub struct DirEntryInfo
 {
   pub(crate) name:   String,
@@ -56,9 +56,16 @@ pub struct ThemePickerState
 pub enum Overlay
 {
   None,
-  WhichKey { prefix: String },
+  WhichKey
+  {
+    prefix: String,
+  },
   Messages,
-  Output { title: String, lines: Vec<String> },
+  Output
+  {
+    title: String,
+    lines: Vec<String>,
+  },
   ThemePicker(Box<ThemePickerState>),
   Prompt(Box<PromptState>),
   Confirm(Box<ConfirmState>),
@@ -92,7 +99,10 @@ fn tokenize_sequence(seq: &str) -> Vec<String>
     if chars[i] == '<'
     {
       let mut j = i + 1;
-      while j < chars.len() && chars[j] != '>' { j += 1; }
+      while j < chars.len() && chars[j] != '>'
+      {
+        j += 1;
+      }
       if j < chars.len() && chars[j] == '>'
       {
         let tok: String = chars[i..=j].iter().collect();
@@ -109,17 +119,25 @@ fn tokenize_sequence(seq: &str) -> Vec<String>
 
 pub struct LuaRuntime
 {
-  pub engine:   crate::config::LuaEngine,
+  pub engine:    crate::config::LuaEngine,
   pub previewer: Option<RegistryKey>,
-  pub actions:  Vec<RegistryKey>,
+  pub actions:   Vec<RegistryKey>,
 }
 
 #[derive(Debug, Clone)]
 pub enum PromptKind
 {
   AddEntry,
-  RenameEntry { from: std::path::PathBuf },
-  RenameMany { items: Vec<std::path::PathBuf>, pre: String, suf: String },
+  RenameEntry
+  {
+    from: std::path::PathBuf,
+  },
+  RenameMany
+  {
+    items: Vec<std::path::PathBuf>,
+    pre:   String,
+    suf:   String,
+  },
 }
 
 #[derive(Debug, Clone)]
@@ -290,7 +308,6 @@ impl App
       info_mode: InfoMode::None,
       display_mode: DisplayMode::Absolute,
       should_quit: false,
-      
     };
     // Discover configuration paths (entry not executed yet)
     if let Ok(paths) = crate::config::discover_config_paths()
@@ -304,7 +321,11 @@ impl App
           app.rebuild_keymap_lookup();
           if let Some((eng, key, action_keys)) = engine_opt
           {
-            app.lua = Some(LuaRuntime { engine: eng, previewer: Some(key), actions: action_keys });
+            app.lua = Some(LuaRuntime {
+              engine:    eng,
+              previewer: Some(key),
+              actions:   action_keys,
+            });
           }
           else
           {
@@ -360,7 +381,8 @@ impl App
     action_keys: Vec<mlua::RegistryKey>,
   )
   {
-    self.lua = Some(LuaRuntime { engine, previewer: None, actions: action_keys });
+    self.lua =
+      Some(LuaRuntime { engine, previewer: None, actions: action_keys });
   }
 
   pub(crate) fn selected_entry(&self) -> Option<&DirEntryInfo>
@@ -469,11 +491,12 @@ impl App
     }
     else
     {
-      self.preview.static_lines = crate::util::read_file_head(&path, preview_limit)
-        .map(|v| {
-          v.into_iter().map(|s| crate::util::sanitize_line(&s)).collect()
-        })
-        .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
+      self.preview.static_lines =
+        crate::util::read_file_head(&path, preview_limit)
+          .map(|v| {
+            v.into_iter().map(|s| crate::util::sanitize_line(&s)).collect()
+          })
+          .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
       // Invalidate dynamic preview cache when selection changes
       self.preview.cache_key = None;
       self.preview.cache_lines = None;
@@ -734,7 +757,7 @@ impl App
   {
     self.config = cfg;
   }
-  pub fn get_config( &mut self) -> crate::config::Config
+  pub fn get_config(&mut self) -> crate::config::Config
   {
     self.config.clone()
   }
@@ -773,7 +796,8 @@ impl App
 
   pub(crate) fn copy_selection(&mut self)
   {
-    let items: Vec<std::path::PathBuf> = self.selected.iter().cloned().collect();
+    let items: Vec<std::path::PathBuf> =
+      self.selected.iter().cloned().collect();
     if items.is_empty()
     {
       self.add_message("Copy: no items selected");
@@ -786,7 +810,8 @@ impl App
 
   pub(crate) fn move_selection(&mut self)
   {
-    let items: Vec<std::path::PathBuf> = self.selected.iter().cloned().collect();
+    let items: Vec<std::path::PathBuf> =
+      self.selected.iter().cloned().collect();
     if items.is_empty()
     {
       self.add_message("Move: no items selected");
@@ -806,7 +831,8 @@ impl App
 
   pub(crate) fn paste_clipboard(&mut self)
   {
-    let Some(cb) = self.clipboard.clone() else
+    let Some(cb) = self.clipboard.clone()
+    else
     {
       self.add_message("Paste: clipboard empty");
       return;
@@ -819,11 +845,17 @@ impl App
     {
       if matches!(cb.op, ClipboardOp::Move) && dest_dir.starts_with(src)
       {
-        self.add_message(&format!("Skip (move into subdir): {}", src.display()));
+        self
+          .add_message(&format!("Skip (move into subdir): {}", src.display()));
         skipped += 1;
         continue;
       }
-      let Some(name) = src.file_name() else { skipped += 1; continue; };
+      let Some(name) = src.file_name()
+      else
+      {
+        skipped += 1;
+        continue;
+      };
       let dest_path = dest_dir.join(name);
       if dest_path.exists()
       {
@@ -842,18 +874,29 @@ impl App
         Err(e) =>
         {
           errs += 1;
-          self.add_message(&format!("Error: {} -> {}: {}", src.display(), dest_path.display(), e));
+          self.add_message(&format!(
+            "Error: {} -> {}: {}",
+            src.display(),
+            dest_path.display(),
+            e
+          ));
         }
       }
     }
     if matches!(cb.op, ClipboardOp::Move)
     {
-      for p in cb.items.iter() { self.selected.remove(p); }
+      for p in cb.items.iter()
+      {
+        self.selected.remove(p);
+      }
     }
     self.clipboard = None;
     self.refresh_lists();
     self.refresh_preview();
-    self.add_message(&format!("Paste: ok={} skipped={} errors={}", ok, skipped, errs));
+    self.add_message(&format!(
+      "Paste: ok={} skipped={} errors={}",
+      ok, skipped, errs
+    ));
   }
 
   fn copy_path_recursive(
@@ -894,7 +937,14 @@ impl App
       {
         App::copy_path_recursive(src, dst)?;
         let meta = std::fs::metadata(src)?;
-        if meta.is_dir() { std::fs::remove_dir_all(src) } else { std::fs::remove_file(src) }
+        if meta.is_dir()
+        {
+          std::fs::remove_dir_all(src)
+        }
+        else
+        {
+          std::fs::remove_file(src)
+        }
       }
     }
   }
@@ -960,13 +1010,22 @@ impl App
         Ok(dir_entry) =>
         {
           let path = dir_entry.path();
-          if !path.is_file() { continue };
+          if !path.is_file()
+          {
+            continue;
+          };
 
           if let Some(ext) = path.extension().and_then(|s| s.to_str())
           {
-            if !ext.eq_ignore_ascii_case("lua") { continue; }
+            if !ext.eq_ignore_ascii_case("lua")
+            {
+              continue;
+            }
           }
-          else { continue; }
+          else
+          {
+            continue;
+          }
 
           match crate::config::load_theme_from_file(&path)
           {
@@ -981,7 +1040,8 @@ impl App
             }
             Err(e) =>
             {
-              self.add_message(&format!( "Theme picker: failed to load {} ({})",
+              self.add_message(&format!(
+                "Theme picker: failed to load {} ({})",
                 path.display(),
                 e
               ));
@@ -1056,10 +1116,13 @@ impl App
     // If there are selected items, prefer multi-rename
     if !self.selected.is_empty()
     {
-      let items: Vec<std::path::PathBuf> = self.selected.iter().cloned().collect();
+      let items: Vec<std::path::PathBuf> =
+        self.selected.iter().cloned().collect();
       let names: Vec<String> = items
         .iter()
-        .filter_map(|p| p.file_name().and_then(|s| s.to_str()).map(|s| s.to_string()))
+        .filter_map(|p| {
+          p.file_name().and_then(|s| s.to_str()).map(|s| s.to_string())
+        })
         .collect();
       if names.is_empty()
       {
@@ -1078,9 +1141,9 @@ impl App
       };
       self.overlay = Overlay::Prompt(Box::new(PromptState {
         title,
-        input:  template.clone(),
+        input: template.clone(),
         cursor: template.len(),
-        kind:   PromptKind::RenameMany { items, pre, suf },
+        kind: PromptKind::RenameMany { items, pre, suf },
       }));
       self.force_full_redraw = true;
       return;
@@ -1129,20 +1192,26 @@ impl App
         format!("Delete {} selected items? (y/n)", items.len())
       };
       self.overlay = Overlay::Confirm(Box::new(ConfirmState {
-        title:       "Confirm Delete".to_string(),
+        title: "Confirm Delete".to_string(),
         question,
         default_yes: false,
-        kind:        ConfirmKind::DeleteSelected(items),
+        kind: ConfirmKind::DeleteSelected(items),
       }));
       self.force_full_redraw = true;
     }
     else
     {
-      for p in self.selected.clone().into_iter() { self.perform_delete_path(&p); }
+      for p in self.selected.clone().into_iter()
+      {
+        self.perform_delete_path(&p);
+      }
     }
   }
 
-  pub(crate) fn perform_delete_path(&mut self, path: &std::path::Path)
+  pub(crate) fn perform_delete_path(
+    &mut self,
+    path: &std::path::Path,
+  )
   {
     crate::trace::log(format!("[delete] perform path='{}'", path.display()));
     let res = if path.is_dir()
@@ -1155,13 +1224,15 @@ impl App
     };
     match res
     {
-      Ok(_) => {
+      Ok(_) =>
+      {
         crate::trace::log("[delete] success");
         self.add_message("Deleted");
         // Remove from selection if present
         self.selected.remove(path);
       }
-      Err(e) => {
+      Err(e) =>
+      {
         crate::trace::log(format!("[delete] error: {}", e));
         self.add_message(&format!("Delete error: {}", e));
       }
@@ -1212,7 +1283,8 @@ impl App
 
   pub(crate) fn cancel_theme_picker(&mut self)
   {
-    if let Overlay::ThemePicker(state) = std::mem::replace(&mut self.overlay, Overlay::None)
+    if let Overlay::ThemePicker(state) =
+      std::mem::replace(&mut self.overlay, Overlay::None)
     {
       let st = *state;
       self.config.ui.theme = st.original_theme;
@@ -1237,28 +1309,50 @@ impl App
     self.overlay = Overlay::Output { title: title.to_string(), lines };
     self.force_full_redraw = true;
   }
-
 }
 
 fn common_affixes(names: &[String]) -> (String, String)
 {
-  if names.is_empty() { return (String::new(), String::new()); }
+  if names.is_empty()
+  {
+    return (String::new(), String::new());
+  }
 
-  fn common_prefix(a: &str, b: &str) -> String
+  fn common_prefix(
+    a: &str,
+    b: &str,
+  ) -> String
   {
     let mut out = String::new();
     for (ca, cb) in a.chars().zip(b.chars())
     {
-      if ca == cb { out.push(ca); } else { break; }
+      if ca == cb
+      {
+        out.push(ca);
+      }
+      else
+      {
+        break;
+      }
     }
     out
   }
-  fn common_suffix(a: &str, b: &str) -> String
+  fn common_suffix(
+    a: &str,
+    b: &str,
+  ) -> String
   {
     let mut rev: Vec<char> = Vec::new();
     for (ca, cb) in a.chars().rev().zip(b.chars().rev())
     {
-      if ca == cb { rev.push(ca); } else { break; }
+      if ca == cb
+      {
+        rev.push(ca);
+      }
+      else
+      {
+        break;
+      }
     }
     rev.into_iter().rev().collect()
   }
@@ -1267,13 +1361,17 @@ fn common_affixes(names: &[String]) -> (String, String)
   for n in names.iter().skip(1)
   {
     pre = common_prefix(&pre, n);
-    if pre.is_empty() { break; }
+    if pre.is_empty()
+    {
+      break;
+    }
   }
   let mut suf = names[0].clone();
   for n in names.iter().skip(1)
   {
     suf = common_suffix(&suf, n);
-    if suf.is_empty() { /* keep going to ensure empty is final */ }
+    if suf.is_empty()
+    { /* keep going to ensure empty is final */ }
   }
   (pre, suf)
 }

@@ -100,12 +100,12 @@ pub fn call_lua_action(
   // Fallback: read from original cfg table if helper mutated it
   if fx.output.is_none()
     && let Ok(text) = cfg_tbl_copy.get::<String>("output_text")
-    {
-      let title = cfg_tbl_copy
-        .get::<String>("output_title")
-        .unwrap_or_else(|_| String::from("Output"));
-      fx.output = Some((title, text));
-    }
+  {
+    let title = cfg_tbl_copy
+      .get::<String>("output_title")
+      .unwrap_or_else(|_| String::from("Output"));
+    fx.output = Some((title, text));
+  }
 
   // Optionally parse a full Config overlay (ui changes, etc.)
   let overlay = crate::config_data::from_lua_config_table(candidate_tbl).ok();
@@ -342,7 +342,8 @@ fn build_lsv_helpers(
       Ok(true)
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl.set("copy_selection", copy_selection_fn)
+  tbl
+    .set("copy_selection", copy_selection_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   let cfg_ref_mv = cfg_tbl.clone();
@@ -352,7 +353,8 @@ fn build_lsv_helpers(
       Ok(true)
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl.set("move_selection", move_selection_fn)
+  tbl
+    .set("move_selection", move_selection_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   let cfg_ref_ps = cfg_tbl.clone();
@@ -362,7 +364,8 @@ fn build_lsv_helpers(
       Ok(true)
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl.set("paste_clipboard", paste_clipboard_fn)
+  tbl
+    .set("paste_clipboard", paste_clipboard_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   let cfg_ref_cc = cfg_tbl.clone();
@@ -372,7 +375,8 @@ fn build_lsv_helpers(
       Ok(true)
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl.set("clear_clipboard", clear_clipboard_fn)
+  tbl
+    .set("clear_clipboard", clear_clipboard_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   // Note: we only add unknown-function guard on config-time lsv to avoid
