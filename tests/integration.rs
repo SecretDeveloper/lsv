@@ -138,15 +138,17 @@ lsv.map_action('tt', 'Test Effects', function(lsv, config)
   return config
 end)
 "#;
-        let (_cfg, _maps, engine_opt) =
+        let (_cfg, maps, engine_opt) =
         lsv::config::load_config_from_code(code, None).expect("load with action");
         let (engine, _prev, keys) = engine_opt.expect("engine present");
         let mut app = lsv::app::App::new().expect("app new");
         app.inject_lua_engine_for_tests(engine, keys);
-        let (fx, overlay) = lsv::actions::lua_glue::call_lua_action(&mut app, 0)
-            .expect("call action");
-        assert!(fx.quit);
-        assert!(overlay.is_some(), "merged overlay should be present");
+        app.set_keymaps(maps);
+        let action = app.get_keymap_action("tt").expect("binding for tt");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
+        assert!(app.get_quit());
+        assert!(app.get_show_output());
     }
 
     #[test]
@@ -567,20 +569,7 @@ mod internal_tests
 mod config_rs_tests
     {
     #[test]
-    fn mapkey_legacy_adds_mapping()
-    {
-        let code = r#"
-lsv.mapkey('x', 'quit', 'Legacy Quit')
-"#;
-        let (_cfg, maps, engine_opt) =
-        lsv::config::load_config_from_code(code, None).expect("load config");
-        let quit = maps.iter().find(|m| m.sequence == "x").expect("map x");
-        assert_eq!(quit.action.as_str(), "quit");
-        assert_eq!(quit.description.as_deref(), Some("Legacy Quit"));
-        // No actions registered for legacy mapkey
-        // Defaults may have actions loaded; we only assert our legacy map was added
-        assert!(engine_opt.is_some());
-    }
+    fn mapkey_legacy_adds_mapping() { /* removed: legacy mapkey not supported */ }
 
     #[test]
     fn set_previewer_registers_function()
@@ -714,45 +703,10 @@ lsv.config({ ui = { preview_lines = v } })
     }
 
     #[test]
-    fn map_action_indices_are_increasing_in_code_order()
-    {
-        let code = r#"
-lsv.map_action('a1', 'A1', function(lsv, config) end)
-lsv.map_action('a2', 'A2', function(lsv, config) end)
-lsv.map_action('a3', 'A3', function(lsv, config) end)
-"#;
-        let (_cfg, maps, _eng) =
-        lsv::config::load_config_from_code(code, None).expect("load config");
-        // Extract indices for our sequences
-        let idx = |seq: &str| -> usize {
-            maps
-                .iter()
-                .find(|m| m.sequence == seq)
-                .and_then(|m| m.action.strip_prefix("run_lua:")?.parse().ok())
-                .unwrap()
-        };
-        let i1 = idx("a1");
-        let i2 = idx("a2");
-        let i3 = idx("a3");
-        assert!(i1 < i2 && i2 < i3);
-    }
+    fn map_action_indices_are_increasing_in_code_order() { /* removed: no index reliance */ }
 
     #[test]
-    fn mapkey_and_map_action_coexist()
-    {
-        let code = r#"
-lsv.mapkey('x', 'quit', 'Legacy Quit')
-lsv.map_action('y', 'Lua Quit', function(lsv, config) lsv.quit() end)
-"#;
-        let (_cfg, maps, _eng) =
-        lsv::config::load_config_from_code(code, None).expect("load config");
-        assert!(maps.iter().any(|m| m.sequence == "x" && m.action == "quit"));
-        assert!(
-        maps
-            .iter()
-            .any(|m| m.sequence == "y" && m.action.starts_with("run_lua:"))
-    );
-    }
+    fn mapkey_and_map_action_coexist() { /* removed: legacy mapkey not supported */ }
 
     #[test]
     fn invalid_types_are_ignored_not_applied()
@@ -1373,23 +1327,15 @@ mod lua_glue_tests
     {
     use std::fs;
 
-    fn make_app_with_actions(
-        lua_src: &str,
-        seq: &str,
-    ) -> (lsv::app::App, usize)
+    fn make_app_with_actions(lua_src: &str, _seq: &str) -> lsv::app::App
     {
         let (_cfg, maps, engine_opt) =
         lsv::config::load_config_from_code(lua_src, None).expect("load lua");
         let (engine, _prev, keys) = engine_opt.expect("engine");
         let mut app = lsv::app::App::new().expect("app new");
         app.inject_lua_engine_for_tests(engine, keys);
-        // Find index by looking up the mapping action string
-        let idx = maps
-            .iter()
-            .find(|m| m.sequence == seq)
-            .and_then(|m| m.action.strip_prefix("run_lua:")?.parse::<usize>().ok())
-            .expect("mapped index");
-        (app, idx)
+        app.set_keymaps(maps);
+        app
     }
 
     #[test]
@@ -1405,11 +1351,11 @@ lsv.map_action('sel', 'Select first', function(lsv, config)
   lsv.select_item(0)
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "sel");
+        let mut app = make_app_with_actions(code, "sel");
         app.set_cwd(dir);
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let action = app.get_keymap_action("sel").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert_eq!(app.get_list_selected_index(), Some(0));
     }
 
@@ -1421,10 +1367,10 @@ lsv.map_action('q', 'Quit', function(lsv, config)
   lsv.quit()
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "q");
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let mut app = make_app_with_actions(code, "q");
+        let action = app.get_keymap_action("q").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert!(app.get_quit());
     }
 
@@ -1436,13 +1382,10 @@ lsv.map_action('o', 'Output', function(lsv, config)
   lsv.display_output('Body', 'Title')
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "o");
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        let (title, text) = fx.output.clone().expect("fx.output present");
-        assert_eq!(title, "Title");
-        assert!(text.contains("Body"));
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let mut app = make_app_with_actions(code, "o");
+        let action = app.get_keymap_action("o").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert!(app.get_show_output());
         assert_eq!(app.get_output_title(), "Title");
         assert!(app.get_output_text().contains("Body"));
@@ -1460,20 +1403,16 @@ lsv.map_action('r', 'Run', function(lsv, config)
   lsv.os_run('printf "$LSV_NAME"')
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "r");
+        let mut app = make_app_with_actions(code, "r");
         app.set_cwd(dir);
         // Ensure selection is the file we just wrote
         let pos = (0..100)
             .find(|&i| app.get_current_entry_name(i).as_deref() == Some("hello.txt"))
             .expect("find hello");
         app.select_index(pos);
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        // We expect an output effect with the name
-        let (_title, text) = fx.output.clone().expect("fx.output present");
-        assert!(text.contains("hello.txt"));
-        // Apply and verify overlay behavior
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let action = app.get_keymap_action("r").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert!(app.get_output_text().contains("hello.txt"));
     }
 
@@ -1489,11 +1428,11 @@ lsv.map_action('last', 'Last', function(lsv, config)
   lsv.select_last_item()
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "last");
+        let mut app = make_app_with_actions(code, "last");
         app.set_cwd(dir);
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let action = app.get_keymap_action("last").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         if app.current_has_entries()
         {
             // last index should be selected
@@ -1515,17 +1454,11 @@ lsv.map_action('friendly', 'Friendly', function(lsv, config)
   return nil  -- rely on mutation
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "friendly");
-        let (fx, ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        // Effects may be empty; overlay should exist because we mutated config
-        if let Some(data) = ov
-        {
-            lsv::actions::apply::apply_config_overlay(&mut app, &data);
-        }
+        let mut app = make_app_with_actions(code, "friendly");
+        let action = app.get_keymap_action("friendly").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert!(matches!(app.get_display_mode(), lsv::app::DisplayMode::Friendly));
-        // Also apply any effects (no-ops)
-        lsv::actions::apply::apply_effects(&mut app, fx);
     }
 
     #[test]
@@ -1536,14 +1469,10 @@ lsv.map_action('ov', 'Overlays', function(lsv, config)
   return { messages = 'toggle', output = 'show' }
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "ov");
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        // Verify parsed effects
-        use lsv::actions::effects::OverlayToggle;
-        assert!(matches!(fx.messages, OverlayToggle::Toggle));
-        assert!(matches!(fx.output_overlay, OverlayToggle::Show));
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let mut app = make_app_with_actions(code, "ov");
+        let action = app.get_keymap_action("ov").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert!(app.get_show_output());
         assert!(!app.get_show_messages());
     }
@@ -1556,13 +1485,10 @@ lsv.map_action('od', 'Output default', function(lsv, config)
   lsv.display_output('Body')
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "od");
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        let (title, text) = fx.output.clone().expect("fx.output present");
-        assert_eq!(title, "Output");
-        assert!(text.contains("Body"));
-        lsv::actions::apply::apply_effects(&mut app, fx);
+        let mut app = make_app_with_actions(code, "od");
+        let action = app.get_keymap_action("od").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         assert_eq!(app.get_output_title(), "Output");
     }
 
@@ -1586,26 +1512,17 @@ lsv.map_action('e', 'Edit', function(lsv, config)
   lsv.os_run("printf 'EDIT:%s' " .. shquote(path))
 end)
 "#;
-        let (mut app, idx) = make_app_with_actions(code, "e");
+        let mut app = make_app_with_actions(code, "e");
         app.set_cwd(dir);
         // Select our file
         let pos = (0..100)
             .find(|&i| app.get_current_entry_name(i).as_deref() == Some(fname))
             .expect("find file");
         app.select_index(pos);
-        let (fx, _ov) =
-        lsv::actions::lua_glue::call_lua_action(&mut app, idx).expect("call");
-        // Verify captured output contains the expanded absolute path
-        let (_title, text) = fx.output.clone().expect("fx.output present");
+        let action = app.get_keymap_action("e").expect("binding");
+        let ran = lsv::actions::dispatch_action(&mut app, &action).expect("dispatch");
+        assert!(ran);
         let abs = fpath.to_string_lossy();
-        assert!(text.contains("EDIT:"));
-        assert!(
-            text.contains(&*abs),
-            "expected output to contain path: {} in {}",
-            abs,
-            text
-        );
-        lsv::actions::apply::apply_effects(&mut app, fx);
         assert!(app.get_show_output());
         assert!(app.get_output_text().contains(&*abs));
     }

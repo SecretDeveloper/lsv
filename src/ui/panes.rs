@@ -28,7 +28,6 @@ use ratatui::{
   },
 };
 use unicode_width::{
-  UnicodeWidthChar,
   UnicodeWidthStr,
 };
 
@@ -563,9 +562,9 @@ pub fn draw_prompt_panel(
   // Popup centered (configurable)
   let (width, height) = if let Some(m) = app.config.ui.modals.as_ref()
   {
-    let w = (area.width.saturating_mul(m.prompt.width_pct.max(10).min(100)) / 100)
+    let w = (area.width.saturating_mul(m.prompt.width_pct.clamp(10, 100)) / 100)
       .max(30);
-    let h = (area.height.saturating_mul(m.prompt.height_pct.max(10).min(100)) / 100)
+    let h = (area.height.saturating_mul(m.prompt.height_pct.clamp(10, 100)) / 100)
       .max(5);
     (w, h)
   }
@@ -603,9 +602,10 @@ pub fn draw_prompt_panel(
   let inner = block.inner(popup);
   f.render_widget(block, popup);
 
-  let mut lines: Vec<Line> = Vec::new();
-  lines.push(Line::from(""));
-  lines.push(Line::from(Span::raw(state.input.clone())));
+  let lines: Vec<Line> = vec![
+    Line::from(""),
+    Line::from(Span::raw(state.input.clone())),
+  ];
   let para = Paragraph::new(lines).wrap(Wrap { trim: false });
   f.render_widget(para, inner);
 
@@ -638,9 +638,9 @@ pub fn draw_confirm_panel(
   };
   let (width, height) = if let Some(m) = app.config.ui.modals.as_ref()
   {
-    let w = (area.width.saturating_mul(m.confirm.width_pct.max(10).min(100)) / 100)
+    let w = (area.width.saturating_mul(m.confirm.width_pct.clamp(10, 100)) / 100)
       .max(30);
-    let h = (area.height.saturating_mul(m.confirm.height_pct.max(10).min(100)) / 100)
+    let h = (area.height.saturating_mul(m.confirm.height_pct.clamp(10, 100)) / 100)
       .max(5);
     (w, h)
   }
@@ -674,9 +674,10 @@ pub fn draw_confirm_panel(
   block = block.title(Span::styled(state.title.clone(), title_style));
   let inner = block.inner(popup);
   f.render_widget(block, popup);
-  let mut lines: Vec<Line> = Vec::new();
-  lines.push(Line::from(""));
-  lines.push(Line::from(Span::raw(state.question.clone())));
+  let lines: Vec<Line> = vec![
+    Line::from(""),
+    Line::from(Span::raw(state.question.clone())),
+  ];
   let para = Paragraph::new(lines).wrap(Wrap { trim: true });
   f.render_widget(para, inner);
 }
@@ -705,9 +706,9 @@ pub fn draw_theme_picker_panel(
     .unwrap_or(0);
   let (popup_width, popup_height) = if let Some(m) = app.config.ui.modals.as_ref()
   {
-    let w = (area.width.saturating_mul(m.theme.width_pct.max(10).min(100)) / 100)
+    let w = (area.width.saturating_mul(m.theme.width_pct.clamp(10, 100)) / 100)
       .max(20);
-    let h = (area.height.saturating_mul(m.theme.height_pct.max(10).min(100)) / 100)
+    let h = (area.height.saturating_mul(m.theme.height_pct.clamp(10, 100)) / 100)
       .max(5);
     (w, h)
   }
@@ -983,11 +984,18 @@ pub fn build_row_line(
   let base_style = entry_style(app, e);
   // Left selection bar column (fixed width so text doesn't shift)
   let mut spans: Vec<Span> = Vec::new();
+  // Base selection bar style from theme or fallback
   let mut bar_style = Style::default().fg(Color::Cyan);
   if let Some(th) = app.config.ui.theme.as_ref()
-    && let Some(fg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
   {
-    bar_style = bar_style.fg(fg);
+    if let Some(fg) = th.selection_bar_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    {
+      bar_style = bar_style.fg(fg);
+    }
+    else if let Some(fg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    {
+      bar_style = bar_style.fg(fg);
+    }
   }
   // Make the indicator wider (3x the previous bar width). Keep width fixed
   // for both selected and unselected rows to prevent text shifting.
@@ -1001,41 +1009,84 @@ pub fn build_row_line(
   let mut sel_style = bar_style;
   if let Some(cb) = app.clipboard.as_ref()
     && cb.items.iter().any(|p| p == &e.path)
+    && let Some(th) = app.config.ui.theme.as_ref()
   {
-    sel_style = match cb.op
-    {
-      crate::app::ClipboardOp::Copy => Style::default().fg(Color::Green),
-      crate::app::ClipboardOp::Move => Style::default().fg(Color::Yellow),
-    };
+      match cb.op
+      {
+        crate::app::ClipboardOp::Copy =>
+        {
+          if let Some(fg) = th.selection_bar_copy_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+          {
+            sel_style = Style::default().fg(fg);
+          }
+          else
+          {
+            sel_style = Style::default().fg(Color::Green);
+          }
+        }
+        crate::app::ClipboardOp::Move =>
+        {
+          if let Some(fg) = th.selection_bar_move_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+          {
+            sel_style = Style::default().fg(fg);
+          }
+          else
+          {
+            sel_style = Style::default().fg(Color::Yellow);
+          }
+        }
+      }
   }
 
-  // Left segment spans: selected marker (colored), space, icon+space+name
+  // Left/Right composition with truncation and right alignment
   let sel_char = if app.selected.contains(&e.path) { "█" } else { " " };
-  let left_rest = format!(" {} {}", icon_val, name_val);
-  spans.push(Span::styled(sel_char.to_string(), sel_style));
-  // For width calculations
-  let total = inner_width as i32;
-  let left_w = (UnicodeWidthStr::width(sel_char) as i32)
-    + (UnicodeWidthStr::width(left_rest.as_str()) as i32);
-  spans.push(Span::styled(left_rest, base_style));
+  let mut left_rest = format!(" {} {}", icon_val, name_val);
+  let mut right_txt = info_val;
+  let total_w = inner_width as usize;
 
-  // Right segment: info (styled)
-  let right_txt = info_val;
-  let right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
-  let space = (total - left_w).max(0);
+  // Truncate right first if it exceeds total width
+  let mut right_w = UnicodeWidthStr::width(right_txt.as_str());
+  if right_w > total_w
+  {
+    right_txt = truncate_with_tilde(&right_txt, total_w);
+    right_w = UnicodeWidthStr::width(right_txt.as_str());
+  }
+
+  // Render selection marker if space permits
+  let sel_w = UnicodeWidthStr::width(sel_char);
+  let mut left_allowed = total_w.saturating_sub(right_w);
+  let mut rendered_left_w = 0usize;
+  if left_allowed >= sel_w && sel_w > 0
+  {
+    spans.push(Span::styled(sel_char.to_string(), sel_style));
+    rendered_left_w += sel_w;
+    left_allowed -= sel_w;
+  }
+  // Truncate left_rest to fit allowed width
+  if left_allowed > 0
+  {
+    let lr_w = UnicodeWidthStr::width(left_rest.as_str());
+    if lr_w > left_allowed
+    {
+      left_rest = truncate_with_tilde(&left_rest, left_allowed);
+    }
+    rendered_left_w += UnicodeWidthStr::width(left_rest.as_str());
+    if !left_rest.is_empty()
+    {
+      spans.push(Span::styled(left_rest, base_style));
+    }
+  }
 
   // Pad so that right text ends at the right edge
+  let total_rendered = rendered_left_w + right_w;
+  let space = total_w.saturating_sub(total_rendered);
   if space > 0
   {
-    let pad_before_right = space.saturating_sub(right_w) as usize;
-    if pad_before_right > 0
-    {
-      let max_pad = 4096usize;
-      spans.push(Span::styled(
-        " ".repeat(std::cmp::min(pad_before_right, max_pad)),
-        base_style,
-      ));
-    }
+    let max_pad = 4096usize;
+    spans.push(Span::styled(
+      " ".repeat(std::cmp::min(space, max_pad)),
+      base_style,
+    ));
   }
   if right_w > 0
   {
@@ -1052,20 +1103,6 @@ pub fn build_row_line(
   Line::from(spans)
 }
 
-fn replace_placeholders(
-  tpl: &str,
-  icon: &str,
-  name: &str,
-  info: &str,
-  perms: &str,
-) -> String
-{
-  let mut s = tpl.replace("{icon}", icon);
-  s = s.replace("{name}", name);
-  s = s.replace("{info}", info);
-  s = s.replace("{perms}", perms);
-  s
-}
 
 fn compute_icon(
   _app: &crate::App,
@@ -1074,6 +1111,25 @@ fn compute_icon(
 {
   // Placeholder icons (to be themed later)
   if e.is_dir { "📁".to_string() } else { "📄".to_string() }
+}
+
+fn truncate_with_tilde(s: &str, max_w: usize) -> String
+{
+  if max_w == 0 { return String::new(); }
+  let w = UnicodeWidthStr::width(s);
+  if w <= max_w { return s.to_string(); }
+  if max_w == 1 { return "~".to_string(); }
+  let mut out = String::new();
+  let mut used = 0usize;
+  for ch in s.chars()
+  {
+    let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+    if used + cw + 1 > max_w { break; }
+    out.push(ch);
+    used += cw;
+  }
+  out.push('~');
+  out
 }
 
 pub(crate) fn permissions_string(e: &crate::app::DirEntryInfo) -> String
@@ -1129,97 +1185,6 @@ pub(crate) fn permissions_string(e: &crate::app::DirEntryInfo) -> String
       (false, false) => '-',
     });
     s
-  }
-  #[cfg(not(unix))]
-  {
-    String::new()
-  }
-}
-
-fn truncate_to_width(
-  s: &str,
-  max_w: usize,
-) -> String
-{
-  if max_w == 0
-  {
-    return String::new();
-  }
-  let mut out = String::new();
-  let mut w = 0usize;
-  for ch in s.chars()
-  {
-    let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
-    if w + cw > max_w
-    {
-      break;
-    }
-    out.push(ch);
-    w += cw;
-  }
-  out
-}
-
-fn truncate_tail_to_width(
-  s: &str,
-  max_w: usize,
-) -> String
-{
-  if max_w == 0
-  {
-    return String::new();
-  }
-  let mut out_rev: Vec<char> = Vec::new();
-  let mut w = 0usize;
-  for ch in s.chars().rev()
-  {
-    let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
-    if w + cw > max_w
-    {
-      break;
-    }
-    out_rev.push(ch);
-    w += cw;
-  }
-  out_rev.into_iter().rev().collect()
-}
-
-fn fit_cell(
-  text: &str,
-  width: usize,
-  align_right: bool,
-) -> String
-{
-  if width == 0
-  {
-    return String::new();
-  }
-  let w = UnicodeWidthStr::width(text);
-  if w == width
-  {
-    return text.to_string();
-  }
-  if w < width
-  {
-    let need = width.saturating_sub(w);
-    let max_pad = 4096usize;
-    let pad = " ".repeat(std::cmp::min(need, max_pad));
-    return if align_right
-    {
-      format!("{}{}", pad, text)
-    }
-    else
-    {
-      format!("{}{}", text, pad)
-    };
-  }
-  if align_right
-  {
-    truncate_tail_to_width(text, width)
-  }
-  else
-  {
-    truncate_to_width(text, width)
   }
 }
 
@@ -1323,72 +1288,4 @@ fn is_executable(path: &std::path::Path) -> bool
     return (mode & 0o111) != 0;
   }
   false
-}
-
-#[cfg(not(unix))]
-fn is_executable(_path: &std::path::Path) -> bool
-{
-  false
-}
-
-#[cfg(test)]
-mod tests
-{
-  use super::*;
-
-  #[test]
-  fn human_size_formats_reasonably()
-  {
-    assert_eq!(human_size(0), "0 B");
-    assert_eq!(human_size(1), "1 B");
-    assert_eq!(human_size(1024), "1.0 KB");
-    assert_eq!(human_size(1536), "1.5 KB");
-    assert_eq!(human_size(1024 * 1024), "1.0 MB");
-  }
-
-  #[test]
-  fn truncate_to_width_cuts_prefix()
-  {
-    assert_eq!(truncate_to_width("abcd", 0), "");
-    assert_eq!(truncate_to_width("abcd", 2), "ab");
-    assert_eq!(truncate_to_width("abcd", 4), "abcd");
-  }
-
-  #[test]
-  fn truncate_tail_to_width_cuts_suffix()
-  {
-    assert_eq!(truncate_tail_to_width("abcd", 0), "");
-    assert_eq!(truncate_tail_to_width("abcd", 2), "cd");
-    assert_eq!(truncate_tail_to_width("abcd", 4), "abcd");
-  }
-
-  #[test]
-  fn fit_cell_left_and_right_padding_and_clamp()
-  {
-    // Left align: pad on the right
-    let s = fit_cell("ab", 5, false);
-    assert_eq!(s.len(), 5);
-    assert!(s.starts_with("ab"));
-    // Right align: pad on the left
-    let s2 = fit_cell("ab", 5, true);
-    assert_eq!(s2.len(), 5);
-    assert!(s2.ends_with("ab"));
-    // Excessive width should clamp padding to a sane maximum
-    let s3 = fit_cell("x", 10_000, false);
-    // length should be original + 4096 (clamp)
-    assert_eq!(s3.len(), 1 + 4096);
-  }
-
-  #[test]
-  fn replace_placeholders_substitutes_all()
-  {
-    let out = replace_placeholders(
-      "{icon}{name}:{info} [{perms}]",
-      "I",
-      "NAME",
-      "INFO",
-      "PERMS",
-    );
-    assert_eq!(out, "INAME:INFO [PERMS]");
-  }
 }

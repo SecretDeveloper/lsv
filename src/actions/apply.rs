@@ -91,7 +91,7 @@ pub fn apply_effects(
   {
     crate::actions::effects::ConfirmCommand::DeleteSelected =>
     {
-      crate::trace::log("[apply] confirm=delete_selected -> request_delete_selected(all)".to_string());
+      crate::trace::log("[apply] confirm=delete_selected -> request_delete_selected(all)");
       app.request_delete_selected();
     }
     crate::actions::effects::ConfirmCommand::None => {}
@@ -263,6 +263,9 @@ pub fn apply_config_overlay(
       hidden_bg:        th.hidden_bg.clone(),
       exec_fg:          th.exec_fg.clone(),
       exec_bg:          th.exec_bg.clone(),
+      selection_bar_fg:      th.selection_bar_fg.clone(),
+      selection_bar_copy_fg: th.selection_bar_copy_fg.clone(),
+      selection_bar_move_fg: th.selection_bar_move_fg.clone(),
     };
     Some(t)
   }

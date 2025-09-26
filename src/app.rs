@@ -119,6 +119,7 @@ pub enum PromptKind
 {
   AddEntry,
   RenameEntry { from: std::path::PathBuf },
+  RenameMany { items: Vec<std::path::PathBuf>, pre: String, suf: String },
 }
 
 #[derive(Debug, Clone)]
@@ -147,7 +148,6 @@ pub struct Clipboard
 #[derive(Debug, Clone)]
 pub enum ConfirmKind
 {
-  DeleteEntry(std::path::PathBuf),
   DeleteSelected(Vec<std::path::PathBuf>),
 }
 
@@ -368,7 +368,6 @@ impl App
     self.list_state.selected().and_then(|i| self.current_entries.get(i))
   }
 
-  #[doc(hidden)]
   pub fn get_current_entry_name(
     &self,
     idx: usize,
@@ -376,7 +375,7 @@ impl App
   {
     self.current_entries.get(idx).map(|e| e.name.clone())
   }
-  #[doc(hidden)]
+
   pub fn select_index(
     &mut self,
     idx: usize,
@@ -834,7 +833,7 @@ impl App
       }
       let res = match cb.op
       {
-        ClipboardOp::Copy => self.copy_path_recursive(src, &dest_path),
+        ClipboardOp::Copy => App::copy_path_recursive(src, &dest_path),
         ClipboardOp::Move => self.move_path_with_fallback(src, &dest_path),
       };
       match res
@@ -858,7 +857,6 @@ impl App
   }
 
   fn copy_path_recursive(
-    &self,
     src: &std::path::Path,
     dst: &std::path::Path,
   ) -> std::io::Result<()>
@@ -873,7 +871,7 @@ impl App
         let p = de.path();
         let name = de.file_name();
         let target = dst.join(name);
-        self.copy_path_recursive(&p, &target)?;
+        App::copy_path_recursive(&p, &target)?;
       }
       Ok(())
     }
@@ -894,7 +892,7 @@ impl App
       Ok(()) => Ok(()),
       Err(_e) =>
       {
-        self.copy_path_recursive(src, dst)?;
+        App::copy_path_recursive(src, dst)?;
         let meta = std::fs::metadata(src)?;
         if meta.is_dir() { std::fs::remove_dir_all(src) } else { std::fs::remove_file(src) }
       }
@@ -1055,6 +1053,40 @@ impl App
 
   pub(crate) fn open_rename_entry_prompt(&mut self)
   {
+    // If there are selected items, prefer multi-rename
+    if !self.selected.is_empty()
+    {
+      let items: Vec<std::path::PathBuf> = self.selected.iter().cloned().collect();
+      let names: Vec<String> = items
+        .iter()
+        .filter_map(|p| p.file_name().and_then(|s| s.to_str()).map(|s| s.to_string()))
+        .collect();
+      if names.is_empty()
+      {
+        self.add_message("Rename: no valid file names selected");
+        return;
+      }
+      let (pre, suf) = common_affixes(&names);
+      let template = format!("{}{}{}", pre, "{}", suf);
+      let title = if names.len() == 1
+      {
+        format!("Rename '{}' to:", names[0])
+      }
+      else
+      {
+        format!("Rename {} items (use {{}} for variable part):", names.len())
+      };
+      self.overlay = Overlay::Prompt(Box::new(PromptState {
+        title,
+        input:  template.clone(),
+        cursor: template.len(),
+        kind:   PromptKind::RenameMany { items, pre, suf },
+      }));
+      self.force_full_redraw = true;
+      return;
+    }
+
+    // Fallback: single item rename from highlighted entry
     let (from_path, name) = match self.selected_entry()
     {
       Some(e) => (e.path.clone(), e.name.clone()),
@@ -1075,7 +1107,7 @@ impl App
 
   pub(crate) fn request_delete_selected(&mut self)
   {
-    crate::trace::log("[delete] request_delete_selected()".to_string());
+    crate::trace::log("[delete] request_delete_selected()");
     if self.selected.is_empty()
     {
       self.add_message("Delete: no items selected");
@@ -1106,7 +1138,7 @@ impl App
     }
     else
     {
-      for p in self.selected.clone().into_iter() { let _ = self.perform_delete_path(&p); }
+      for p in self.selected.clone().into_iter() { self.perform_delete_path(&p); }
     }
   }
 
@@ -1124,8 +1156,10 @@ impl App
     match res
     {
       Ok(_) => {
-        crate::trace::log("[delete] success".to_string());
+        crate::trace::log("[delete] success");
         self.add_message("Deleted");
+        // Remove from selection if present
+        self.selected.remove(path);
       }
       Err(e) => {
         crate::trace::log(format!("[delete] error: {}", e));
@@ -1203,6 +1237,45 @@ impl App
     self.overlay = Overlay::Output { title: title.to_string(), lines };
     self.force_full_redraw = true;
   }
+
+}
+
+fn common_affixes(names: &[String]) -> (String, String)
+{
+  if names.is_empty() { return (String::new(), String::new()); }
+
+  fn common_prefix(a: &str, b: &str) -> String
+  {
+    let mut out = String::new();
+    for (ca, cb) in a.chars().zip(b.chars())
+    {
+      if ca == cb { out.push(ca); } else { break; }
+    }
+    out
+  }
+  fn common_suffix(a: &str, b: &str) -> String
+  {
+    let mut rev: Vec<char> = Vec::new();
+    for (ca, cb) in a.chars().rev().zip(b.chars().rev())
+    {
+      if ca == cb { rev.push(ca); } else { break; }
+    }
+    rev.into_iter().rev().collect()
+  }
+
+  let mut pre = names[0].clone();
+  for n in names.iter().skip(1)
+  {
+    pre = common_prefix(&pre, n);
+    if pre.is_empty() { break; }
+  }
+  let mut suf = names[0].clone();
+  for n in names.iter().skip(1)
+  {
+    suf = common_suffix(&suf, n);
+    if suf.is_empty() { /* keep going to ensure empty is final */ }
+  }
+  (pre, suf)
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InfoMode

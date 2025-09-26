@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "lsv"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "chrono",
  "crossterm 0.29.0",

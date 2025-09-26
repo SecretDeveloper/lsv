@@ -92,7 +92,7 @@ pub fn handle_key(
               }
               else
               {
-                let _ = std::fs::OpenOptions::new().create(true).write(true).open(&path);
+                let _ = std::fs::OpenOptions::new().create_new(true).write(true).open(&path);
               }
               app.refresh_lists();
             }
@@ -103,8 +103,47 @@ pub fn handle_key(
             if !new_name.is_empty()
             {
               let dest = app.cwd.join(new_name);
-              let _ = std::fs::rename(from, &dest);
+              if std::fs::rename(from, &dest).is_ok()
+              {
+                // Keep item selected after rename (update selection to new path)
+                if app.selected.remove(from)
+                {
+                  app.selected.insert(dest.clone());
+                }
+              }
               app.refresh_lists();
+            }
+          }
+          crate::app::PromptKind::RenameMany { ref items, ref pre, ref suf } =>
+          {
+            let tpl = st.input.trim().to_string();
+            // Require exactly one {}
+            if let Some(pos) = tpl.find("{}")
+              && tpl.matches("{}").count() == 1
+            {
+              let (new_pre, new_suf) = (tpl[..pos].to_string(), tpl[pos+2..].to_string());
+              for p in items.iter()
+              {
+                if let Some(name_os) = p.file_name()
+                  && let Some(name) = name_os.to_str()
+                {
+                  // Extract variable segment using original pre/suf
+                  let var = name.strip_prefix(pre.as_str()).unwrap_or(name)
+                    .strip_suffix(suf.as_str()).unwrap_or(name);
+                  let new_name = format!("{}{}{}", new_pre, var, new_suf);
+                  let dst = app.cwd.join(new_name);
+                  if std::fs::rename(p, &dst).is_ok()
+                    && app.selected.remove(p)
+                  {
+                    app.selected.insert(dst.clone());
+                  }
+                }
+              }
+              app.refresh_lists();
+            }
+            else
+            {
+              app.add_message("Rename: template must contain exactly one {} placeholder");
             }
           }
         }
@@ -164,7 +203,7 @@ pub fn handle_key(
     {
       KeyCode::Esc =>
       {
-        crate::trace::log("[confirm] ESC -> cancel".to_string());
+        crate::trace::log("[confirm] ESC -> cancel");
         act = Act::None;
       }
       KeyCode::Enter =>
@@ -178,7 +217,7 @@ pub fn handle_key(
       }
       KeyCode::Char('n') | KeyCode::Char('N') =>
       {
-        crate::trace::log("[confirm] key='n' -> cancel".to_string());
+        crate::trace::log("[confirm] key='n' -> cancel");
         act = Act::None;
       }
       _ => {}
@@ -187,13 +226,8 @@ pub fn handle_key(
     let kind = st.kind.clone();
     app.overlay = crate::app::Overlay::None;
     app.force_full_redraw = true;
-    match (act, &kind)
-    {
-      (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) =>
-      {
-        for p in list.iter() { let _ = app.perform_delete_path(p); }
-      }
-      _ => {}
+    if let (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) = (act, &kind) {
+      for p in list.iter() { app.perform_delete_path(p); }
     }
     return Ok(false);
   }
@@ -289,8 +323,15 @@ pub fn handle_key(
   match (key.code, key.modifiers)
   {
     (KeyCode::Char('q'), _) => return Ok(true),
-    (KeyCode::Esc, _) =>
+    (KeyCode::Esc, _mods) =>
     {
+      // If a mapping exists for <Esc>, dispatch it first
+      let esc_seq = String::from("<Esc>");
+      if let Some(action) = app.keys.lookup.get(esc_seq.as_str()).cloned()
+      {
+        let _ = crate::actions::dispatch_action(app, &action);
+        if app.should_quit { return Ok(true); }
+      }
       // cancel pending sequences and which-key
       app.keys.pending.clear();
       app.overlay = crate::app::Overlay::None;

@@ -43,6 +43,9 @@ pub struct UiThemeData
   pub hidden_bg:        Option<String>,
   pub exec_fg:          Option<String>,
   pub exec_bg:          Option<String>,
+  pub selection_bar_fg:       Option<String>,
+  pub selection_bar_copy_fg:  Option<String>,
+  pub selection_bar_move_fg:  Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -243,6 +246,18 @@ pub fn to_lua_config_table(
     {
       theme_tbl.set("exec_bg", v.as_str())?;
     }
+    if let Some(v) = theme.selection_bar_fg.as_ref()
+    {
+      theme_tbl.set("selection_bar_fg", v.as_str())?;
+    }
+    if let Some(v) = theme.selection_bar_copy_fg.as_ref()
+    {
+      theme_tbl.set("selection_bar_copy_fg", v.as_str())?;
+    }
+    if let Some(v) = theme.selection_bar_move_fg.as_ref()
+    {
+      theme_tbl.set("selection_bar_move_fg", v.as_str())?;
+    }
     ui.set("theme", theme_tbl)?;
   }
   if let Some(path) = app.config.ui.theme_path.as_ref()
@@ -327,6 +342,9 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
         hidden_bg:        get_opt_str(&t, "hidden_bg")?,
         exec_fg:          get_opt_str(&t, "exec_fg")?,
         exec_bg:          get_opt_str(&t, "exec_bg")?,
+        selection_bar_fg:      get_opt_str(&t, "selection_bar_fg")?,
+        selection_bar_copy_fg: get_opt_str(&t, "selection_bar_copy_fg")?,
+        selection_bar_move_fg: get_opt_str(&t, "selection_bar_move_fg")?,
       };
       Some(th)
     }

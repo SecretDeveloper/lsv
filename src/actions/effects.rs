@@ -91,12 +91,12 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
     {
       "delete" | "remove" | "rm" =>
       {
-        crate::trace::log("[effects] confirm request 'delete_selected' (mapped)".to_string());
+        crate::trace::log("[effects] confirm request 'delete_selected' (mapped)");
         fx.confirm = ConfirmCommand::DeleteSelected;
       }
       "delete_all" | "delete_selected" =>
       {
-        crate::trace::log("[effects] confirm request 'delete_selected'".to_string());
+        crate::trace::log("[effects] confirm request 'delete_selected'");
         fx.confirm = ConfirmCommand::DeleteSelected;
       }
       _ => {}

@@ -188,6 +188,10 @@ pub struct UiTheme
   pub hidden_bg:        Option<String>,
   pub exec_fg:          Option<String>,
   pub exec_bg:          Option<String>,
+  // Selection indicator (bar) colours
+  pub selection_bar_fg:       Option<String>,
+  pub selection_bar_copy_fg:  Option<String>,
+  pub selection_bar_move_fg:  Option<String>,
 }
 
 pub(crate) fn merge_theme_table(
@@ -262,6 +266,18 @@ pub(crate) fn merge_theme_table(
   if let Ok(s) = theme_tbl.get::<String>("exec_bg")
   {
     theme.exec_bg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("selection_bar_fg")
+  {
+    theme.selection_bar_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("selection_bar_copy_fg")
+  {
+    theme.selection_bar_copy_fg = Some(s);
+  }
+  if let Ok(s) = theme_tbl.get::<String>("selection_bar_move_fg")
+  {
+    theme.selection_bar_move_fg = Some(s);
   }
 }
 

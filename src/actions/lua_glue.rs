@@ -99,15 +99,13 @@ pub fn call_lua_action(
   let mut fx = parse_effects_from_lua(&candidate_tbl);
   // Fallback: read from original cfg table if helper mutated it
   if fx.output.is_none()
-  {
-    if let Ok(text) = cfg_tbl_copy.get::<String>("output_text")
+    && let Ok(text) = cfg_tbl_copy.get::<String>("output_text")
     {
       let title = cfg_tbl_copy
         .get::<String>("output_title")
         .unwrap_or_else(|_| String::from("Output"));
       fx.output = Some((title, text));
     }
-  }
 
   // Optionally parse a full Config overlay (ui changes, etc.)
   let overlay = crate::config_data::from_lua_config_table(candidate_tbl).ok();
@@ -251,7 +249,7 @@ fn build_lsv_helpers(
     .set("add_entry", add_entry_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
-  // show_messages(): toggle messages overlay
+  // show_messages(): toggle messages overlay (legacy)
   let cfg_ref_msg = cfg_tbl.clone();
   let show_messages_fn = lua
     .create_function(move |_, ()| {
@@ -261,6 +259,31 @@ fn build_lsv_helpers(
     .map_err(|e| io::Error::other(e.to_string()))?;
   tbl
     .set("show_messages", show_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // toggle_show_messages(): explicit name for toggling messages overlay
+  let cfg_ref_msg2 = cfg_tbl.clone();
+  let toggle_show_messages_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_msg2.set("messages", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("toggle_show_messages", toggle_show_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // close_overlays(): hide message/output overlays (Esc also clears others)
+  let cfg_ref_close = cfg_tbl.clone();
+  let close_overlays_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_close.set("messages", "hide");
+      let _ = cfg_ref_close.set("output", "hide");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("close_overlays", close_overlays_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   // toggle_output(): toggle output overlay
