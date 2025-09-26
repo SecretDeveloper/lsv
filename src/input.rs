@@ -273,32 +273,11 @@ pub fn handle_key(
       }
       else
       {
-        // no sequence match, try single-key fallbacks (normalize case variants)
+        // no sequence match; clear pending and exit this path (case-sensitive)
         app.keys.pending.clear();
         if matches!(app.overlay, crate::app::Overlay::WhichKey { .. })
         {
           app.overlay = crate::app::Overlay::None;
-        }
-        let mut tried = std::collections::HashSet::new();
-        for k in [
-          ch.to_string(),
-          ch.to_ascii_lowercase().to_string(),
-          ch.to_ascii_uppercase().to_string(),
-        ]
-        {
-          if !tried.insert(k.clone())
-          {
-            continue;
-          }
-          if let Some(action) = app.keys.lookup.get(k.as_str()).cloned()
-            && crate::actions::dispatch_action(app, &action).unwrap_or(false)
-          {
-            if app.should_quit
-            {
-              return Ok(true);
-            }
-            return Ok(false);
-          }
         }
       }
     }

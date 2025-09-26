@@ -89,7 +89,7 @@ pub fn call_lua_action(
   {
     Value::Table(t) => merge_tables(lua, &cfg_tbl, &t)
       .map_err(|e| io::Error::other(format!("merge: {}", e)))?,
-    _ => cfg_tbl,
+    _ => cfg_tbl.clone(),
   };
 
   // Parse lightweight effects first
@@ -101,6 +101,20 @@ pub fn call_lua_action(
     {
       let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
       let title_s = match candidate_tbl.get::<mlua::String>("output_title")
+      {
+        Ok(s) => match s.to_str() { Ok(v) => v.to_string(), Err(_) => String::from("Output") },
+        Err(_) => String::from("Output"),
+      };
+      fx.output = Some((title_s, text_s));
+    }
+  }
+  // Final fallback: read directly from cfg_tbl (mutated in-place by helpers)
+  if fx.output.is_none()
+  {
+    if let Ok(text) = cfg_tbl.get::<mlua::String>("output_text")
+    {
+      let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
+      let title_s = match cfg_tbl.get::<mlua::String>("output_title")
       {
         Ok(s) => match s.to_str() { Ok(v) => v.to_string(), Err(_) => String::from("Output") },
         Err(_) => String::from("Output"),
@@ -263,6 +277,30 @@ fn build_lsv_helpers(
     .set("rename_item", rename_item_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
+  // toggle_select(): toggle selection for current item
+  let cfg_ref_sel = cfg_tbl.clone();
+  let toggle_select_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_sel.set("select", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("toggle_select", toggle_select_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // clear_selection(): clear all selections
+  let cfg_ref_clr = cfg_tbl.clone();
+  let clear_selection_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_clr.set("select", "clear");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("clear_selection", clear_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
   // Note: we only add unknown-function guard on config-time lsv to avoid
   // interfering with action helpers and tests here.
 
@@ -287,7 +325,7 @@ fn build_lsv_helpers(
   let name_capture = name_str.clone();
 
   let os_run_fn = lua
-    .create_function(move |lua, cmd: String| {
+    .create_function(move |_, cmd: String| {
       let rendered =
         render_cmd(&cmd, &path_capture, &dir_capture, &name_capture);
       trace::log(format!(
@@ -316,29 +354,23 @@ fn build_lsv_helpers(
           }
           let text = String::from_utf8_lossy(&buf).to_string();
           let title = format!("$ {}", cmd);
-          let _ = cfg_ref5.set("output_text", text.clone());
-          let _ = cfg_ref5.set("output_title", title.clone());
+          let _ = cfg_ref5.set("output_text", text);
+          let _ = cfg_ref5.set("output_title", title);
           trace::log(format!(
             "[os_run] exit={:?} bytes_out={}",
             output.status.code(),
             buf.len()
           ));
-          let ret = lua.create_table()?;
-          ret.set("output_text", text)?;
-          ret.set("output_title", title)?;
-          Ok(mlua::Value::Table(ret))
+          Ok(true)
         }
         Err(e) =>
         {
           trace::log(format!("[os_run] error: {}", e));
           let text = format!("<error: {}>", e);
           let title = format!("$ {}", cmd);
-          let _ = cfg_ref5.set("output_text", text.clone());
-          let _ = cfg_ref5.set("output_title", title.clone());
-          let ret = lua.create_table()?;
-          ret.set("output_text", text)?;
-          ret.set("output_title", title)?;
-          Ok(mlua::Value::Table(ret))
+          let _ = cfg_ref5.set("output_text", text);
+          let _ = cfg_ref5.set("output_title", title);
+          Ok(true)
         }
       }
     })

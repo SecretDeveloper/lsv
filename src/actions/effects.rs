@@ -22,6 +22,7 @@ pub struct ActionEffects
   pub theme_picker:   ThemePickerCommand,
   pub prompt:         PromptCommand,
   pub confirm:        ConfirmCommand,
+  pub select:         SelectCommand,
 }
 use mlua::Table;
 
@@ -57,12 +58,15 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
   {
     fx.output_overlay = s.as_str().into();
   }
-  if let Ok(text) = tbl.get::<String>("output_text")
+  if let Ok(text) = tbl.get::<mlua::String>("output_text")
   {
     let title = tbl
-      .get::<String>("output_title")
-      .unwrap_or_else(|_| String::from("Output"));
-    fx.output = Some((title, text));
+      .get::<mlua::String>("output_title")
+      .ok()
+      .and_then(|s| s.to_str().ok().map(|v| v.to_string()))
+      .unwrap_or_else(|| String::from("Output"));
+    let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
+    fx.output = Some((title, text_s));
   }
   // redraw/quit
   fx.redraw = tbl.get::<bool>("redraw").unwrap_or(false);
@@ -92,6 +96,16 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
     }
   }
 
+  if let Ok(s) = tbl.get::<String>("select")
+  {
+    match s.as_str()
+    {
+      "toggle" => fx.select = SelectCommand::ToggleCurrent,
+      "clear" => fx.select = SelectCommand::ClearAll,
+      _ => {}
+    }
+  }
+
   fx
 }
 
@@ -118,4 +132,13 @@ pub enum ConfirmCommand
   #[default]
   None,
   Delete,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectCommand
+{
+  #[default]
+  None,
+  ToggleCurrent,
+  ClearAll,
 }

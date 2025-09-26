@@ -136,6 +136,7 @@ pub struct App
   pub(crate) keys:              KeyState,
   pub(crate) force_full_redraw: bool,
   pub(crate) lua:               Option<LuaRuntime>,
+  pub(crate) selected:          std::collections::HashSet<std::path::PathBuf>,
   // In-memory runtime settings
   pub(crate) sort_key:          SortKey,
   pub(crate) sort_reverse:      bool,
@@ -241,6 +242,7 @@ impl App
       keys: KeyState::default(),
       force_full_redraw: false,
       lua: None,
+      selected: std::collections::HashSet::new(),
       sort_key: SortKey::Name,
       sort_reverse: false,
       info_mode: InfoMode::None,
@@ -705,6 +707,29 @@ impl App
   pub fn preview_line_count(&self) -> usize
   {
     self.preview.static_lines.len()
+  }
+
+  pub(crate) fn toggle_select_current(&mut self)
+  {
+    if let Some(e) = self.selected_entry().cloned()
+    {
+      if self.selected.contains(&e.path)
+      {
+        self.selected.remove(&e.path);
+      }
+      else
+      {
+        self.selected.insert(e.path);
+      }
+    }
+  }
+
+  pub(crate) fn clear_all_selected(&mut self)
+  {
+    if !self.selected.is_empty()
+    {
+      self.selected.clear();
+    }
   }
 
   pub fn recent_messages_len(&self) -> usize

@@ -134,8 +134,16 @@ lsv.map_action("ut", "UI Theme picker", function(lsv, config)
 end)
 
 -- Rename selected file/folder
-lsv.map_action("R", "Rename selected", function(lsv, config)
+lsv.map_action("r", "Rename selected", function(lsv, config)
 	lsv.rename_item()
+end)
+
+-- Selection: space toggles current item, 'c' clears all
+lsv.map_action(" ", "Toggle select", function(lsv, config)
+	lsv.toggle_select()
+end)
+lsv.map_action("u", "Clear selection", function(lsv, config)
+	lsv.clear_selection()
 end)
 
 -- Delete selected file or folder (with confirmation by default)

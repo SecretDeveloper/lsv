@@ -1153,7 +1153,7 @@ mod input_tests
     }
 
     #[test]
-    fn case_normalization_single_key_fallback()
+    fn case_sensitivity_single_key()
     {
         let mut app = lsv::app::App::new().expect("app new");
         app.set_keymaps(vec![lsv::config::KeyMapping {
@@ -1161,9 +1161,12 @@ mod input_tests
             action:      "quit".into(),
             description: None,
         }]);
-        // Press uppercase Q: handler tries 'Q','q','Q' variants
+        // Press uppercase Q: now case-sensitive, should NOT quit
         let quit = lsv::input::handle_key(&mut app, key('Q')).unwrap();
-        assert!(quit);
+        assert!(!quit);
+        // Press lowercase q: should quit
+        let quit2 = lsv::input::handle_key(&mut app, key('q')).unwrap();
+        assert!(quit2);
     }
 }
 

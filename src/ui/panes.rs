@@ -141,9 +141,9 @@ pub fn draw_current_panel(
   let inner = block.inner(area);
   let inner_width = inner.width;
   let fmt = app.config.ui.row.clone().unwrap_or_default();
-  let highlight_symbol = "▶ ";
-  let hl_w = UnicodeWidthStr::width(highlight_symbol) as u16;
-  let avail_width = inner_width.saturating_sub(hl_w);
+  // Remove the left arrow indicator; no extra gutter space
+  let highlight_symbol = "";
+  let avail_width = inner_width;
   let items: Vec<ListItem> = app
     .current_entries
     .iter()
@@ -975,86 +975,46 @@ fn format_info(
 
 pub fn build_row_line(
   app: &crate::App,
-  fmt: &crate::config::UiRowFormat,
+  _fmt: &crate::config::UiRowFormat,
   e: &crate::app::DirEntryInfo,
   inner_width: u16,
 ) -> Line<'static>
 {
   let base_style = entry_style(app, e);
+  // Left selection bar column (fixed width so text doesn't shift)
+  let mut spans: Vec<Span> = Vec::new();
+  let mut bar_style = Style::default().fg(Color::Cyan);
+  if let Some(th) = app.config.ui.theme.as_ref()
+    && let Some(fg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+  {
+    bar_style = bar_style.fg(fg);
+  }
+  // Make the indicator wider (3x the previous bar width). Keep width fixed
+  // for both selected and unselected rows to prevent text shifting.
+  // Compose in order: {selected} {icon} {name} {info}
+  // where {info} is right-aligned to the edge
   let marker = if e.is_dir { "/" } else { "" };
   let name_val = format!("{}{}", e.name, marker);
   let icon_val = compute_icon(app, e);
   let info_val = format_info(app, e).unwrap_or_default();
-  let perms_val = permissions_string(e);
-  let icon_s = replace_placeholders(
-    &fmt.icon, &icon_val, &name_val, &info_val, &perms_val,
-  );
-  let left_s = replace_placeholders(
-    &fmt.left, &icon_val, &name_val, &info_val, &perms_val,
-  );
-  let right_s = replace_placeholders(
-    &fmt.right, &icon_val, &name_val, &info_val, &perms_val,
-  );
-  // Compose: [icon][left] ... [right aligned]
-  let mut spans: Vec<Span> = Vec::new();
+
+  // Left segment: selected + space + icon + space + name
+  let sel_seg = if app.selected.contains(&e.path) { "█" } else { " " };
+  let left_seg = format!("{} {} {}", sel_seg, icon_val, name_val);
+
+  // Right segment: info (styled)
+  let right_txt = info_val;
   let total = inner_width as i32;
-
-  // If fixed widths configured, fit each cell into its box
-  if let Some(rw) = app.config.ui.row_widths.as_ref()
-  {
-    let iw = rw.icon as usize;
-    let lw = rw.left as usize;
-    let rw_w = rw.right as usize;
-    if iw + lw + rw_w > 0 && (iw + lw + rw_w) as i32 <= total
-    {
-      let icon_cell = fit_cell(&icon_s, iw, false);
-      let left_cell = fit_cell(&left_s, lw, false);
-      let right_cell = fit_cell(&right_s, rw_w, true);
-      if iw > 0
-      {
-        spans.push(Span::styled(icon_cell, base_style));
-      }
-      if lw > 0
-      {
-        spans.push(Span::styled(left_cell, base_style));
-      }
-      if rw_w > 0
-      {
-        let mut s = Style::default().fg(Color::Gray);
-        if let Some(th) = app.config.ui.theme.as_ref()
-          && let Some(fg) =
-            th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v))
-        {
-          s = s.fg(fg);
-        }
-        spans.push(Span::styled(right_cell, s));
-      }
-      return Line::from(spans);
-    }
-  }
-
-  // Auto layout fallback
-  let icon_w = UnicodeWidthStr::width(icon_s.as_str()) as i32;
-  let left_w = UnicodeWidthStr::width(left_s.as_str()) as i32;
-  let mut current_w = 0i32;
-  if !icon_s.is_empty()
-  {
-    spans.push(Span::styled(icon_s.clone(), base_style));
-    current_w += icon_w;
-  }
-  if !left_s.is_empty()
-  {
-    spans.push(Span::styled(left_s.clone(), base_style));
-    current_w += left_w;
-  }
-
-  let right_txt = right_s.clone();
+  let left_w = UnicodeWidthStr::width(left_seg.as_str()) as i32;
   let right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
-  let space = (total - current_w).max(0);
+  let space = (total - left_w).max(0);
 
+  // Push left segment
+  spans.push(Span::styled(left_seg, base_style));
+
+  // Pad so that right text ends at the right edge
   if space > 0
   {
-    // Right-align info text in remaining space
     let pad_before_right = space.saturating_sub(right_w) as usize;
     if pad_before_right > 0
     {
@@ -1064,17 +1024,17 @@ pub fn build_row_line(
         base_style,
       ));
     }
-    if right_w > 0
+  }
+  if right_w > 0
+  {
+    let mut s = Style::default().fg(Color::Gray);
+    if let Some(th) = app.config.ui.theme.as_ref()
+      && let Some(fg) =
+        th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v))
     {
-      let mut s = Style::default().fg(Color::Gray);
-      if let Some(th) = app.config.ui.theme.as_ref()
-        && let Some(fg) =
-          th.info_fg.as_ref().and_then(|v| crate::ui::colors::parse_color(v))
-      {
-        s = s.fg(fg);
-      }
-      spans.push(Span::styled(right_txt, s));
+      s = s.fg(fg);
     }
+    spans.push(Span::styled(right_txt, s));
   }
 
   Line::from(spans)
@@ -1097,12 +1057,11 @@ fn replace_placeholders(
 
 fn compute_icon(
   _app: &crate::App,
-  _e: &crate::app::DirEntryInfo,
+  e: &crate::app::DirEntryInfo,
 ) -> String
 {
-  // Placeholder: integrate actual icon theme later. For now, one space to
-  // reserve a column.
-  " ".to_string()
+  // Placeholder icons (to be themed later)
+  if e.is_dir { "📁".to_string() } else { "📄".to_string() }
 }
 
 pub(crate) fn permissions_string(e: &crate::app::DirEntryInfo) -> String

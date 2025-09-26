@@ -226,7 +226,21 @@ fn lookup_user_name(uid: u32) -> Option<String>
   else
   {
     None
-  };
+  }
+  // Fallback: try `id -nu <uid>` on Unix systems where /etc/passwd is not authoritative (e.g., macOS)
+  .or_else(|| {
+    use std::process::Command;
+    let out = Command::new("id").arg("-nu").arg(uid.to_string()).output();
+    match out
+    {
+      Ok(o) if o.status.success() =>
+      {
+        let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        if s.is_empty() { None } else { Some(s) }
+      }
+      _ => None,
+    }
+  });
   if let Some(ref name) = found
     && let Ok(mut map) = uid_cache().write()
   {
@@ -267,7 +281,20 @@ fn lookup_group_name(gid: u32) -> Option<String>
   else
   {
     None
-  };
+  }
+  .or_else(|| {
+    use std::process::Command;
+    let out = Command::new("id").arg("-ng").arg(gid.to_string()).output();
+    match out
+    {
+      Ok(o) if o.status.success() =>
+      {
+        let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+        if s.is_empty() { None } else { Some(s) }
+      }
+      _ => None,
+    }
+  });
   if let Some(ref name) = found
     && let Ok(mut map) = gid_cache().write()
   {

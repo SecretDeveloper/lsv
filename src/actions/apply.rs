@@ -97,6 +97,20 @@ pub fn apply_effects(
     crate::actions::effects::ConfirmCommand::None => {}
   }
 
+  // Selection commands
+  match fx.select
+  {
+    crate::actions::effects::SelectCommand::ToggleCurrent =>
+    {
+      app.toggle_select_current();
+    }
+    crate::actions::effects::SelectCommand::ClearAll =>
+    {
+      app.clear_all_selected();
+    }
+    crate::actions::effects::SelectCommand::None => {}
+  }
+
   if fx.redraw { app.force_full_redraw = true; }
   if fx.quit { app.should_quit = true; }
 }
