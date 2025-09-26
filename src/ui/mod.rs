@@ -60,6 +60,14 @@ pub fn draw(
     {
       panes::draw_output_panel(f, f.area(), app);
     }
+    crate::app::Overlay::Prompt(_) =>
+    {
+      panes::draw_prompt_panel(f, f.area(), app);
+    }
+    crate::app::Overlay::Confirm(_) =>
+    {
+      panes::draw_confirm_panel(f, f.area(), app);
+    }
     crate::app::Overlay::ThemePicker(_) =>
     {
       panes::draw_theme_picker_panel(f, f.area(), app);

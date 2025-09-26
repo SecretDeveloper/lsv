@@ -91,6 +91,8 @@ pub struct UiConfig
   pub show:           Option<String>,
   pub theme_path:     Option<PathBuf>,
   pub theme:          Option<UiTheme>,
+  pub confirm_delete: bool,
+  pub modals:         Option<UiModals>,
 }
 
 impl Default for UiConfig
@@ -111,8 +113,25 @@ impl Default for UiConfig
       show:           None,
       theme_path:     None,
       theme:          None,
+      confirm_delete: true,
+      modals:         None,
     }
   }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UiModalConfig
+{
+  pub width_pct:  u16, // 10..=100
+  pub height_pct: u16, // 10..=100
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UiModals
+{
+  pub prompt:  UiModalConfig,
+  pub confirm: UiModalConfig,
+  pub theme:   UiModalConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -761,6 +780,36 @@ fn install_lsv_api(
       {
         cfg_mut.ui.show = Some(show_str);
       }
+      if let Ok(b) = ui_tbl.get::<bool>("confirm_delete")
+      {
+        cfg_mut.ui.confirm_delete = b;
+      }
+      if let Ok(modals_tbl) = ui_tbl.get::<Table>("modals")
+      {
+        let mut modals = cfg_mut.ui.modals.clone().unwrap_or_default();
+        if let Ok(p_tbl) = modals_tbl.get::<Table>("prompt")
+        {
+          let mut p = modals.prompt;
+          if let Ok(v) = p_tbl.get::<u64>("width_pct") { p.width_pct = v as u16; }
+          if let Ok(v) = p_tbl.get::<u64>("height_pct") { p.height_pct = v as u16; }
+          modals.prompt = p;
+        }
+        if let Ok(c_tbl) = modals_tbl.get::<Table>("confirm")
+        {
+          let mut c = modals.confirm;
+          if let Ok(v) = c_tbl.get::<u64>("width_pct") { c.width_pct = v as u16; }
+          if let Ok(v) = c_tbl.get::<u64>("height_pct") { c.height_pct = v as u16; }
+          modals.confirm = c;
+        }
+        if let Ok(t_tbl) = modals_tbl.get::<Table>("theme")
+        {
+          let mut t = modals.theme;
+          if let Ok(v) = t_tbl.get::<u64>("width_pct") { t.width_pct = v as u16; }
+          if let Ok(v) = t_tbl.get::<u64>("height_pct") { t.height_pct = v as u16; }
+          modals.theme = t;
+        }
+        cfg_mut.ui.modals = Some(modals);
+      }
     }
     // Note: legacy 'commands' table removed in favor of map_action + lsv.os_run
 
@@ -849,6 +898,26 @@ fn install_lsv_api(
   lsv.set("mapkey", mapkey_fn)?;
   lsv.set("set_previewer", set_previewer_fn)?;
   lsv.set("map_action", map_action_fn)?;
+  // Add metatable to error on unknown lsv.* at config time
+  let mt = lua.create_table()?;
+  let idx = lua.create_function(move |lua, (_tbl, key): (Table, Value)| {
+    let name = match key {
+      Value::String(s) => match s.to_str() {
+        Ok(v) => v.to_string(),
+        Err(_) => "?".to_string(),
+      },
+      other => format!("{:?}", other),
+    };
+    let func = lua.create_function(move |_, ()| -> mlua::Result<()> {
+      Err(mlua::Error::RuntimeError(format!(
+        "unknown lsv function: {}",
+        name
+      )))
+    })?;
+    Ok(func)
+  })?;
+  mt.set("__index", idx)?;
+  let _ = lsv.set_metatable(Some(mt));
   globals.set("lsv", lsv)?;
   Ok(())
 }

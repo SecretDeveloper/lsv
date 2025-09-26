@@ -6,6 +6,7 @@ lsv.config({
 		row = { middle = "" },
 		row_widths = { icon = 2, left = 40, right = 14 },
 		theme_path = "themes/light.lua", -- change to "themes/light.lua" for light mode
+		confirm_delete = true,
 		-- Optional tweaks still overlay on top of the theme module
 		theme = {
 			selected_item_fg = "#1b1d2b",

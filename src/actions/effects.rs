@@ -20,6 +20,8 @@ pub struct ActionEffects
   pub output_overlay: OverlayToggle,
   pub output:         Option<(String, String)>, // (title, text)
   pub theme_picker:   ThemePickerCommand,
+  pub prompt:         PromptCommand,
+  pub confirm:        ConfirmCommand,
 }
 use mlua::Table;
 
@@ -70,6 +72,25 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
   {
     fx.theme_picker = ThemePickerCommand::Open;
   }
+  if let Ok(p) = tbl.get::<String>("prompt")
+  {
+    if p == "add_entry" || p == "add" || p == "new"
+    {
+      fx.prompt = PromptCommand::OpenAddEntry;
+    }
+    else if p == "rename_entry" || p == "rename"
+    {
+      fx.prompt = PromptCommand::OpenRenameEntry;
+    }
+  }
+  if let Ok(c) = tbl.get::<String>("confirm")
+  {
+    if c == "delete" || c == "remove" || c == "rm"
+    {
+      crate::trace::log("[effects] confirm request 'delete'".to_string());
+      fx.confirm = ConfirmCommand::Delete;
+    }
+  }
 
   fx
 }
@@ -80,4 +101,21 @@ pub enum ThemePickerCommand
   #[default]
   None,
   Open,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptCommand
+{
+  #[default]
+  None,
+  OpenAddEntry,
+  OpenRenameEntry,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmCommand
+{
+  #[default]
+  None,
+  Delete,
 }

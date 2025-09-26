@@ -93,7 +93,21 @@ pub fn call_lua_action(
   };
 
   // Parse lightweight effects first
-  let fx = parse_effects_from_lua(&candidate_tbl);
+  let mut fx = parse_effects_from_lua(&candidate_tbl);
+  // Fallback: if output not parsed but keys exist, populate
+  if fx.output.is_none()
+  {
+    if let Ok(text) = candidate_tbl.get::<mlua::String>("output_text")
+    {
+      let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
+      let title_s = match candidate_tbl.get::<mlua::String>("output_title")
+      {
+        Ok(s) => match s.to_str() { Ok(v) => v.to_string(), Err(_) => String::from("Output") },
+        Err(_) => String::from("Output"),
+      };
+      fx.output = Some((title_s, text_s));
+    }
+  }
 
   // Optionally parse a full Config overlay (ui changes, etc.)
   let overlay = crate::config_data::from_lua_config_table(candidate_tbl).ok();
@@ -201,6 +215,57 @@ fn build_lsv_helpers(
     .set("open_theme_picker", open_theme_picker_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
+  // delete_selected(): request delete confirmation (respects ui.confirm_delete)
+  let cfg_ref_del = cfg_tbl.clone();
+  let delete_selected_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_del.set("confirm", "delete");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("delete_selected", delete_selected_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // add_entry(): open add-entry prompt overlay
+  let cfg_ref_add = cfg_tbl.clone();
+  let add_entry_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_add.set("prompt", "add_entry");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("add_entry", add_entry_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // show_messages(): toggle messages overlay
+  let cfg_ref_msg = cfg_tbl.clone();
+  let show_messages_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_msg.set("messages", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("show_messages", show_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // rename_item(): open rename prompt
+  let cfg_ref_ren = cfg_tbl.clone();
+  let rename_item_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_ren.set("prompt", "rename_entry");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("rename_item", rename_item_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // Note: we only add unknown-function guard on config-time lsv to avoid
+  // interfering with action helpers and tests here.
+
   // os_run (captured)
   let cfg_ref5 = cfg_tbl.clone();
   let cwd_str = app.cwd.to_string_lossy().to_string();
@@ -222,7 +287,7 @@ fn build_lsv_helpers(
   let name_capture = name_str.clone();
 
   let os_run_fn = lua
-    .create_function(move |_, cmd: String| {
+    .create_function(move |lua, cmd: String| {
       let rendered =
         render_cmd(&cmd, &path_capture, &dir_capture, &name_capture);
       trace::log(format!(
@@ -250,21 +315,30 @@ fn build_lsv_helpers(
             buf.extend_from_slice(&output.stderr);
           }
           let text = String::from_utf8_lossy(&buf).to_string();
-          let _ = cfg_ref5.set("output_text", text);
-          let _ = cfg_ref5.set("output_title", format!("$ {}", cmd));
+          let title = format!("$ {}", cmd);
+          let _ = cfg_ref5.set("output_text", text.clone());
+          let _ = cfg_ref5.set("output_title", title.clone());
           trace::log(format!(
             "[os_run] exit={:?} bytes_out={}",
             output.status.code(),
             buf.len()
           ));
-          Ok(true)
+          let ret = lua.create_table()?;
+          ret.set("output_text", text)?;
+          ret.set("output_title", title)?;
+          Ok(mlua::Value::Table(ret))
         }
         Err(e) =>
         {
           trace::log(format!("[os_run] error: {}", e));
-          let _ = cfg_ref5.set("output_text", format!("<error: {}>", e));
-          let _ = cfg_ref5.set("output_title", format!("$ {}", cmd));
-          Ok(true)
+          let text = format!("<error: {}>", e);
+          let title = format!("$ {}", cmd);
+          let _ = cfg_ref5.set("output_text", text.clone());
+          let _ = cfg_ref5.set("output_title", title.clone());
+          let ret = lua.create_table()?;
+          ret.set("output_text", text)?;
+          ret.set("output_title", title)?;
+          Ok(mlua::Value::Table(ret))
         }
       }
     })

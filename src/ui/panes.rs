@@ -1,4 +1,4 @@
-use crate::ui::ansi::ansi_spans;
+  use crate::ui::ansi::ansi_spans;
 use ratatui::{
   layout::{
     Alignment,
@@ -548,6 +548,139 @@ pub fn draw_output_panel(
   f.render_widget(para, panel);
 }
 
+pub fn draw_prompt_panel(
+  f: &mut ratatui::Frame,
+  area: Rect,
+  app: &crate::App,
+)
+{
+  let state = match app.overlay
+  {
+    crate::app::Overlay::Prompt(ref s) => s.as_ref(),
+    _ => return,
+  };
+
+  // Popup centered (configurable)
+  let (width, height) = if let Some(m) = app.config.ui.modals.as_ref()
+  {
+    let w = (area.width.saturating_mul(m.prompt.width_pct.max(10).min(100)) / 100)
+      .max(30);
+    let h = (area.height.saturating_mul(m.prompt.height_pct.max(10).min(100)) / 100)
+      .max(5);
+    (w, h)
+  }
+  else
+  {
+    (area.width.saturating_sub(area.width / 3).max(30), 5u16)
+  };
+  let popup = Rect::new(
+    area.x + area.width.saturating_sub(width) / 2,
+    area.y + area.height.saturating_sub(height) / 2,
+    width,
+    height,
+  );
+  f.render_widget(Clear, popup);
+
+  let mut block = Block::default().borders(Borders::ALL);
+  if let Some(th) = app.config.ui.theme.as_ref()
+  {
+    if let Some(bg) =
+      th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    {
+      block = block.style(Style::default().bg(bg));
+    }
+    if let Some(bfg) =
+      th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    {
+      block = block.border_style(Style::default().fg(bfg));
+    }
+  }
+  let title_style = Style::default()
+    .fg(Color::Yellow)
+    .add_modifier(Modifier::BOLD);
+  block = block.title(Span::styled(state.title.clone(), title_style));
+
+  let inner = block.inner(popup);
+  f.render_widget(block, popup);
+
+  let mut lines: Vec<Line> = Vec::new();
+  lines.push(Line::from(""));
+  lines.push(Line::from(Span::raw(state.input.clone())));
+  let para = Paragraph::new(lines).wrap(Wrap { trim: false });
+  f.render_widget(para, inner);
+
+  // Place terminal cursor at the logical input cursor position
+  let pre = if state.cursor <= state.input.len()
+  {
+    &state.input[..state.cursor]
+  }
+  else
+  {
+    state.input.as_str()
+  };
+  let mut xoff = UnicodeWidthStr::width(pre) as u16;
+  if xoff >= inner.width { xoff = inner.width.saturating_sub(1); }
+  let cur_x = inner.x.saturating_add(xoff);
+  let cur_y = inner.y.saturating_add(1); // second line (after blank)
+  f.set_cursor_position((cur_x, cur_y));
+}
+
+pub fn draw_confirm_panel(
+  f: &mut ratatui::Frame,
+  area: Rect,
+  app: &crate::App,
+)
+{
+  let state = match app.overlay
+  {
+    crate::app::Overlay::Confirm(ref s) => s.as_ref(),
+    _ => return,
+  };
+  let (width, height) = if let Some(m) = app.config.ui.modals.as_ref()
+  {
+    let w = (area.width.saturating_mul(m.confirm.width_pct.max(10).min(100)) / 100)
+      .max(30);
+    let h = (area.height.saturating_mul(m.confirm.height_pct.max(10).min(100)) / 100)
+      .max(5);
+    (w, h)
+  }
+  else
+  {
+    (area.width.saturating_sub(area.width / 3).max(30), 5u16)
+  };
+  let popup = Rect::new(
+    area.x + area.width.saturating_sub(width) / 2,
+    area.y + area.height.saturating_sub(height) / 2,
+    width,
+    height,
+  );
+  f.render_widget(Clear, popup);
+  let mut block = Block::default().borders(Borders::ALL);
+  if let Some(th) = app.config.ui.theme.as_ref()
+  {
+    if let Some(bg) =
+      th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    {
+      block = block.style(Style::default().bg(bg));
+    }
+    if let Some(bfg) =
+      th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    {
+      block = block.border_style(Style::default().fg(bfg));
+    }
+  }
+  let title_style =
+    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+  block = block.title(Span::styled(state.title.clone(), title_style));
+  let inner = block.inner(popup);
+  f.render_widget(block, popup);
+  let mut lines: Vec<Line> = Vec::new();
+  lines.push(Line::from(""));
+  lines.push(Line::from(Span::raw(state.question.clone())));
+  let para = Paragraph::new(lines).wrap(Wrap { trim: true });
+  f.render_widget(para, inner);
+}
+
 pub fn draw_theme_picker_panel(
   f: &mut ratatui::Frame,
   area: Rect,
@@ -570,19 +703,30 @@ pub fn draw_theme_picker_panel(
     .map(|e| UnicodeWidthStr::width(e.name.as_str()))
     .max()
     .unwrap_or(0);
-  let base_width = (max_name_width as u16).saturating_add(6);
-  let desired_width = base_width.max(30);
-  let popup_width = desired_width
-    .min(area.width.saturating_sub(4).max(20))
-    .min(area.width)
-    .max(10);
-
-  let entries_len = state.entries.len() as u16;
-  let desired_height = entries_len.saturating_add(4);
-  let popup_height = desired_height
-    .min(area.height.saturating_sub(4).max(6))
-    .min(area.height)
-    .max(5);
+  let (popup_width, popup_height) = if let Some(m) = app.config.ui.modals.as_ref()
+  {
+    let w = (area.width.saturating_mul(m.theme.width_pct.max(10).min(100)) / 100)
+      .max(20);
+    let h = (area.height.saturating_mul(m.theme.height_pct.max(10).min(100)) / 100)
+      .max(5);
+    (w, h)
+  }
+  else
+  {
+    let base_width = (max_name_width as u16).saturating_add(6);
+    let desired_width = base_width.max(30);
+    let w = desired_width
+      .min(area.width.saturating_sub(4).max(20))
+      .min(area.width)
+      .max(10);
+    let entries_len = state.entries.len() as u16;
+    let desired_height = entries_len.saturating_add(4);
+    let h = desired_height
+      .min(area.height.saturating_sub(4).max(6))
+      .min(area.height)
+      .max(5);
+    (w, h)
+  };
 
   let popup = Rect::new(
     area.x + area.width.saturating_sub(popup_width) / 2,

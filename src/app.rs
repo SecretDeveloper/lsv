@@ -60,6 +60,8 @@ pub enum Overlay
   Messages,
   Output { title: String, lines: Vec<String> },
   ThemePicker(Box<ThemePickerState>),
+  Prompt(Box<PromptState>),
+  Confirm(Box<ConfirmState>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -85,6 +87,37 @@ pub struct LuaRuntime
   pub engine:   crate::config::LuaEngine,
   pub previewer: Option<RegistryKey>,
   pub actions:  Vec<RegistryKey>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PromptKind
+{
+  AddEntry,
+  RenameEntry { from: std::path::PathBuf },
+}
+
+#[derive(Debug, Clone)]
+pub struct PromptState
+{
+  pub title:  String,
+  pub input:  String,
+  pub cursor: usize,
+  pub kind:   PromptKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConfirmKind
+{
+  DeleteEntry(std::path::PathBuf),
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfirmState
+{
+  pub title:       String,
+  pub question:    String,
+  pub default_yes: bool,
+  pub kind:        ConfirmKind,
 }
 
 /// Mutable application state driving the three-pane UI.
@@ -813,6 +846,102 @@ impl App
     self.config.ui.theme = Some(entry.theme);
     self.config.ui.theme_path = Some(entry.path);
     self.force_full_redraw = true;
+  }
+
+  pub(crate) fn open_add_entry_prompt(&mut self)
+  {
+    self.overlay = Overlay::Prompt(Box::new(PromptState {
+      title:  "Name (end with '/' for folder):".to_string(),
+      input:  String::new(),
+      cursor: 0,
+      kind:   PromptKind::AddEntry,
+    }));
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn open_rename_entry_prompt(&mut self)
+  {
+    let (from_path, name) = match self.selected_entry()
+    {
+      Some(e) => (e.path.clone(), e.name.clone()),
+      None =>
+      {
+        self.add_message("Rename: no selection");
+        return;
+      }
+    };
+    self.overlay = Overlay::Prompt(Box::new(PromptState {
+      title:  format!("Rename '{}' to:", name),
+      input:  name.clone(),
+      cursor: name.len(),
+      kind:   PromptKind::RenameEntry { from: from_path },
+    }));
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn request_delete_selected(&mut self)
+  {
+    crate::trace::log("[delete] request_delete_selected()".to_string());
+    let path = match self.selected_entry()
+    {
+      Some(e) => {
+        crate::trace::log(format!("[delete] selected='{}'", e.path.display()));
+        e.path.clone()
+      }
+      None =>
+      {
+        self.add_message("Delete: no selection");
+        crate::trace::log("[delete] no selection".to_string());
+        return;
+      }
+    };
+    crate::trace::log(format!(
+      "[delete] confirm_delete flag={}",
+      self.config.ui.confirm_delete
+    ));
+    if self.config.ui.confirm_delete
+    {
+      let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
+      crate::trace::log(format!("[delete] opening confirm for '{}'", name));
+      self.overlay = Overlay::Confirm(Box::new(ConfirmState {
+        title:       "Confirm Delete".to_string(),
+        question:    format!("Delete '{}' ? (y/n)", name),
+        default_yes: false,
+        kind:        ConfirmKind::DeleteEntry(path),
+      }));
+      self.force_full_redraw = true;
+    }
+    else
+    {
+      crate::trace::log("[delete] confirm disabled -> deleting immediately".to_string());
+      self.perform_delete_path(&path);
+    }
+  }
+
+  pub(crate) fn perform_delete_path(&mut self, path: &std::path::Path)
+  {
+    crate::trace::log(format!("[delete] perform path='{}'", path.display()));
+    let res = if path.is_dir()
+    {
+      std::fs::remove_dir_all(path)
+    }
+    else
+    {
+      std::fs::remove_file(path)
+    };
+    match res
+    {
+      Ok(_) => {
+        crate::trace::log("[delete] success".to_string());
+        self.add_message("Deleted");
+      }
+      Err(e) => {
+        crate::trace::log(format!("[delete] error: {}", e));
+        self.add_message(&format!("Delete error: {}", e));
+      }
+    }
+    self.refresh_lists();
+    self.refresh_preview();
   }
 
   pub(crate) fn theme_picker_move(

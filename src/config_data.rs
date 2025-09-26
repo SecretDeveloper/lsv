@@ -64,6 +64,7 @@ pub struct UiData
   pub display_mode:   crate::app::DisplayMode,
   pub preview_lines:  usize,
   pub max_list_items: usize,
+  pub confirm_delete: bool,
   pub row:            UiRowData,
   pub row_widths:     Option<super::config::UiRowWidths>,
   pub theme_path:     Option<String>,
@@ -118,6 +119,7 @@ pub fn to_lua_config_table(
   ui.set("display_mode", crate::enums::display_mode_to_str(app.display_mode))?;
   ui.set("preview_lines", app.config.ui.preview_lines as u64)?;
   ui.set("max_list_items", app.config.ui.max_list_items as u64)?;
+  ui.set("confirm_delete", app.config.ui.confirm_delete)?;
 
   // context snapshot for actions
   let ctx = lua.create_table()?;
@@ -294,6 +296,7 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
     })?;
   let preview_lines_u64 = get_u64(&ui_tbl, "preview_lines")?;
   let max_list_items_u64 = get_u64(&ui_tbl, "max_list_items")?;
+  let confirm_delete = get_bool(&ui_tbl, "confirm_delete")?;
   let row_tbl: Table = get_req_tbl(&ui_tbl, "row")?;
   let row = UiRowData {
     icon:   get_string(&row_tbl, "icon")?,
@@ -336,6 +339,7 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
     display_mode,
     preview_lines: preview_lines_u64 as usize,
     max_list_items: max_list_items_u64 as usize,
+    confirm_delete,
     row,
     row_widths: match ui_tbl.get::<Value>("row_widths")
     {

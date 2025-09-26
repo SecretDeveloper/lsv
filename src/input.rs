@@ -27,6 +27,7 @@ pub fn handle_key(
     return Ok(false);
   }
 
+
   if app.is_theme_picker_active()
   {
     match key.code
@@ -57,6 +58,155 @@ pub fn handle_key(
       }
       _ =>
       {}
+    }
+    return Ok(false);
+  }
+
+  // Prompt overlay input handling
+  if let crate::app::Overlay::Prompt(ref mut st_box) = app.overlay
+  {
+    use crossterm::event::KeyEventKind;
+    if key.kind != KeyEventKind::Press { return Ok(false); }
+    let st = st_box.as_mut();
+    match key.code
+    {
+      KeyCode::Esc =>
+      {
+        app.overlay = crate::app::Overlay::None;
+        app.force_full_redraw = true;
+      }
+      KeyCode::Enter =>
+      {
+        // Submit
+        match st.kind
+        {
+          crate::app::PromptKind::AddEntry =>
+          {
+            let name = st.input.trim();
+            if !name.is_empty()
+            {
+              let path = app.cwd.join(name);
+              if name.ends_with('/') || name.ends_with('\u{2f}')
+              {
+                let _ = std::fs::create_dir_all(&path);
+              }
+              else
+              {
+                let _ = std::fs::OpenOptions::new().create(true).write(true).open(&path);
+              }
+              app.refresh_lists();
+            }
+          }
+          crate::app::PromptKind::RenameEntry { ref from } =>
+          {
+            let new_name = st.input.trim();
+            if !new_name.is_empty()
+            {
+              let dest = app.cwd.join(new_name);
+              let _ = std::fs::rename(from, &dest);
+              app.refresh_lists();
+            }
+          }
+        }
+        app.overlay = crate::app::Overlay::None;
+        app.force_full_redraw = true;
+      }
+      KeyCode::Backspace =>
+      {
+        if st.cursor > 0 && st.cursor <= st.input.len()
+        {
+          st.input.remove(st.cursor - 1);
+          st.cursor -= 1;
+          app.force_full_redraw = true;
+        }
+      }
+      KeyCode::Left =>
+      {
+        if st.cursor > 0 { st.cursor -= 1; app.force_full_redraw = true; }
+      }
+      KeyCode::Right =>
+      {
+        if st.cursor < st.input.len() { st.cursor += 1; app.force_full_redraw = true; }
+      }
+      KeyCode::Home =>
+      {
+        st.cursor = 0; app.force_full_redraw = true;
+      }
+      KeyCode::End =>
+      {
+        st.cursor = st.input.len(); app.force_full_redraw = true;
+      }
+      KeyCode::Char(ch) =>
+      {
+        if !key.modifiers.contains(KeyModifiers::CONTROL)
+          && !key.modifiers.contains(KeyModifiers::ALT)
+          && !key.modifiers.contains(KeyModifiers::SUPER)
+        {
+          st.input.insert(st.cursor, ch);
+          st.cursor += ch.len_utf8();
+          app.force_full_redraw = true;
+        }
+      }
+      _ => {}
+    }
+    return Ok(false);
+  }
+
+  // Confirm overlay input handling (y/n)
+  if let crate::app::Overlay::Confirm(ref mut st_box) = app.overlay
+  {
+    use crossterm::event::KeyEventKind;
+    if key.kind != KeyEventKind::Press { return Ok(false); }
+    let st = st_box.as_ref();
+    enum Act { None, Delete(std::path::PathBuf) }
+    let mut act = Act::None;
+    match key.code
+    {
+      KeyCode::Esc =>
+      {
+        crate::trace::log("[confirm] ESC -> cancel".to_string());
+        act = Act::None;
+      }
+      KeyCode::Enter =>
+      {
+        if st.default_yes
+        {
+          let target = match &st.kind
+          {
+            crate::app::ConfirmKind::DeleteEntry(p) => p.clone(),
+          };
+          crate::trace::log(format!(
+            "[confirm] ENTER default_yes -> delete path='{}'",
+            target.display()
+          ));
+          act = Act::Delete(target);
+        }
+      }
+      KeyCode::Char('y') | KeyCode::Char('Y') =>
+      {
+        let target = match &st.kind
+        {
+          crate::app::ConfirmKind::DeleteEntry(p) => p.clone(),
+        };
+        crate::trace::log(format!(
+          "[confirm] key='y' -> delete path='{}'",
+          target.display()
+        ));
+        act = Act::Delete(target);
+      }
+      KeyCode::Char('n') | KeyCode::Char('N') =>
+      {
+        crate::trace::log("[confirm] key='n' -> cancel".to_string());
+        act = Act::None;
+      }
+      _ => {}
+    }
+    app.overlay = crate::app::Overlay::None;
+    app.force_full_redraw = true;
+    match act
+    {
+      Act::Delete(p) => { app.perform_delete_path(&p); }
+      Act::None => {}
     }
     return Ok(false);
   }

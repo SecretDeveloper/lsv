@@ -12,6 +12,7 @@ lsv.config({
 		display_mode = "absolute", -- or "friendly"
 		preview_lines = 100,
 		max_list_items = 5000,
+		confirm_delete = true,
 		-- initial listing/format defaults
 		sort = "name",
 		sort_reverse = false,
@@ -24,6 +25,12 @@ lsv.config({
 		},
 		-- fixed widths disabled by default (0 = auto)
 		row_widths = { icon = 0, left = 0, middle = 0, right = 0 },
+		-- Modal window defaults (user can override)
+		modals = {
+			prompt = { width_pct = 50, height_pct = 10 },
+			confirm = { width_pct = 50, height_pct = 10 },
+			theme = { width_pct = 60, height_pct = 60 },
+		},
 		-- Default dark theme; users can override fully in their config
 		theme = {
 			pane_bg = "#101114",
@@ -100,7 +107,7 @@ lsv.map_action("zc", "Info: created date", function(lsv, config)
 end)
 
 lsv.map_action("zm", "Show messages", function(lsv, config)
-	return { messages = "toggle" }
+	lsv.show_messages()
 end)
 
 -- Display mode
@@ -114,14 +121,7 @@ end)
 
 -- Add file/folder action
 lsv.map_action("a", "Add file/folder", function(lsv, config)
-  local cwd = (config.context and config.context.cwd) or "."
-  local name = lsv.prompt("Name (end with '/' for folder): ", nil)
-  if not name or name == "" then return end
-  if name:sub(-1) == "/" then
-    lsv.os_run_interactive("mkdir -p " .. cwd .. "/" .. name)
-  else
-    lsv.os_run_interactive("touch " .. cwd .. "/" .. name)
-  end
+	lsv.add_entry()
 end)
 
 -- Toggle last command output panel
@@ -131,4 +131,14 @@ end)
 
 lsv.map_action("ut", "UI Theme picker", function(lsv, config)
 	lsv.open_theme_picker()
+end)
+
+-- Rename selected file/folder
+lsv.map_action("R", "Rename selected", function(lsv, config)
+	lsv.rename_item()
+end)
+
+-- Delete selected file or folder (with confirmation by default)
+lsv.map_action("d", "Delete selected", function(lsv, config)
+	lsv.delete_selected()
 end)

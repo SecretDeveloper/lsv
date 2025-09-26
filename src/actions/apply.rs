@@ -72,6 +72,31 @@ pub fn apply_effects(
     ThemePickerCommand::None => {}
   }
 
+  // Prompt overlay
+  match fx.prompt
+  {
+    crate::actions::effects::PromptCommand::OpenAddEntry =>
+    {
+      app.open_add_entry_prompt();
+    }
+    crate::actions::effects::PromptCommand::OpenRenameEntry =>
+    {
+      app.open_rename_entry_prompt();
+    }
+    crate::actions::effects::PromptCommand::None => {}
+  }
+
+  // Confirmations
+  match fx.confirm
+  {
+    crate::actions::effects::ConfirmCommand::Delete =>
+    {
+      crate::trace::log("[apply] confirm=delete -> request_delete_selected()".to_string());
+      app.request_delete_selected();
+    }
+    crate::actions::effects::ConfirmCommand::None => {}
+  }
+
   if fx.redraw { app.force_full_redraw = true; }
   if fx.quit { app.should_quit = true; }
 }
@@ -142,6 +167,12 @@ pub fn apply_config_overlay(
   {
     app.config.ui.preview_lines = data.ui.preview_lines;
     refresh_preview_only = true;
+  }
+
+  // Confirm delete: runtime toggle
+  if app.config.ui.confirm_delete != data.ui.confirm_delete
+  {
+    app.config.ui.confirm_delete = data.ui.confirm_delete;
   }
 
   // Max list items: impacts listing
