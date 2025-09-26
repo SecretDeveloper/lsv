@@ -5,7 +5,7 @@ lsv.config({
 		preview_lines = 80,
 		row = { middle = "" },
 		row_widths = { icon = 2, left = 40, right = 14 },
-		theme_path = "themes/light.lua", -- change to "themes/light.lua" for light mode
+		theme_path = "themes/tokyonight.lua", -- change to "themes/light.lua" for light mode
 		confirm_delete = true,
 		-- Optional tweaks still overlay on top of the theme module
 		theme = {

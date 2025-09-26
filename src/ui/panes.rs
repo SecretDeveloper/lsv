@@ -991,26 +991,38 @@ pub fn build_row_line(
   }
   // Make the indicator wider (3x the previous bar width). Keep width fixed
   // for both selected and unselected rows to prevent text shifting.
-  // Compose in order: {selected} {icon} {name} {info}
-  // where {info} is right-aligned to the edge
+  // Compose in order: {selected} {icon} {name} {info} with right-aligned info
   let marker = if e.is_dir { "/" } else { "" };
   let name_val = format!("{}{}", e.name, marker);
   let icon_val = compute_icon(app, e);
   let info_val = format_info(app, e).unwrap_or_default();
 
-  // Left segment: selected + space + icon + space + name
-  let sel_seg = if app.selected.contains(&e.path) { "█" } else { " " };
-  let left_seg = format!("{} {} {}", sel_seg, icon_val, name_val);
+  // Determine clipboard state color override
+  let mut sel_style = bar_style;
+  if let Some(cb) = app.clipboard.as_ref()
+    && cb.items.iter().any(|p| p == &e.path)
+  {
+    sel_style = match cb.op
+    {
+      crate::app::ClipboardOp::Copy => Style::default().fg(Color::Green),
+      crate::app::ClipboardOp::Move => Style::default().fg(Color::Yellow),
+    };
+  }
+
+  // Left segment spans: selected marker (colored), space, icon+space+name
+  let sel_char = if app.selected.contains(&e.path) { "█" } else { " " };
+  let left_rest = format!(" {} {}", icon_val, name_val);
+  spans.push(Span::styled(sel_char.to_string(), sel_style));
+  // For width calculations
+  let total = inner_width as i32;
+  let left_w = (UnicodeWidthStr::width(sel_char) as i32)
+    + (UnicodeWidthStr::width(left_rest.as_str()) as i32);
+  spans.push(Span::styled(left_rest, base_style));
 
   // Right segment: info (styled)
   let right_txt = info_val;
-  let total = inner_width as i32;
-  let left_w = UnicodeWidthStr::width(left_seg.as_str()) as i32;
   let right_w = UnicodeWidthStr::width(right_txt.as_str()) as i32;
   let space = (total - left_w).max(0);
-
-  // Push left segment
-  spans.push(Span::styled(left_seg, base_style));
 
   // Pad so that right text ends at the right edge
   if space > 0

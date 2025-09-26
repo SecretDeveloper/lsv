@@ -126,10 +126,10 @@ end)
 
 -- Toggle last command output panel
 lsv.map_action("zo", "Show output", function(lsv, config)
-	return { output = "toggle" }
+	lsv.toggle_output()
 end)
 
-lsv.map_action("ut", "UI Theme picker", function(lsv, config)
+lsv.map_action("Ut", "UI Theme picker", function(lsv, config)
 	lsv.open_theme_picker()
 end)
 
@@ -138,15 +138,24 @@ lsv.map_action("r", "Rename selected", function(lsv, config)
 	lsv.rename_item()
 end)
 
--- Selection: space toggles current item, 'c' clears all
+-- Selection and clipboard
 lsv.map_action(" ", "Toggle select", function(lsv, config)
 	lsv.toggle_select()
+end)
+lsv.map_action("c", "Copy selection", function(lsv, config)
+	lsv.copy_selection()
+end)
+lsv.map_action("X", "Move selection", function(lsv, config)
+	lsv.move_selection()
+end)
+lsv.map_action("v", "Paste", function(lsv, config)
+	lsv.paste_clipboard()
 end)
 lsv.map_action("u", "Clear selection", function(lsv, config)
 	lsv.clear_selection()
 end)
 
--- Delete selected file or folder (with confirmation by default)
-lsv.map_action("d", "Delete selected", function(lsv, config)
-	lsv.delete_selected()
+-- Delete selected items (with confirmation by default)
+lsv.map_action("D", "Delete selected", function(lsv, config)
+	lsv.delete_selected_all()
 end)

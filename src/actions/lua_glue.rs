@@ -66,6 +66,7 @@ pub fn call_lua_action(
   // Build config snapshot (mutable by Lua)
   let cfg_tbl = crate::config_data::to_lua_config_table(lua, app)
     .map_err(|e| io::Error::other(format!("build config tbl: {e}")))?;
+  let cfg_tbl_copy = cfg_tbl.clone();
 
   // Build lsv helpers table
   let lsv_tbl = build_lsv_helpers(lua, &cfg_tbl, app)?;
@@ -73,7 +74,9 @@ pub fn call_lua_action(
   trace::log(format!("[lua] calling action idx={}...", idx));
   let started = Instant::now();
   let ret_val: Value = func.call((lsv_tbl, cfg_tbl.clone())).map_err(|e| {
+    let bt = std::backtrace::Backtrace::force_capture();
     trace::log(format!("[lua] action idx={} error: {}", idx, e));
+    trace::log(format!("[lua] backtrace:\n{}", bt));
     io::Error::other(format!("lua fn: {e}"))
   })?;
   trace::log(format!(
@@ -89,37 +92,20 @@ pub fn call_lua_action(
   {
     Value::Table(t) => merge_tables(lua, &cfg_tbl, &t)
       .map_err(|e| io::Error::other(format!("merge: {}", e)))?,
-    _ => cfg_tbl.clone(),
+    _ => cfg_tbl,
   };
 
   // Parse lightweight effects first
   let mut fx = parse_effects_from_lua(&candidate_tbl);
-  // Fallback: if output not parsed but keys exist, populate
+  // Fallback: read from original cfg table if helper mutated it
   if fx.output.is_none()
   {
-    if let Ok(text) = candidate_tbl.get::<mlua::String>("output_text")
+    if let Ok(text) = cfg_tbl_copy.get::<String>("output_text")
     {
-      let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
-      let title_s = match candidate_tbl.get::<mlua::String>("output_title")
-      {
-        Ok(s) => match s.to_str() { Ok(v) => v.to_string(), Err(_) => String::from("Output") },
-        Err(_) => String::from("Output"),
-      };
-      fx.output = Some((title_s, text_s));
-    }
-  }
-  // Final fallback: read directly from cfg_tbl (mutated in-place by helpers)
-  if fx.output.is_none()
-  {
-    if let Ok(text) = cfg_tbl.get::<mlua::String>("output_text")
-    {
-      let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
-      let title_s = match cfg_tbl.get::<mlua::String>("output_title")
-      {
-        Ok(s) => match s.to_str() { Ok(v) => v.to_string(), Err(_) => String::from("Output") },
-        Err(_) => String::from("Output"),
-      };
-      fx.output = Some((title_s, text_s));
+      let title = cfg_tbl_copy
+        .get::<String>("output_title")
+        .unwrap_or_else(|_| String::from("Output"));
+      fx.output = Some((title, text));
     }
   }
 
@@ -241,6 +227,18 @@ fn build_lsv_helpers(
     .set("delete_selected", delete_selected_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
+  // delete_selected_all(): request delete confirmation for all selected
+  let cfg_ref_del_all = cfg_tbl.clone();
+  let delete_selected_all_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_del_all.set("confirm", "delete_all");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("delete_selected_all", delete_selected_all_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
   // add_entry(): open add-entry prompt overlay
   let cfg_ref_add = cfg_tbl.clone();
   let add_entry_fn = lua
@@ -263,6 +261,18 @@ fn build_lsv_helpers(
     .map_err(|e| io::Error::other(e.to_string()))?;
   tbl
     .set("show_messages", show_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // toggle_output(): toggle output overlay
+  let cfg_ref_out = cfg_tbl.clone();
+  let toggle_output_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_out.set("output", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("toggle_output", toggle_output_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   // rename_item(): open rename prompt
@@ -299,6 +309,47 @@ fn build_lsv_helpers(
     .map_err(|e| io::Error::other(e.to_string()))?;
   tbl
     .set("clear_selection", clear_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // Clipboard helpers
+  let cfg_ref_cp = cfg_tbl.clone();
+  let copy_selection_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_cp.set("clipboard", "copy_arm");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("copy_selection", copy_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_mv = cfg_tbl.clone();
+  let move_selection_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_mv.set("clipboard", "move_arm");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("move_selection", move_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_ps = cfg_tbl.clone();
+  let paste_clipboard_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_ps.set("clipboard", "paste");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("paste_clipboard", paste_clipboard_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_cc = cfg_tbl.clone();
+  let clear_clipboard_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_cc.set("clipboard", "clear");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("clear_clipboard", clear_clipboard_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   // Note: we only add unknown-function guard on config-time lsv to avoid

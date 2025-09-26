@@ -89,9 +89,9 @@ pub fn apply_effects(
   // Confirmations
   match fx.confirm
   {
-    crate::actions::effects::ConfirmCommand::Delete =>
+    crate::actions::effects::ConfirmCommand::DeleteSelected =>
     {
-      crate::trace::log("[apply] confirm=delete -> request_delete_selected()".to_string());
+      crate::trace::log("[apply] confirm=delete_selected -> request_delete_selected(all)".to_string());
       app.request_delete_selected();
     }
     crate::actions::effects::ConfirmCommand::None => {}
@@ -109,6 +109,16 @@ pub fn apply_effects(
       app.clear_all_selected();
     }
     crate::actions::effects::SelectCommand::None => {}
+  }
+
+  // Clipboard commands
+  match fx.clipboard
+  {
+    crate::actions::effects::ClipboardCommand::CopyArm => app.copy_selection(),
+    crate::actions::effects::ClipboardCommand::MoveArm => app.move_selection(),
+    crate::actions::effects::ClipboardCommand::Paste => app.paste_clipboard(),
+    crate::actions::effects::ClipboardCommand::Clear => app.clear_clipboard(),
+    crate::actions::effects::ClipboardCommand::None => {}
   }
 
   if fx.redraw { app.force_full_redraw = true; }

@@ -23,6 +23,7 @@ pub struct ActionEffects
   pub prompt:         PromptCommand,
   pub confirm:        ConfirmCommand,
   pub select:         SelectCommand,
+  pub clipboard:      ClipboardCommand,
 }
 use mlua::Table;
 
@@ -58,15 +59,12 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
   {
     fx.output_overlay = s.as_str().into();
   }
-  if let Ok(text) = tbl.get::<mlua::String>("output_text")
+  if let Ok(text) = tbl.get::<String>("output_text")
   {
     let title = tbl
-      .get::<mlua::String>("output_title")
-      .ok()
-      .and_then(|s| s.to_str().ok().map(|v| v.to_string()))
-      .unwrap_or_else(|| String::from("Output"));
-    let text_s = match text.to_str() { Ok(v) => v.to_string(), Err(_) => String::new() };
-    fx.output = Some((title, text_s));
+      .get::<String>("output_title")
+      .unwrap_or_else(|_| String::from("Output"));
+    fx.output = Some((title, text));
   }
   // redraw/quit
   fx.redraw = tbl.get::<bool>("redraw").unwrap_or(false);
@@ -89,10 +87,19 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
   }
   if let Ok(c) = tbl.get::<String>("confirm")
   {
-    if c == "delete" || c == "remove" || c == "rm"
+    match c.as_str()
     {
-      crate::trace::log("[effects] confirm request 'delete'".to_string());
-      fx.confirm = ConfirmCommand::Delete;
+      "delete" | "remove" | "rm" =>
+      {
+        crate::trace::log("[effects] confirm request 'delete_selected' (mapped)".to_string());
+        fx.confirm = ConfirmCommand::DeleteSelected;
+      }
+      "delete_all" | "delete_selected" =>
+      {
+        crate::trace::log("[effects] confirm request 'delete_selected'".to_string());
+        fx.confirm = ConfirmCommand::DeleteSelected;
+      }
+      _ => {}
     }
   }
 
@@ -104,6 +111,18 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
       "clear" => fx.select = SelectCommand::ClearAll,
       _ => {}
     }
+  }
+
+  if let Ok(s) = tbl.get::<String>("clipboard")
+  {
+    fx.clipboard = match s.as_str()
+    {
+      "copy_arm" => ClipboardCommand::CopyArm,
+      "move_arm" => ClipboardCommand::MoveArm,
+      "paste" => ClipboardCommand::Paste,
+      "clear" => ClipboardCommand::Clear,
+      _ => ClipboardCommand::None,
+    };
   }
 
   fx
@@ -131,7 +150,7 @@ pub enum ConfirmCommand
 {
   #[default]
   None,
-  Delete,
+  DeleteSelected,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,4 +160,15 @@ pub enum SelectCommand
   None,
   ToggleCurrent,
   ClearAll,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClipboardCommand
+{
+  #[default]
+  None,
+  CopyArm,
+  MoveArm,
+  Paste,
+  Clear,
 }

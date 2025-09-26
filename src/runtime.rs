@@ -43,6 +43,10 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
       }
       if let Err(e) = terminal.draw(|f| crate::ui::draw(f, app))
       {
+        // Log draw errors with a backtrace for diagnostics
+        let bt = std::backtrace::Backtrace::force_capture();
+        crate::trace::log(format!("[runtime] draw error: {}", e));
+        crate::trace::log(format!("[runtime] backtrace:\n{}", bt));
         result = Err(e.into());
         break;
       }
@@ -57,6 +61,9 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
             {}
             Err(e) =>
             {
+              let bt = std::backtrace::Backtrace::force_capture();
+              crate::trace::log(format!("[runtime] input error: {}", e));
+              crate::trace::log(format!("[runtime] backtrace:\n{}", bt));
               result = Err(e.into());
               break;
             }
@@ -67,6 +74,9 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
           {}
           Err(e) =>
           {
+            let bt = std::backtrace::Backtrace::force_capture();
+            crate::trace::log(format!("[runtime] event read error: {}", e));
+            crate::trace::log(format!("[runtime] backtrace:\n{}", bt));
             result = Err(e.into());
             break;
           }
@@ -75,6 +85,9 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
         {}
         Err(e) =>
         {
+          let bt = std::backtrace::Backtrace::force_capture();
+          crate::trace::log(format!("[runtime] poll error: {}", e));
+          crate::trace::log(format!("[runtime] backtrace:\n{}", bt));
           result = Err(e.into());
           break;
         }

@@ -880,16 +880,41 @@ fn install_lsv_api(
   // lsv.map_action(keymap, description, fn)
   let maps_for_actions_outer = Rc::clone(&maps);
   let actions_acc_outer = Rc::clone(&lua_action_keys_out);
+  // lsv.map_action(keymap_or_list, description, fn)
   let map_action_fn = lua.create_function(
-    move |lua, (keymap, desc, func): (String, String, Function)| {
+    move |lua, (keymaps_val, desc, func): (Value, String, Function)| {
       let reg = lua.create_registry_value(func)?;
       let idx = actions_acc_outer.borrow().len();
       actions_acc_outer.borrow_mut().push(reg);
-      maps_for_actions_outer.borrow_mut().push(KeyMapping {
-        sequence:    keymap,
-        action:      format!("run_lua:{}", idx),
-        description: Some(desc),
-      });
+      let action_str = format!("run_lua:{}", idx);
+      match keymaps_val
+      {
+        Value::String(s) =>
+        {
+          let seq = s.to_str().map(|v| v.to_string()).unwrap_or_default();
+          maps_for_actions_outer.borrow_mut().push(KeyMapping {
+            sequence:    seq,
+            action:      action_str.clone(),
+            description: Some(desc.clone()),
+          });
+        }
+        Value::Table(t) =>
+        {
+          for pair in t.sequence_values::<Value>()
+          {
+            if let Value::String(s) = pair?
+            {
+              let seq = s.to_str().map(|v| v.to_string()).unwrap_or_default();
+              maps_for_actions_outer.borrow_mut().push(KeyMapping {
+                sequence:    seq,
+                action:      action_str.clone(),
+                description: Some(desc.clone()),
+              });
+            }
+          }
+        }
+        _ => {}
+      }
       Ok(true)
     },
   )?;

@@ -158,7 +158,7 @@ pub fn handle_key(
     use crossterm::event::KeyEventKind;
     if key.kind != KeyEventKind::Press { return Ok(false); }
     let st = st_box.as_ref();
-    enum Act { None, Delete(std::path::PathBuf) }
+    enum Act { None, DeleteAll }
     let mut act = Act::None;
     match key.code
     {
@@ -169,30 +169,12 @@ pub fn handle_key(
       }
       KeyCode::Enter =>
       {
-        if st.default_yes
-        {
-          let target = match &st.kind
-          {
-            crate::app::ConfirmKind::DeleteEntry(p) => p.clone(),
-          };
-          crate::trace::log(format!(
-            "[confirm] ENTER default_yes -> delete path='{}'",
-            target.display()
-          ));
-          act = Act::Delete(target);
-        }
+        // ENTER only confirms if default_yes
+        if st.default_yes { act = Act::DeleteAll; }
       }
       KeyCode::Char('y') | KeyCode::Char('Y') =>
       {
-        let target = match &st.kind
-        {
-          crate::app::ConfirmKind::DeleteEntry(p) => p.clone(),
-        };
-        crate::trace::log(format!(
-          "[confirm] key='y' -> delete path='{}'",
-          target.display()
-        ));
-        act = Act::Delete(target);
+        act = Act::DeleteAll;
       }
       KeyCode::Char('n') | KeyCode::Char('N') =>
       {
@@ -201,12 +183,17 @@ pub fn handle_key(
       }
       _ => {}
     }
+    // Drop borrow before mutating app
+    let kind = st.kind.clone();
     app.overlay = crate::app::Overlay::None;
     app.force_full_redraw = true;
-    match act
+    match (act, &kind)
     {
-      Act::Delete(p) => { app.perform_delete_path(&p); }
-      Act::None => {}
+      (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) =>
+      {
+        for p in list.iter() { let _ = app.perform_delete_path(p); }
+      }
+      _ => {}
     }
     return Ok(false);
   }
@@ -225,11 +212,7 @@ pub fn handle_key(
 
   if let KeyCode::Char(ch) = key.code
   {
-    // Allow plain or SHIFT-modified letters; ignore Ctrl/Alt/Super
-    let disallowed = key.modifiers.contains(KeyModifiers::CONTROL)
-      || key.modifiers.contains(KeyModifiers::ALT)
-      || key.modifiers.contains(KeyModifiers::SUPER);
-    if !disallowed
+    // Allow modifier combinations; build token string for sequence matching
     {
       let now = std::time::Instant::now();
       // reset pending_seq on timeout
@@ -245,7 +228,28 @@ pub fn handle_key(
       }
       app.keys.last_at = Some(now);
 
-      app.keys.pending.push(ch);
+      // Build token
+      let mut tok = String::new();
+      let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+      let alt = key.modifiers.contains(KeyModifiers::ALT);
+      let superm = key.modifiers.contains(KeyModifiers::SUPER);
+      let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+      if ctrl || alt || superm || (shift && !ch.is_ascii_alphabetic())
+      {
+        tok.push('<');
+        let mut _first = true;
+        if ctrl { tok.push_str("C-"); _first = false; }
+        if alt { tok.push_str("M-"); _first = false; }
+        if superm { tok.push_str("S-"); _first = false; }
+        if shift && !ch.is_ascii_alphabetic() { tok.push_str("Sh-"); _first = false; }
+        tok.push(ch);
+        tok.push('>');
+      }
+      else
+      {
+        tok.push(ch);
+      }
+      app.keys.pending.push_str(&tok);
       let seq = app.keys.pending.clone();
 
       if let Some(action) = app.keys.lookup.get(seq.as_str()).cloned()

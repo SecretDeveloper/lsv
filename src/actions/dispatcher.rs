@@ -71,6 +71,10 @@ pub fn dispatch_action(
       }
       return Ok(false);
     }
+    else
+    {
+      trace::log(format!("[dispatch] bad lua index in '{}'", action));
+    }
   }
 
   // Internal action

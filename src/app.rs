@@ -82,6 +82,31 @@ pub struct KeyState
   pub last_at:  Option<std::time::Instant>,
 }
 
+fn tokenize_sequence(seq: &str) -> Vec<String>
+{
+  let mut out = Vec::new();
+  let chars: Vec<char> = seq.chars().collect();
+  let mut i = 0usize;
+  while i < chars.len()
+  {
+    if chars[i] == '<'
+    {
+      let mut j = i + 1;
+      while j < chars.len() && chars[j] != '>' { j += 1; }
+      if j < chars.len() && chars[j] == '>'
+      {
+        let tok: String = chars[i..=j].iter().collect();
+        out.push(tok);
+        i = j + 1;
+        continue;
+      }
+    }
+    out.push(chars[i].to_string());
+    i += 1;
+  }
+  out
+}
+
 pub struct LuaRuntime
 {
   pub engine:   crate::config::LuaEngine,
@@ -105,10 +130,25 @@ pub struct PromptState
   pub kind:   PromptKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClipboardOp
+{
+  Copy,
+  Move,
+}
+
+#[derive(Debug, Clone)]
+pub struct Clipboard
+{
+  pub op:    ClipboardOp,
+  pub items: Vec<std::path::PathBuf>,
+}
+
 #[derive(Debug, Clone)]
 pub enum ConfirmKind
 {
   DeleteEntry(std::path::PathBuf),
+  DeleteSelected(Vec<std::path::PathBuf>),
 }
 
 #[derive(Debug, Clone)]
@@ -137,6 +177,7 @@ pub struct App
   pub(crate) force_full_redraw: bool,
   pub(crate) lua:               Option<LuaRuntime>,
   pub(crate) selected:          std::collections::HashSet<std::path::PathBuf>,
+  pub(crate) clipboard:         Option<Clipboard>,
   // In-memory runtime settings
   pub(crate) sort_key:          SortKey,
   pub(crate) sort_reverse:      bool,
@@ -243,6 +284,7 @@ impl App
       force_full_redraw: false,
       lua: None,
       selected: std::collections::HashSet::new(),
+      clipboard: None,
       sort_key: SortKey::Name,
       sort_reverse: false,
       info_mode: InfoMode::None,
@@ -518,17 +560,15 @@ impl App
     for m in &self.keys.maps
     {
       self.keys.lookup.insert(m.sequence.clone(), m.action.clone());
-      // collect prefixes for sequence matching
-      let s = &m.sequence;
-      let chars = s.chars();
-      let mut prefix = String::new();
-      for c in chars
+      // collect token-based prefixes for sequence matching
+      let tokens = tokenize_sequence(&m.sequence);
+      let mut acc = String::new();
+      for (idx, t) in tokens.iter().enumerate()
       {
-        prefix.push(c);
-        // do not include the full sequence as prefix-only
-        if prefix.len() < s.len()
+        acc.push_str(t);
+        if idx + 1 < tokens.len()
         {
-          self.keys.prefixes.insert(prefix.clone());
+          self.keys.prefixes.insert(acc.clone());
         }
       }
     }
@@ -732,6 +772,135 @@ impl App
     }
   }
 
+  pub(crate) fn copy_selection(&mut self)
+  {
+    let items: Vec<std::path::PathBuf> = self.selected.iter().cloned().collect();
+    if items.is_empty()
+    {
+      self.add_message("Copy: no items selected");
+      return;
+    }
+    self.clipboard = Some(Clipboard { op: ClipboardOp::Copy, items });
+    self.add_message("Copied selection to clipboard");
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn move_selection(&mut self)
+  {
+    let items: Vec<std::path::PathBuf> = self.selected.iter().cloned().collect();
+    if items.is_empty()
+    {
+      self.add_message("Move: no items selected");
+      return;
+    }
+    self.clipboard = Some(Clipboard { op: ClipboardOp::Move, items });
+    self.add_message("Move selection armed");
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn clear_clipboard(&mut self)
+  {
+    self.clipboard = None;
+    self.add_message("Clipboard cleared");
+    self.force_full_redraw = true;
+  }
+
+  pub(crate) fn paste_clipboard(&mut self)
+  {
+    let Some(cb) = self.clipboard.clone() else
+    {
+      self.add_message("Paste: clipboard empty");
+      return;
+    };
+    let dest_dir = self.cwd.clone();
+    let mut ok = 0usize;
+    let mut skipped = 0usize;
+    let mut errs = 0usize;
+    for src in cb.items.iter()
+    {
+      if matches!(cb.op, ClipboardOp::Move) && dest_dir.starts_with(src)
+      {
+        self.add_message(&format!("Skip (move into subdir): {}", src.display()));
+        skipped += 1;
+        continue;
+      }
+      let Some(name) = src.file_name() else { skipped += 1; continue; };
+      let dest_path = dest_dir.join(name);
+      if dest_path.exists()
+      {
+        self.add_message(&format!("Skip (exists): {}", dest_path.display()));
+        skipped += 1;
+        continue;
+      }
+      let res = match cb.op
+      {
+        ClipboardOp::Copy => self.copy_path_recursive(src, &dest_path),
+        ClipboardOp::Move => self.move_path_with_fallback(src, &dest_path),
+      };
+      match res
+      {
+        Ok(()) => ok += 1,
+        Err(e) =>
+        {
+          errs += 1;
+          self.add_message(&format!("Error: {} -> {}: {}", src.display(), dest_path.display(), e));
+        }
+      }
+    }
+    if matches!(cb.op, ClipboardOp::Move)
+    {
+      for p in cb.items.iter() { self.selected.remove(p); }
+    }
+    self.clipboard = None;
+    self.refresh_lists();
+    self.refresh_preview();
+    self.add_message(&format!("Paste: ok={} skipped={} errors={}", ok, skipped, errs));
+  }
+
+  fn copy_path_recursive(
+    &self,
+    src: &std::path::Path,
+    dst: &std::path::Path,
+  ) -> std::io::Result<()>
+  {
+    let meta = std::fs::metadata(src)?;
+    if meta.is_dir()
+    {
+      std::fs::create_dir_all(dst)?;
+      for entry in std::fs::read_dir(src)?
+      {
+        let de = entry?;
+        let p = de.path();
+        let name = de.file_name();
+        let target = dst.join(name);
+        self.copy_path_recursive(&p, &target)?;
+      }
+      Ok(())
+    }
+    else
+    {
+      std::fs::copy(src, dst).map(|_| ())
+    }
+  }
+
+  fn move_path_with_fallback(
+    &self,
+    src: &std::path::Path,
+    dst: &std::path::Path,
+  ) -> std::io::Result<()>
+  {
+    match std::fs::rename(src, dst)
+    {
+      Ok(()) => Ok(()),
+      Err(_e) =>
+      {
+        self.copy_path_recursive(src, dst)?;
+        let meta = std::fs::metadata(src)?;
+        if meta.is_dir() { std::fs::remove_dir_all(src) } else { std::fs::remove_file(src) }
+      }
+    }
+  }
+
   pub fn recent_messages_len(&self) -> usize
   {
     self.recent_messages.len()
@@ -907,39 +1076,37 @@ impl App
   pub(crate) fn request_delete_selected(&mut self)
   {
     crate::trace::log("[delete] request_delete_selected()".to_string());
-    let path = match self.selected_entry()
+    if self.selected.is_empty()
     {
-      Some(e) => {
-        crate::trace::log(format!("[delete] selected='{}'", e.path.display()));
-        e.path.clone()
-      }
-      None =>
-      {
-        self.add_message("Delete: no selection");
-        crate::trace::log("[delete] no selection".to_string());
-        return;
-      }
-    };
-    crate::trace::log(format!(
-      "[delete] confirm_delete flag={}",
-      self.config.ui.confirm_delete
-    ));
+      self.add_message("Delete: no items selected");
+      return;
+    }
+    let items: Vec<PathBuf> = self.selected.iter().cloned().collect();
     if self.config.ui.confirm_delete
     {
-      let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
-      crate::trace::log(format!("[delete] opening confirm for '{}'", name));
+      let question = if items.len() == 1
+      {
+        let name = items[0]
+          .file_name()
+          .map(|s| s.to_string_lossy().to_string())
+          .unwrap_or_else(|| items[0].to_string_lossy().to_string());
+        format!("Delete '{}' ? (y/n)", name)
+      }
+      else
+      {
+        format!("Delete {} selected items? (y/n)", items.len())
+      };
       self.overlay = Overlay::Confirm(Box::new(ConfirmState {
         title:       "Confirm Delete".to_string(),
-        question:    format!("Delete '{}' ? (y/n)", name),
+        question,
         default_yes: false,
-        kind:        ConfirmKind::DeleteEntry(path),
+        kind:        ConfirmKind::DeleteSelected(items),
       }));
       self.force_full_redraw = true;
     }
     else
     {
-      crate::trace::log("[delete] confirm disabled -> deleting immediately".to_string());
-      self.perform_delete_path(&path);
+      for p in self.selected.clone().into_iter() { let _ = self.perform_delete_path(&p); }
     }
   }
 
