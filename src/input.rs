@@ -305,42 +305,7 @@ pub fn handle_key(
       app.keys.last_at = Some(now);
 
       // Build token
-      let mut tok = String::new();
-      let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-      let alt = key.modifiers.contains(KeyModifiers::ALT);
-      let superm = key.modifiers.contains(KeyModifiers::SUPER);
-      let shift = key.modifiers.contains(KeyModifiers::SHIFT);
-      if ctrl || alt || superm || (shift && !ch.is_ascii_alphabetic())
-      {
-        tok.push('<');
-        let mut _first = true;
-        if ctrl
-        {
-          tok.push_str("C-");
-          _first = false;
-        }
-        if alt
-        {
-          tok.push_str("M-");
-          _first = false;
-        }
-        if superm
-        {
-          tok.push_str("S-");
-          _first = false;
-        }
-        if shift && !ch.is_ascii_alphabetic()
-        {
-          tok.push_str("Sh-");
-          _first = false;
-        }
-        tok.push(ch);
-        tok.push('>');
-      }
-      else
-      {
-        tok.push(ch);
-      }
+      let tok = crate::keymap::build_token(ch, key.modifiers);
       app.keys.pending.push_str(&tok);
       let seq = app.keys.pending.clone();
 

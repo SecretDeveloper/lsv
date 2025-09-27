@@ -120,219 +120,25 @@ fn build_lsv_helpers(
 {
   let tbl = lua.create_table().map_err(|e| io::Error::other(e.to_string()))?;
 
-  // select_item(index)
-  let cfg_ref = cfg_tbl.clone();
-  let select_item_fn = lua
-    .create_function(move |lua, idx: i64| {
-      let ctx: Table = match cfg_ref.get("context")
-      {
-        Ok(t) => t,
-        Err(_) =>
-        {
-          let t = lua.create_table()?;
-          cfg_ref.set("context", t.clone())?;
-          t
-        }
-      };
-      let i = if idx < 0 { 0 } else { idx as u64 };
-      ctx.set("selected_index", i)?;
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("select_item", select_item_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
+  // UI and overlay helpers
+  build_ui_helpers(lua, &tbl, cfg_tbl)?;
 
-  // select_last_item()
-  let cfg_ref2 = cfg_tbl.clone();
-  let select_last_fn = lua
-    .create_function(move |_, ()| {
-      if let Ok(ctx) = cfg_ref2.get::<Table>("context")
-      {
-        let len = ctx.get::<u64>("current_len").unwrap_or(0);
-        if len > 0
-        {
-          ctx.set("selected_index", len - 1)?;
-        }
-      }
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("select_last_item", select_last_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
+  // Selection and prompts
+  build_selection_helpers(lua, &tbl, cfg_tbl)?;
 
-  // quit()
-  let cfg_ref3 = cfg_tbl.clone();
-  let quit_fn = lua
-    .create_function(move |_, ()| {
-      cfg_ref3.set("quit", true)?;
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl.set("quit", quit_fn).map_err(|e| io::Error::other(e.to_string()))?;
+  // Clipboard helpers
+  build_clipboard_helpers(lua, &tbl, cfg_tbl)?;
 
-  // prompt(message, default?)
-  let prompt_fn = lua
-    .create_function(move |_, (msg, def): (String, Option<String>)| {
-      let mut out = stdout();
-      write!(out, "{}", msg)?;
-      out.flush()?;
-      let mut input = String::new();
-      stdin().read_line(&mut input)?;
-      let input = input.trim_end().to_string();
-      Ok(if input.is_empty() { def.unwrap_or_default() } else { input })
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl.set("prompt", prompt_fn).map_err(|e| io::Error::other(e.to_string()))?;
+  // Process helpers
+  build_process_helpers(lua, &tbl, cfg_tbl, app)?;
 
-  // display_output(text, title?)
-  let cfg_ref4 = cfg_tbl.clone();
-  let display_output_fn = lua
-    .create_function(move |_, (text, title): (String, Option<String>)| {
-      cfg_ref4.set("output_text", text)?;
-      if let Some(t) = title
-      {
-        cfg_ref4.set("output_title", t)?;
-      }
-      Ok(true)
+  // getenv(name, default?) -> string|nil
+  let getenv_fn = lua
+    .create_function(|_, (name, default): (String, Option<String>)| {
+      Ok(std::env::var(&name).ok().or(default))
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("display_output", display_output_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  let cfg_ref6 = cfg_tbl.clone();
-  let open_theme_picker_fn = lua
-    .create_function(move |_, ()| {
-      cfg_ref6.set("theme_picker", "open")?;
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("open_theme_picker", open_theme_picker_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // delete_selected(): request delete confirmation (respects ui.confirm_delete)
-  let cfg_ref_del = cfg_tbl.clone();
-  let delete_selected_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_del.set("confirm", "delete");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("delete_selected", delete_selected_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // delete_selected_all(): request delete confirmation for all selected
-  let cfg_ref_del_all = cfg_tbl.clone();
-  let delete_selected_all_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_del_all.set("confirm", "delete_all");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("delete_selected_all", delete_selected_all_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // add_entry(): open add-entry prompt overlay
-  let cfg_ref_add = cfg_tbl.clone();
-  let add_entry_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_add.set("prompt", "add_entry");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("add_entry", add_entry_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // show_messages(): toggle messages overlay (legacy)
-  let cfg_ref_msg = cfg_tbl.clone();
-  let show_messages_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_msg.set("messages", "toggle");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("show_messages", show_messages_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // toggle_show_messages(): explicit name for toggling messages overlay
-  let cfg_ref_msg2 = cfg_tbl.clone();
-  let toggle_show_messages_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_msg2.set("messages", "toggle");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("toggle_show_messages", toggle_show_messages_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // close_overlays(): hide message/output overlays (Esc also clears others)
-  let cfg_ref_close = cfg_tbl.clone();
-  let close_overlays_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_close.set("messages", "hide");
-      let _ = cfg_ref_close.set("output", "hide");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("close_overlays", close_overlays_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // toggle_output(): toggle output overlay
-  let cfg_ref_out = cfg_tbl.clone();
-  let toggle_output_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_out.set("output", "toggle");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("toggle_output", toggle_output_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // rename_item(): open rename prompt
-  let cfg_ref_ren = cfg_tbl.clone();
-  let rename_item_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_ren.set("prompt", "rename_entry");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("rename_item", rename_item_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // toggle_select(): toggle selection for current item
-  let cfg_ref_sel = cfg_tbl.clone();
-  let toggle_select_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_sel.set("select", "toggle");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("toggle_select", toggle_select_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
-
-  // clear_selection(): clear all selections
-  let cfg_ref_clr = cfg_tbl.clone();
-  let clear_selection_fn = lua
-    .create_function(move |_, ()| {
-      let _ = cfg_ref_clr.set("select", "clear");
-      Ok(true)
-    })
-    .map_err(|e| io::Error::other(e.to_string()))?;
-  tbl
-    .set("clear_selection", clear_selection_fn)
-    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("getenv", getenv_fn).map_err(|e| io::Error::other(e.to_string()))?;
 
   // Clipboard helpers
   let cfg_ref_cp = cfg_tbl.clone();
@@ -515,6 +321,285 @@ fn build_lsv_helpers(
     .map_err(|e| io::Error::other(e.to_string()))?;
 
   Ok(tbl)
+}
+
+fn build_ui_helpers(
+  lua: &Lua,
+  out: &Table,
+  cfg_tbl: &Table,
+) -> io::Result<()>
+{
+  // display_output(text, title?)
+  let cfg_ref4 = cfg_tbl.clone();
+  let display_output_fn = lua
+    .create_function(move |_, (text, title): (String, Option<String>)| {
+      cfg_ref4.set("output_text", text)?;
+      if let Some(t) = title
+      {
+        cfg_ref4.set("output_title", t)?;
+      }
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("display_output", display_output_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // toggle_show_messages()
+  let cfg_ref_msg2 = cfg_tbl.clone();
+  let toggle_show_messages_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_msg2.set("messages", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("toggle_show_messages", toggle_show_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // close_overlays(): hide message/output overlays
+  let cfg_ref_close = cfg_tbl.clone();
+  let close_overlays_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_close.set("messages", "hide");
+      let _ = cfg_ref_close.set("output", "hide");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("close_overlays", close_overlays_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // toggle_output()
+  let cfg_ref_out = cfg_tbl.clone();
+  let toggle_output_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_out.set("output", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("toggle_output", toggle_output_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // open_theme_picker()
+  let cfg_ref6 = cfg_tbl.clone();
+  let open_theme_picker_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref6.set("theme_picker", "open")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("open_theme_picker", open_theme_picker_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  Ok(())
+}
+
+fn build_selection_helpers(
+  lua: &Lua,
+  out: &Table,
+  cfg_tbl: &Table,
+) -> io::Result<()>
+{
+  // select_item(index)
+  let cfg_ref = cfg_tbl.clone();
+  let select_item_fn = lua
+    .create_function(move |lua, idx: i64| {
+      let ctx: Table = match cfg_ref.get("context")
+      {
+        Ok(t) => t,
+        Err(_) =>
+        {
+          let t = lua.create_table()?;
+          cfg_ref.set("context", t.clone())?;
+          t
+        }
+      };
+      let i = if idx < 0 { 0 } else { idx as u64 };
+      ctx.set("selected_index", i)?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("select_item", select_item_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // select_last_item()
+  let cfg_ref2 = cfg_tbl.clone();
+  let select_last_fn = lua
+    .create_function(move |_, ()| {
+      if let Ok(ctx) = cfg_ref2.get::<Table>("context")
+      {
+        let len = ctx.get::<u64>("current_len").unwrap_or(0);
+        if len > 0
+        {
+          ctx.set("selected_index", len - 1)?;
+        }
+      }
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("select_last_item", select_last_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // rename_item(): open rename prompt
+  let cfg_ref_ren = cfg_tbl.clone();
+  let rename_item_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_ren.set("prompt", "rename_entry");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("rename_item", rename_item_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // add_entry(): open add-entry prompt
+  let cfg_ref_add = cfg_tbl.clone();
+  let add_entry_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_add.set("prompt", "add_entry");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("add_entry", add_entry_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // toggle_select/clear_selection
+  let cfg_ref_sel = cfg_tbl.clone();
+  let toggle_select_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_sel.set("select", "toggle");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("toggle_select", toggle_select_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_clr = cfg_tbl.clone();
+  let clear_selection_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_clr.set("select", "clear");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("clear_selection", clear_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  Ok(())
+}
+
+fn build_clipboard_helpers(
+  lua: &Lua,
+  out: &Table,
+  cfg_tbl: &Table,
+) -> io::Result<()>
+{
+  let cfg_ref_cp = cfg_tbl.clone();
+  let copy_selection_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_cp.set("clipboard", "copy_arm");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("copy_selection", copy_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_mv = cfg_tbl.clone();
+  let move_selection_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_mv.set("clipboard", "move_arm");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("move_selection", move_selection_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_p = cfg_tbl.clone();
+  let paste_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_p.set("clipboard", "paste");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("paste_clipboard", paste_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_c = cfg_tbl.clone();
+  let clear_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_c.set("clipboard", "clear");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("clear_clipboard", clear_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  Ok(())
+}
+
+fn build_process_helpers(
+  lua: &Lua,
+  out: &Table,
+  cfg_tbl: &Table,
+  _app: &App,
+) -> io::Result<()>
+{
+  // quit()
+  let cfg_ref3 = cfg_tbl.clone();
+  let quit_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref3.set("quit", true)?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out.set("quit", quit_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
+  // prompt(message, default?)
+  let prompt_fn = lua
+    .create_function(move |_, (msg, def): (String, Option<String>)| {
+      let mut out = stdout();
+      write!(out, "{}", msg)?;
+      out.flush()?;
+      let mut input = String::new();
+      stdin().read_line(&mut input)?;
+      let input = input.trim_end().to_string();
+      Ok(if input.is_empty() { def.unwrap_or_default() } else { input })
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out.set("prompt", prompt_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
+  // delete_selected / delete_selected_all
+  let cfg_ref_del = cfg_tbl.clone();
+  let delete_selected_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_del.set("confirm", "delete");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("delete_selected", delete_selected_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_del_all = cfg_tbl.clone();
+  let delete_selected_all_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_del_all.set("confirm", "delete_all");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("delete_selected_all", delete_selected_all_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  Ok(())
 }
 
 fn render_cmd(

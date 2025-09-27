@@ -1,6 +1,7 @@
 pub mod ansi;
 pub mod colors;
 pub mod panes;
+pub mod template;
 
 use ratatui::{
   layout::{
@@ -83,6 +84,9 @@ fn draw_header(
   app: &crate::App,
 )
 {
+  // helper removed; header rendering now lives in template::format_header_side
+  let _unused = (); // retain function body start for patching
+  #[allow(dead_code)]
   fn render_header_side(
     app: &crate::App,
     tpl_opt: Option<&String>,
@@ -234,8 +238,8 @@ fn draw_header(
     )
   });
 
-  let left_full = render_header_side(app, left_tpl.as_ref());
-  let right_full = render_header_side(app, right_tpl.as_ref());
+  let left_full = template::format_header_side(app, left_tpl.as_ref());
+  let right_full = template::format_header_side(app, right_tpl.as_ref());
 
   // right_full already rendered via template
 

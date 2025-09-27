@@ -20,7 +20,10 @@ use std::{
 use mlua::RegistryKey;
 use ratatui::widgets::ListState;
 
-use crate::actions::SortKey;
+use crate::{
+  actions::SortKey,
+  core::fs_ops,
+};
 
 #[derive(Debug, Clone)]
 /// Runtime state for lsv, including directory listings, preview cache, overlay
@@ -89,33 +92,7 @@ pub struct KeyState
   pub last_at:  Option<std::time::Instant>,
 }
 
-fn tokenize_sequence(seq: &str) -> Vec<String>
-{
-  let mut out = Vec::new();
-  let chars: Vec<char> = seq.chars().collect();
-  let mut i = 0usize;
-  while i < chars.len()
-  {
-    if chars[i] == '<'
-    {
-      let mut j = i + 1;
-      while j < chars.len() && chars[j] != '>'
-      {
-        j += 1;
-      }
-      if j < chars.len() && chars[j] == '>'
-      {
-        let tok: String = chars[i..=j].iter().collect();
-        out.push(tok);
-        i = j + 1;
-        continue;
-      }
-    }
-    out.push(chars[i].to_string());
-    i += 1;
-  }
-  out
-}
+use crate::keymap::tokenize_sequence;
 
 pub struct LuaRuntime
 {
@@ -509,71 +486,12 @@ impl App
     path: &Path,
   ) -> io::Result<Vec<DirEntryInfo>>
   {
-    let mut entries: Vec<DirEntryInfo> = fs::read_dir(path)?
-      .filter_map(|res| res.ok())
-      .filter_map(|e| {
-        let path = e.path();
-        let name = e.file_name().to_string_lossy().to_string();
-        if !self.config.ui.show_hidden && name.starts_with('.')
-        {
-          return None;
-        }
-        match e.file_type()
-        {
-          Ok(ft) =>
-          {
-            let meta = fs::metadata(&path).ok();
-            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-            let mtime = meta.as_ref().and_then(|m| m.modified().ok());
-            let ctime = meta.as_ref().and_then(|m| m.created().ok());
-            Some(DirEntryInfo {
-              name,
-              path,
-              is_dir: ft.is_dir(),
-              size,
-              mtime,
-              ctime,
-            })
-          }
-          Err(_) => None,
-        }
-      })
-      .collect();
-
-    let sort_key = self.sort_key;
-    let reverse = self.sort_reverse;
-
-    entries.sort_by(|a, b| {
-      // Always keep directories before files
-      match (a.is_dir, b.is_dir)
-      {
-        (true, false) => return std::cmp::Ordering::Less,
-        (false, true) => return std::cmp::Ordering::Greater,
-        _ =>
-        {}
-      }
-
-      let ord = match sort_key
-      {
-        SortKey::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        SortKey::Size => a.size.cmp(&b.size),
-        SortKey::MTime =>
-        {
-          let at = a.mtime.unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-          let bt = b.mtime.unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-          at.cmp(&bt)
-        }
-        SortKey::CTime =>
-        {
-          let at = a.ctime.unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-          let bt = b.ctime.unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-          at.cmp(&bt)
-        }
-      };
-      if reverse { ord.reverse() } else { ord }
-    });
-
-    Ok(entries)
+    crate::core::listing::read_dir_sorted(
+      path,
+      self.config.ui.show_hidden,
+      self.sort_key,
+      self.sort_reverse,
+    )
   }
 
   pub(crate) fn rebuild_keymap_lookup(&mut self)
@@ -857,8 +775,8 @@ impl App
       }
       let res = match cb.op
       {
-        ClipboardOp::Copy => App::copy_path_recursive(src, &dest_path),
-        ClipboardOp::Move => self.move_path_with_fallback(src, &dest_path),
+        ClipboardOp::Copy => fs_ops::copy_path_recursive(src, &dest_path),
+        ClipboardOp::Move => fs_ops::move_path_with_fallback(src, &dest_path),
       };
       match res
       {
@@ -891,56 +809,6 @@ impl App
     ));
   }
 
-  fn copy_path_recursive(
-    src: &std::path::Path,
-    dst: &std::path::Path,
-  ) -> std::io::Result<()>
-  {
-    let meta = std::fs::metadata(src)?;
-    if meta.is_dir()
-    {
-      std::fs::create_dir_all(dst)?;
-      for entry in std::fs::read_dir(src)?
-      {
-        let de = entry?;
-        let p = de.path();
-        let name = de.file_name();
-        let target = dst.join(name);
-        App::copy_path_recursive(&p, &target)?;
-      }
-      Ok(())
-    }
-    else
-    {
-      std::fs::copy(src, dst).map(|_| ())
-    }
-  }
-
-  fn move_path_with_fallback(
-    &self,
-    src: &std::path::Path,
-    dst: &std::path::Path,
-  ) -> std::io::Result<()>
-  {
-    match std::fs::rename(src, dst)
-    {
-      Ok(()) => Ok(()),
-      Err(_e) =>
-      {
-        App::copy_path_recursive(src, dst)?;
-        let meta = std::fs::metadata(src)?;
-        if meta.is_dir()
-        {
-          std::fs::remove_dir_all(src)
-        }
-        else
-        {
-          std::fs::remove_file(src)
-        }
-      }
-    }
-  }
-
   pub fn recent_messages_len(&self) -> usize
   {
     self.recent_messages.len()
@@ -964,7 +832,7 @@ impl App
     self.force_full_redraw = true;
   }
 
-  fn theme_root_dir(&self) -> Option<PathBuf>
+  pub(crate) fn theme_root_dir(&self) -> Option<PathBuf>
   {
     crate::config::discover_config_paths().ok().map(|p| p.root)
   }
@@ -1082,122 +950,19 @@ impl App
     self.force_full_redraw = true;
   }
 
-  fn apply_theme_entry(
-    &mut self,
-    entry: ThemePickerEntry,
-  )
-  {
-    self.config.ui.theme = Some(entry.theme);
-    self.config.ui.theme_path = Some(entry.path);
-    self.force_full_redraw = true;
-  }
-
   pub(crate) fn open_add_entry_prompt(&mut self)
   {
-    self.overlay = Overlay::Prompt(Box::new(PromptState {
-      title:  "Name (end with '/' for folder):".to_string(),
-      input:  String::new(),
-      cursor: 0,
-      kind:   PromptKind::AddEntry,
-    }));
-    self.force_full_redraw = true;
+    crate::core::overlays::open_add_entry_prompt(self)
   }
 
   pub(crate) fn open_rename_entry_prompt(&mut self)
   {
-    // If there are selected items, prefer multi-rename
-    if !self.selected.is_empty()
-    {
-      let items: Vec<std::path::PathBuf> =
-        self.selected.iter().cloned().collect();
-      let names: Vec<String> = items
-        .iter()
-        .filter_map(|p| {
-          p.file_name().and_then(|s| s.to_str()).map(|s| s.to_string())
-        })
-        .collect();
-      if names.is_empty()
-      {
-        self.add_message("Rename: no valid file names selected");
-        return;
-      }
-      let (pre, suf) = common_affixes(&names);
-      let template = format!("{}{}{}", pre, "{}", suf);
-      let title = if names.len() == 1
-      {
-        format!("Rename '{}' to:", names[0])
-      }
-      else
-      {
-        format!("Rename {} items (use {{}} for variable part):", names.len())
-      };
-      self.overlay = Overlay::Prompt(Box::new(PromptState {
-        title,
-        input: template.clone(),
-        cursor: template.len(),
-        kind: PromptKind::RenameMany { items, pre, suf },
-      }));
-      self.force_full_redraw = true;
-      return;
-    }
-
-    // Fallback: single item rename from highlighted entry
-    let (from_path, name) = match self.selected_entry()
-    {
-      Some(e) => (e.path.clone(), e.name.clone()),
-      None =>
-      {
-        self.add_message("Rename: no selection");
-        return;
-      }
-    };
-    self.overlay = Overlay::Prompt(Box::new(PromptState {
-      title:  format!("Rename '{}' to:", name),
-      input:  name.clone(),
-      cursor: name.len(),
-      kind:   PromptKind::RenameEntry { from: from_path },
-    }));
-    self.force_full_redraw = true;
+    crate::core::overlays::open_rename_entry_prompt(self)
   }
 
   pub(crate) fn request_delete_selected(&mut self)
   {
-    crate::trace::log("[delete] request_delete_selected()");
-    if self.selected.is_empty()
-    {
-      self.add_message("Delete: no items selected");
-      return;
-    }
-    let items: Vec<PathBuf> = self.selected.iter().cloned().collect();
-    if self.config.ui.confirm_delete
-    {
-      let question = if items.len() == 1
-      {
-        let name = items[0]
-          .file_name()
-          .map(|s| s.to_string_lossy().to_string())
-          .unwrap_or_else(|| items[0].to_string_lossy().to_string());
-        format!("Delete '{}' ? (y/n)", name)
-      }
-      else
-      {
-        format!("Delete {} selected items? (y/n)", items.len())
-      };
-      self.overlay = Overlay::Confirm(Box::new(ConfirmState {
-        title: "Confirm Delete".to_string(),
-        question,
-        default_yes: false,
-        kind: ConfirmKind::DeleteSelected(items),
-      }));
-      self.force_full_redraw = true;
-    }
-    else
-    {
-      for p in self.selected.clone().into_iter()
-      {
-        self.perform_delete_path(&p);
-      }
-    }
+    crate::core::overlays::request_delete_selected(self)
   }
 
   pub(crate) fn perform_delete_path(
@@ -1206,14 +971,7 @@ impl App
   )
   {
     crate::trace::log(format!("[delete] perform path='{}'", path.display()));
-    let res = if path.is_dir()
-    {
-      std::fs::remove_dir_all(path)
-    }
-    else
-    {
-      std::fs::remove_file(path)
-    };
+    let res = fs_ops::remove_path_all(path);
     match res
     {
       Ok(_) =>
@@ -1238,39 +996,12 @@ impl App
     delta: isize,
   )
   {
-    let entry = {
-      let state = match self.overlay
-      {
-        Overlay::ThemePicker(ref mut s) => s.as_mut(),
-        _ => return,
-      };
-      if state.entries.is_empty()
-      {
-        return;
-      }
-      let len = state.entries.len() as isize;
-      let mut new_idx = state.selected as isize + delta;
-      new_idx = new_idx.clamp(0, len.saturating_sub(1));
-      if new_idx as usize == state.selected
-      {
-        None
-      }
-      else
-      {
-        state.selected = new_idx as usize;
-        Some(state.entries[state.selected].clone())
-      }
-    };
-    if let Some(entry) = entry
-    {
-      self.apply_theme_entry(entry);
-    }
+    crate::core::overlays::theme_picker_move(self, delta)
   }
 
   pub(crate) fn confirm_theme_picker(&mut self)
   {
-    self.overlay = Overlay::None;
-    self.force_full_redraw = true;
+    crate::core::overlays::confirm_theme_picker(self)
   }
 
   pub(crate) fn cancel_theme_picker(&mut self)
@@ -1303,7 +1034,7 @@ impl App
   }
 }
 
-fn common_affixes(names: &[String]) -> (String, String)
+pub(crate) fn common_affixes(names: &[String]) -> (String, String)
 {
   if names.is_empty()
   {

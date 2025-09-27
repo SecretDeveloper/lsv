@@ -81,7 +81,14 @@ pub fn dispatch_action(
   if let Some(int) = parse_internal_action(action)
   {
     trace::log(format!("[dispatch] action='{}'", action));
-    execute_internal_action(app, int);
+    if let Some(fx) = super::internal::internal_effects(app, int)
+    {
+      apply_effects(app, fx);
+    }
+    else
+    {
+      execute_internal_action(app, int);
+    }
     return Ok(true);
   }
   Ok(false)

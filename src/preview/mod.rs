@@ -1,6 +1,6 @@
 use std::{
   path::Path,
-  process::Command,
+  process::Command
 };
 
 use ratatui::{
@@ -23,6 +23,7 @@ use ratatui::{
 };
 
 use crate::ui::ansi::ansi_spans;
+use mlua::Value as LuaValue;
 
 // Internal safety cap on how many preview lines we ingest/render.
 // Not configurable via user config; prevents runaway output.
@@ -202,21 +203,63 @@ fn run_previewer(
         let _ = ctx.set("current_file", path_str.clone());
         let _ = ctx.set("current_file_dir", dir_str.clone());
         let _ = ctx.set("current_file_name", name_now.clone());
-        let _ = ctx.set("current_file_extension", ext);
+        let _ = ctx.set("current_file_extension", ext.clone());
         let _ = ctx.set("is_binary", is_binary);
         let _ = ctx.set("preview_height", area.height as i64);
         let _ = ctx.set("preview_width", area.width as i64);
         let _ = ctx.set("preview_x", area.x as i64);
         let _ = ctx.set("preview_y", area.y as i64);
-        if let Ok(Some(cmd)) = func.call::<Option<String>>(ctx)
+
+        match func.call::<LuaValue>(ctx)
         {
-          let name_str = path
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-          return run_previewer_command(
-            &cmd, &dir_str, &path_str, &name_str, limit,
-          );
+          Ok(LuaValue::String(s)) =>
+          {
+            match s.to_str()
+            {
+              Ok(cmd) =>
+              {
+                let cmd = cmd.to_string();
+                crate::trace::log(format!(
+                  "[preview] lua cmd='{}' cwd='{}' file='{}'",
+                  cmd, dir_str, path_str
+                ));
+                let name_str = path
+                  .file_name()
+                  .map(|s| s.to_string_lossy().to_string())
+                  .unwrap_or_default();
+                return run_previewer_command(
+                  &cmd, &dir_str, &path_str, &name_str, limit,
+                );
+              }
+              Err(e) =>
+              {
+                crate::trace::log(format!(
+                  "[preview] lua previewer returned non-utf8 string: {}",
+                  e
+                ));
+              }
+            }
+          }
+          Ok(LuaValue::Nil) =>
+          {
+            crate::trace::log(format!(
+              "[preview] lua previewer returned nil for file {} (ext: {})",
+              path_str, ext
+            ));
+          }
+          Ok(other) =>
+          {
+            crate::trace::log(format!(
+              "[preview] lua previewer returned unexpected type: {}",
+              other.type_name()
+            ));
+          }
+          Err(e) =>
+          {
+            let bt = std::backtrace::Backtrace::force_capture();
+            crate::trace::log(format!("[preview] lua error: {}", e));
+            crate::trace::log(format!("[preview] backtrace:\n{}", bt));
+          }
         }
       }
     }
@@ -235,10 +278,10 @@ fn run_previewer_command(
 ) -> Option<Vec<String>>
 {
   crate::trace::log(format!(
-    "[preview] launching shell='{}' cmd='{}' cwd='{}' file='{}'",
+    "[preview] run: shell='{}' cwd='{}' cmd='{}' file='{}'",
     if cfg!(windows) { "cmd" } else { "sh" },
-    cmd,
     dir_str,
+    cmd,
     path_str
   ));
 
@@ -276,9 +319,9 @@ fn run_previewer_command(
       }
       let text = String::from_utf8_lossy(&buf).replace('\r', "");
       crate::trace::log(format!(
-        "[preview] exit_code={:?} success={} bytes_out={}",
-        out.status.code(),
+        "[preview] done: success={} exit_code={:?} bytes_out={}",
         out.status.success(),
+        out.status.code(),
         text.len()
       ));
       if !out.status.success()

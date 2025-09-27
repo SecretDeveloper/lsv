@@ -308,6 +308,7 @@ pub(crate) fn load_theme_table_from_path(
   path: &Path,
 ) -> mlua::Result<Table>
 {
+  crate::trace::log(format!("[lua] read theme: {}", path.display()));
   let code = fs::read_to_string(path).map_err(|e| {
     LuaError::RuntimeError(format!(
       "read theme '{}' failed: {}",
@@ -315,8 +316,21 @@ pub(crate) fn load_theme_table_from_path(
       e
     ))
   })?;
+  crate::trace::log(format!("[lua] eval theme: {}", path.display()));
   let chunk = lua.load(&code).set_name(path.to_string_lossy());
-  let value = chunk.eval::<Value>()?;
+  let value = match chunk.eval::<Value>()
+  {
+    Ok(v) => v,
+    Err(e) =>
+    {
+      crate::trace::log(format!(
+        "[lua] theme eval error ({}): {}",
+        path.display(),
+        e
+      ));
+      return Err(e);
+    }
+  };
   match value
   {
     Value::Table(t) => Ok(t),
@@ -485,22 +499,35 @@ pub fn load_config(paths: &ConfigPaths) -> std::io::Result<ConfigArtifacts>
     .map_err(|e| io_err(format!("require install failed: {e}")))?;
 
   // 1) Execute built-in defaults
-  lua
-    .load(BUILTIN_DEFAULTS_LUA)
-    .set_name("builtin/defaults.lua")
-    .exec()
-    .map_err(|e| io_err(format!("defaults.lua execution failed: {e}")))?;
+  crate::trace::log("[lua] exec builtin/defaults.lua");
+  {
+    let chunk = lua.load(BUILTIN_DEFAULTS_LUA).set_name("builtin/defaults.lua");
+    if let Err(e) = chunk.exec()
+    {
+      crate::trace::log(format!("[lua] defaults.lua error: {}", e));
+      return Err(io_err(format!("defaults.lua execution failed: {e}")));
+    }
+  }
 
   // 2) Execute user config if present
   if paths.exists
   {
     let code = fs::read_to_string(&paths.entry)
       .map_err(|e| io_err(format!("read init.lua failed: {e}")))?;
-    lua
-      .load(&code)
-      .set_name(paths.entry.to_string_lossy())
-      .exec()
-      .map_err(|e| io_err(format!("init.lua execution failed: {e}")))?;
+    crate::trace::log(format!(
+      "[lua] exec user config: {}",
+      paths.entry.to_string_lossy()
+    ));
+    let chunk = lua.load(&code).set_name(paths.entry.to_string_lossy());
+    if let Err(e) = chunk.exec()
+    {
+      crate::trace::log(format!(
+        "[lua] user config error ({}): {}",
+        paths.entry.to_string_lossy(),
+        e
+      ));
+      return Err(io_err(format!("init.lua execution failed: {e}")));
+    }
   }
 
   let cfg = config_acc.borrow().clone();
@@ -582,18 +609,26 @@ pub fn load_config_from_code(
     .map_err(|e| io_err(format!("require install failed: {e}")))?;
 
   // 1) Execute built-in defaults
+  crate::trace::log("[lua] exec builtin/defaults.lua (inline)");
   lua
     .load(BUILTIN_DEFAULTS_LUA)
     .set_name("builtin/defaults.lua")
     .exec()
-    .map_err(|e| io_err(format!("defaults.lua execution failed: {e}")))?;
+    .map_err(|e| {
+      crate::trace::log(format!("[lua] defaults.lua error: {}", e));
+      io_err(format!("defaults.lua execution failed: {e}"))
+    })?;
 
   // 2) Execute provided code
+  crate::trace::log("[lua] exec inline init.lua");
   lua
     .load(code)
-    .set_name("inline/init.lua")
+    .set_name("inline init.lua")
     .exec()
-    .map_err(|e| io_err(format!("inline init.lua execution failed: {e}")))?;
+    .map_err(|e| {
+      crate::trace::log(format!("[lua] inline init.lua error: {}", e));
+      io_err(format!("inline init.lua execution failed: {e}"))
+    })?;
 
   let cfg = config_acc.borrow().clone();
   let maps = keymaps_acc.borrow().clone();
@@ -967,6 +1002,11 @@ fn install_lsv_api(
   lsv.set("mapkey", mapkey_fn)?;
   lsv.set("set_previewer", set_previewer_fn)?;
   lsv.set("map_action", map_action_fn)?;
+  // lsv.getenv(name, default?) -> string|nil: safe env access for config, actions, previewers
+  let getenv_fn = lua.create_function(|_, (name, default): (String, Option<String>)| {
+    Ok(std::env::var(&name).ok().or(default))
+  })?;
+  lsv.set("getenv", getenv_fn)?;
   // Add metatable to error on unknown lsv.* at config time
   let mt = lua.create_table()?;
   let idx = lua.create_function(move |lua, (_tbl, key): (Table, Value)| {

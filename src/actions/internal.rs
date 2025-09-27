@@ -96,10 +96,8 @@ pub(crate) fn execute_internal_action(
       app.sort_key = key;
       app.refresh_lists();
       if let Some(name) = current_name
-        && let Some(idx) =
-          app.current_entries.iter().position(|e| e.name == name)
       {
-        app.list_state.select(Some(idx));
+        crate::core::selection::reselect_by_name(app, &name);
       }
       app.refresh_preview();
     }
@@ -109,10 +107,8 @@ pub(crate) fn execute_internal_action(
       app.sort_reverse = !app.sort_reverse;
       app.refresh_lists();
       if let Some(name) = current_name
-        && let Some(idx) =
-          app.current_entries.iter().position(|e| e.name == name)
       {
-        app.list_state.select(Some(idx));
+        crate::core::selection::reselect_by_name(app, &name);
       }
       app.refresh_preview();
     }
@@ -148,5 +144,50 @@ pub(crate) fn execute_internal_action(
         app.refresh_preview();
       }
     }
+  }
+}
+
+/// Produce lightweight effects for simple internal actions (quit/navigation)
+/// without mutating the app directly. Returns None for actions that require
+/// configuration or list mutations (sorting, display toggles).
+pub(crate) fn internal_effects(
+  app: &crate::app::App,
+  action: InternalAction,
+) -> Option<super::effects::ActionEffects>
+{
+  use super::effects::ActionEffects;
+  match action
+  {
+    InternalAction::Quit =>
+    {
+      let fx = ActionEffects { quit: true, ..Default::default() };
+      Some(fx)
+    }
+    InternalAction::GoTop =>
+    {
+      if !app.current_entries.is_empty()
+      {
+        let fx = ActionEffects { selection: Some(0), ..Default::default() };
+        Some(fx)
+      }
+      else
+      {
+        Some(ActionEffects::default())
+      }
+    }
+    InternalAction::GoBottom =>
+    {
+      if !app.current_entries.is_empty()
+      {
+        let last = app.current_entries.len().saturating_sub(1);
+        let fx = ActionEffects { selection: Some(last), ..Default::default() };
+        Some(fx)
+      }
+      else
+      {
+        Some(ActionEffects::default())
+      }
+    }
+    _ => None,
   }
 }
