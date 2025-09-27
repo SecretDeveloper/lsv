@@ -1187,12 +1187,33 @@ pub fn build_row_line(
 }
 
 fn compute_icon(
-  _app: &crate::App,
+  app: &crate::App,
   e: &crate::app::DirEntryInfo,
 ) -> String
 {
-  // Placeholder icons (to be themed later)
-  if e.is_dir { "📁".to_string() } else { "📄".to_string() }
+  let ic = &app.config.icons;
+  if !ic.enabled
+  {
+    return String::new();
+  }
+  if e.is_dir
+  {
+    return ic.default_dir.clone().unwrap_or_else(|| "📁".to_string());
+  }
+  let ext = e
+    .path
+    .extension()
+    .and_then(|s| s.to_str())
+    .map(|s| s.to_lowercase())
+    .unwrap_or_default();
+  if !ext.is_empty()
+  {
+    if let Some(sym) = ic.extensions.get(&ext)
+    {
+      return sym.clone();
+    }
+  }
+  ic.default_file.clone().unwrap_or_else(|| "📄".to_string())
 }
 
 fn truncate_with_tilde(

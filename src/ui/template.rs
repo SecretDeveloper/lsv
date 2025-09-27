@@ -1,11 +1,23 @@
 use crate::app::App;
+use ratatui::{
+  style::{Color, Modifier, Style},
+  text::Span,
+};
+use unicode_width::UnicodeWidthChar;
+
+#[derive(Clone, Default)]
+pub struct HeaderSide
+{
+  pub text:  String,
+  pub spans: Vec<Span<'static>>,
+}
 
 /// Render a header side using the configured template and runtime context.
 /// Unknown placeholders are logged via trace for troubleshooting.
 pub fn format_header_side(
   app: &App,
   tpl_opt: Option<&String>,
-) -> String
+) -> HeaderSide
 {
   // Extract placeholder names like {foo}
   fn placeholders_in(s: &str) -> Vec<String>
@@ -113,17 +125,152 @@ pub fn format_header_side(
     }
   }
 
-  tpl
-    .replace("{date}", &date_s)
-    .replace("{time}", &time_s)
-    .replace("{cwd}", &cwd_s)
-    .replace("{current_file}", &current_file)
-    .replace("{username}", &username)
-    .replace("{hostname}", &hostname)
-    .replace("{current_file_permissions}", &perms)
-    .replace("{current_file_size}", &size_s)
-    .replace("{current_file_ctime}", &ctime_s)
-    .replace("{current_file_mtime}", &mtime_s)
-    .replace("{current_file_extension}", &ext)
-    .replace("{owner}", &owner)
+  // Helper to resolve placeholder value
+  let mut value_for = |name: &str| -> String {
+    match name
+    {
+      "date" => date_s.clone(),
+      "time" => time_s.clone(),
+      "cwd" => cwd_s.clone(),
+      "current_file" => current_file.clone(),
+      "username" => username.clone(),
+      "hostname" => hostname.clone(),
+      "current_file_permissions" => perms.clone(),
+      "current_file_size" => size_s.clone(),
+      "current_file_ctime" => ctime_s.clone(),
+      "current_file_mtime" => mtime_s.clone(),
+      "current_file_extension" => ext.clone(),
+      "owner" => owner.clone(),
+      _ => String::new(),
+    }
+  };
+
+  // Parse a modifier string like "fg=red;bg=black;style=italic/bold"
+  fn style_from_mods(mods: &str) -> Style
+  {
+    let mut st = Style::default();
+    for part in mods.split(';')
+    {
+      let mut it = part.splitn(2, '=');
+      let key = it.next().unwrap_or("").trim().to_ascii_lowercase();
+      let val = it.next().unwrap_or("").trim();
+      if key.is_empty() || val.is_empty()
+      {
+        continue;
+      }
+      match key.as_str()
+      {
+        "fg" =>
+        {
+          if let Some(c) = crate::ui::colors::parse_color(val)
+          {
+            st = st.fg(c);
+          }
+        }
+        "bg" =>
+        {
+          if let Some(c) = crate::ui::colors::parse_color(val)
+          {
+            st = st.bg(c);
+          }
+        }
+        "style" =>
+        {
+          for tok in val.split(&['/', ','][..])
+          {
+            match tok.trim().to_ascii_lowercase().as_str()
+            {
+              "bold" => st = st.add_modifier(Modifier::BOLD),
+              "italic" => st = st.add_modifier(Modifier::ITALIC),
+              "underline" | "underlined" =>
+              {
+                st = st.add_modifier(Modifier::UNDERLINED)
+              }
+              _ => {}
+            }
+          }
+        }
+        _ => {}
+      }
+    }
+    st
+  }
+
+  // Walk template and build plain text + styled spans
+  let mut out = HeaderSide::default();
+  let bytes = tpl.as_bytes();
+  let mut i = 0usize;
+  let mut seg_start = 0usize;
+  while i < bytes.len()
+  {
+    if bytes[i] == b'{' && tpl[i + 1..].contains('}')
+    {
+      // flush previous plain segment
+      if seg_start < i
+      {
+        if let Some(seg) = tpl.get(seg_start..i)
+        {
+          out.text.push_str(seg);
+          out.spans.push(Span::raw(seg.to_string()));
+        }
+      }
+      // find end
+      if let Some(rel) = tpl[i + 1..].find('}')
+      {
+        let end = i + 1 + rel + 1;
+        let token = &tpl[i + 1..end - 1];
+        let (name, mods) = match token.split_once('|')
+        {
+          Some((n, m)) => (n.trim(), Some(m.trim())),
+          None => (token.trim(), None),
+        };
+        let allowed = [
+          "date",
+          "time",
+          "cwd",
+          "current_file",
+          "username",
+          "hostname",
+          "current_file_permissions",
+          "current_file_size",
+          "current_file_ctime",
+          "current_file_mtime",
+          "current_file_extension",
+          "owner",
+        ];
+        if allowed.iter().any(|&a| a == name)
+        {
+          let val = value_for(name);
+          out.text.push_str(&val);
+          let mut span = Span::raw(val);
+          if let Some(m) = mods
+          {
+            let st = style_from_mods(m);
+            span = Span::styled(span.content.clone().into_owned(), st);
+          }
+          out.spans.push(span);
+        }
+        else
+        {
+          crate::trace::log(format!("[header] unknown placeholder '{{{}}}'", token));
+          // pass through literally
+          let lit = format!("{{{}}}", token);
+          out.text.push_str(&lit);
+          out.spans.push(Span::raw(lit));
+        }
+        i = end;
+        seg_start = i;
+        continue;
+      }
+    }
+    let ch = tpl[i..].chars().next().unwrap();
+    i += ch.len_utf8();
+  }
+  if seg_start < tpl.len()
+    && let Some(seg) = tpl.get(seg_start..)
+  {
+    out.text.push_str(seg);
+    out.spans.push(Span::raw(seg.to_string()));
+  }
+  out
 }

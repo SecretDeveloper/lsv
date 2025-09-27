@@ -82,7 +82,8 @@ lsv.config({
     show_hidden = true,
     date_format = "%Y-%m-%d %H:%M",
     display_mode = "absolute",   -- or "friendly" (affects both dates and sizes)
-    theme_path = "themes/dark.lua",  -- swap to "themes/light.lua" or any palette under themes/
+    -- Prefer module form via <config>/lua/themes/dark.lua
+    theme = "themes.dark",           -- or: theme = require("themes.dark")
 
     -- Optional row layout: icon/left/middle/right with placeholders
     row = {

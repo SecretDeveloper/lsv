@@ -848,7 +848,18 @@ impl App
         return;
       }
     };
-    let themes_dir = root.join("themes");
+    // Prefer <root>/lua/themes (module-style) and fall back to <root>/themes
+    let themes_dir = {
+      let module_dir = root.join("lua").join("themes");
+      if std::fs::metadata(&module_dir).map(|m| m.is_dir()).unwrap_or(false)
+      {
+        module_dir
+      }
+      else
+      {
+        root.join("themes")
+      }
+    };
     let read_dir = match fs::read_dir(&themes_dir)
     {
       Ok(rd) => rd,

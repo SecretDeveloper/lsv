@@ -46,26 +46,34 @@ lsv.config({
 			confirm = { width_pct = 50, height_pct = 10 },
 			theme = { width_pct = 60, height_pct = 60 },
 		},
-		-- Default dark theme; users can override fully in their config
+		-- Default dark theme with explicit colours for all styles
 		theme = {
+			-- Pane and borders
 			pane_bg = "#101114",
 			border_fg = "gray",
+			-- Item rows
 			item_fg = "white",
-			item_bg = nil,
+			item_bg = "#101114",
 			selected_item_fg = "black",
 			selected_item_bg = "cyan",
+			-- Header (title) line
 			title_fg = "gray",
-			title_bg = nil,
+			title_bg = "#101114",
+			-- Info (right column) text
 			info_fg = "gray",
 			-- Per-type accents
 			dir_fg = "cyan",
-			dir_bg = nil,
+			dir_bg = "#101114",
 			file_fg = "white",
-			file_bg = nil,
+			file_bg = "#101114",
 			hidden_fg = "darkgray",
-			hidden_bg = nil,
+			hidden_bg = "#101114",
 			exec_fg = "green",
-			exec_bg = nil,
+			exec_bg = "#101114",
+			-- Selection indicator (bar)
+			selection_bar_fg = "cyan",
+			selection_bar_copy_fg = "green",
+			selection_bar_move_fg = "yellow",
 		},
 	},
 })

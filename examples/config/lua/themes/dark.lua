@@ -1,0 +1,23 @@
+-- Example dark theme for LSV
+return {
+  pane_bg = "#0b0d10",
+  border_fg = "cyan",
+  item_fg = "white",
+  item_bg = "#0b0d10",
+  selected_item_bg = "magenta",
+  selected_item_fg = "black",
+  dir_fg = "cyan",
+  dir_bg = "#0b0d10",
+  file_fg = "white",
+  file_bg = "#0b0d10",
+  hidden_fg = "darkgray",
+  hidden_bg = "#0b0d10",
+  exec_fg = "yellow",
+  exec_bg = "#0b0d10",
+  info_fg = "#9faec7",
+  title_fg = "#cdd9f5",
+  title_bg = "#10131a",
+  selection_bar_fg = "cyan",
+  selection_bar_copy_fg = "green",
+  selection_bar_move_fg = "yellow",
+}

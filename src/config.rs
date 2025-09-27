@@ -33,9 +33,13 @@ const BUILTIN_DEFAULTS_LUA: &str = include_str!("lua/defaults.lua");
 /// Icon configuration flags. Icons are optional and require a compatible font.
 pub struct IconsConfig
 {
-  pub enabled: bool,
-  pub preset:  Option<String>,
-  pub font:    Option<String>,
+  pub enabled:      bool,
+  pub preset:       Option<String>,
+  pub font:         Option<String>,
+  // Optional defaults + per-extension map (lowercased keys)
+  pub default_file: Option<String>,
+  pub default_dir:  Option<String>,
+  pub extensions:   std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -698,6 +702,46 @@ fn install_lsv_api(
       {
         icons.font = Some(f);
       }
+      if let Ok(s) = icons_tbl.get::<String>("default_file")
+      {
+        icons.default_file = Some(s);
+      }
+      if let Ok(s) = icons_tbl.get::<String>("default_dir")
+      {
+        icons.default_dir = Some(s);
+      }
+      // Legacy: icons.by_ext (deprecated). Parse first so `extensions` wins.
+      if let Ok(ext_tbl) = icons_tbl.get::<Table>("by_ext")
+      {
+        for pair in ext_tbl.pairs::<mlua::Value, mlua::Value>()
+        {
+          let (k, v) =
+            pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+          if let (mlua::Value::String(ks), mlua::Value::String(vs)) = (k, v)
+          {
+            if let (Ok(k), Ok(v)) = (ks.to_str(), vs.to_str())
+            {
+              icons.extensions.insert(k.to_lowercase(), v.to_string());
+            }
+          }
+        }
+      }
+      // Preferred: icons.extensions
+      if let Ok(ext_tbl) = icons_tbl.get::<Table>("extensions")
+      {
+        for pair in ext_tbl.pairs::<mlua::Value, mlua::Value>()
+        {
+          let (k, v) =
+            pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+          if let (mlua::Value::String(ks), mlua::Value::String(vs)) = (k, v)
+          {
+            if let (Ok(k), Ok(v)) = (ks.to_str(), vs.to_str())
+            {
+              icons.extensions.insert(k.to_lowercase(), v.to_string());
+            }
+          }
+        }
+      }
       cfg_mut.icons = icons;
     }
     if let Ok(keys_tbl) = tbl.get::<Table>("keys")
@@ -814,11 +858,58 @@ fn install_lsv_api(
         cfg_mut.ui.theme = Some(th);
         cfg_mut.ui.theme_path = Some(resolved_path);
       }
-      if let Ok(theme_tbl) = ui_tbl.get::<Table>("theme")
+      // ui.theme may be either a table (inline) or a string (module name)
+      if let Ok(val) = ui_tbl.get::<Value>("theme")
       {
-        let mut th = cfg_mut.ui.theme.clone().unwrap_or_default();
-        merge_theme_table(&theme_tbl, &mut th);
-        cfg_mut.ui.theme = Some(th);
+        match val
+        {
+          Value::Table(theme_tbl) =>
+          {
+            let mut th = cfg_mut.ui.theme.clone().unwrap_or_default();
+            merge_theme_table(&theme_tbl, &mut th);
+            cfg_mut.ui.theme = Some(th);
+          }
+          Value::String(s) =>
+          {
+            let mod_name =
+              s.to_str().map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+            // Resolve module file path under <root>/lua
+            let base = match theme_root.as_ref()
+            {
+              Some(p) => p.clone(),
+              None => std::env::current_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            };
+            let rel_path = mod_name.replace('.', "/");
+            let path = base.join("lua").join(format!("{}.lua", rel_path));
+            // Load via Lua require() to allow module code to run
+            let globals = lua.globals();
+            let require_fn: Function = globals.get("require")?;
+            let loaded: Value = require_fn.call(&mod_name)?;
+            let theme_tbl = match loaded
+            {
+              Value::Table(t) => t,
+              other =>
+              {
+                return Err(LuaError::RuntimeError(format!(
+                  "theme module '{}' must return a table (got {})",
+                  mod_name,
+                  other.type_name()
+                )));
+              }
+            };
+            let mut th = cfg_mut.ui.theme.clone().unwrap_or_default();
+            merge_theme_table(&theme_tbl, &mut th);
+            cfg_mut.ui.theme = Some(th);
+            // Record the resolved path for theme picker integration if possible
+            if let Ok(canon) = std::fs::canonicalize(&path)
+            {
+              cfg_mut.ui.theme_path = Some(canon);
+            }
+          }
+          _ =>
+          {}
+        }
       }
       if let Ok(s) = ui_tbl.get::<String>("display_mode")
       {

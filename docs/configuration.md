@@ -83,7 +83,11 @@ lsv.config({
 
 Only provide the fields you want to override; omitted values inherit from the defaults embedded in the binary.
 
-- `ui.theme_path` points to a Lua file that must `return` a table of theme colours. Paths resolve relative to the config root (e.g. `themes/dark.lua`). The returned table is merged first, and any inline `ui.theme` block in `init.lua` can further override individual fields. The repository ships reference palettes (`dark.lua`, `light.lua`, `tokyonight.lua`, `gruvbox.lua`, `catppuccin.lua`, `onedark.lua`, `dracula.lua`, `everforest.lua`, `kanagawa.lua`, `solarized.lua`) under `examples/config/themes/`.
+- Theme loading:
+  - Prefer `ui.theme` with a module name string (resolved via `require()` under `<config>/lua`), e.g. `ui.theme = "themes.dark"`.
+  - You can still inline a theme table: `ui.theme = { item_fg = "white", ... }`.
+  - For backward compatibility, `ui.theme_path = "themes/dark.lua"` is supported and loads directly from the config root.
+  - Any inline `ui.theme` table is merged on top of the loaded theme.
 
 ### Placeholders & Environment
 
@@ -99,6 +103,42 @@ local function shquote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 ```
+
+## Icons
+
+Enable glyph icons and keep the mapping in a separate Lua file:
+
+1) Create `~/.config/lsv/lua/icons.lua` (or under your `LSV_CONFIG_DIR`):
+
+```lua
+return {
+  md = "", rs = "", lua = "󰢱",
+  png = "󰋩", jpg = "󰋩", json = "", toml = "",
+}
+```
+
+2) Reference it from `init.lua` and enable icons:
+
+```lua
+local ext_icons = require("icons")
+lsv.config({
+  icons = {
+    enabled = true,
+    font = "Nerd",               -- set your terminal to a Nerd Font
+    default_file = "",
+    default_dir = "",
+    extensions = ext_icons,       -- table returned by the module above
+  },
+  ui = {
+    row_widths = { icon = 2, left = 40, middle = 0, right = 14 },
+  },
+})
+```
+
+Notes:
+- Keys in `icons.extensions` are matched case-insensitively by lowering at load time.
+- If no mapping exists for a file, `default_file` is used; directories use `default_dir`.
+- Ensure your terminal uses a Nerd Font to render these glyphs.
 
 ## Previewer Commands
 

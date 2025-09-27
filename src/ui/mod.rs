@@ -238,35 +238,109 @@ fn draw_header(
     )
   });
 
-  let left_full = template::format_header_side(app, left_tpl.as_ref());
-  let right_full = template::format_header_side(app, right_tpl.as_ref());
+  let left_side = template::format_header_side(app, left_tpl.as_ref());
+  let right_side = template::format_header_side(app, right_tpl.as_ref());
 
-  // right_full already rendered via template
-
+  // Compute widths from plain text
   let total = area.width as usize;
-  let right_w = UnicodeWidthStr::width(right_full.as_str());
+  let right_w = UnicodeWidthStr::width(right_side.text.as_str());
   let left_max = total.saturating_sub(right_w + 1);
-  let left = truncate_to_width(&left_full, left_max);
+
+  // Truncate left spans to fit
+  fn truncate_spans_to_width(
+    spans: &[ratatui::text::Span<'_>],
+    max_w: usize,
+  ) -> Vec<ratatui::text::Span<'static>>
+  {
+    if max_w == 0
+    {
+      return Vec::new();
+    }
+    let mut out: Vec<ratatui::text::Span<'static>> = Vec::new();
+    let mut used = 0usize;
+    for sp in spans
+    {
+      let s = sp.content.as_ref();
+      let mut acc = String::new();
+      for ch in s.chars()
+      {
+        let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + cw > max_w
+        {
+          break;
+        }
+        used += cw;
+        acc.push(ch);
+      }
+      if !acc.is_empty()
+      {
+        let st = sp.style;
+        out.push(ratatui::text::Span::styled(acc, st));
+      }
+      if used >= max_w
+      {
+        break;
+      }
+    }
+    out
+  }
+
+  let left_spans = truncate_spans_to_width(&left_side.spans, left_max);
 
   // Draw left and right in the same row using two aligned paragraphs
-  let mut style =
-    ratatui::style::Style::default().fg(ratatui::style::Color::Gray);
+  // Apply default title fg/bg to spans only where not explicitly set
+  let mut left_spans_final = left_spans;
+  let mut right_spans_final: Vec<ratatui::text::Span<'static>> =
+    right_side
+      .spans
+      .into_iter()
+      .map(|s| ratatui::text::Span::styled(s.content.into_owned(), s.style))
+      .collect();
   if let Some(th) = app.config.ui.theme.as_ref()
   {
     if let Some(fg) =
       th.title_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
-      style = style.fg(fg);
+      for sp in &mut left_spans_final
+      {
+        if sp.style.fg.is_none()
+        {
+          sp.style = sp.style.fg(fg);
+        }
+      }
+      for sp in &mut right_spans_final
+      {
+        if sp.style.fg.is_none()
+        {
+          sp.style = sp.style.fg(fg);
+        }
+      }
     }
     if let Some(bg) =
       th.title_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
-      style = style.bg(bg);
+      for sp in &mut left_spans_final
+      {
+        if sp.style.bg.is_none()
+        {
+          sp.style = sp.style.bg(bg);
+        }
+      }
+      for sp in &mut right_spans_final
+      {
+        if sp.style.bg.is_none()
+        {
+          sp.style = sp.style.bg(bg);
+        }
+      }
     }
   }
-  let left_p = Paragraph::new(left).alignment(Alignment::Left).style(style);
-  let right_p =
-    Paragraph::new(right_full).alignment(Alignment::Right).style(style);
+
+  let left_line = ratatui::text::Line::from(left_spans_final);
+  let left_p = Paragraph::new(left_line).alignment(Alignment::Left);
+
+  let right_line = ratatui::text::Line::from(right_spans_final);
+  let right_p = Paragraph::new(right_line).alignment(Alignment::Right);
   f.render_widget(left_p, area);
   f.render_widget(right_p, area);
 }

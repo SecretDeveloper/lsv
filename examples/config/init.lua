@@ -11,17 +11,25 @@
 --   config.context.current_file_mtime        -- modified time (formatted per ui.date_format)
 --
 -- Override a few UI defaults
+
 lsv.config({
+	icons = {
+		enabled = true,
+		font = "Nerd",
+		default_file = "",
+		default_dir = "",
+		extensions = require("icons"),
+	},
 	ui = {
 		display_mode = "friendly",
 		row = { middle = "" },
 		row_widths = { icon = 2, left = 40, right = 14 },
-		theme_path = "themes/catppuccin.lua", -- change to "themes/light.lua" for light mode
-		confirm_delete = true,
-		-- Optional tweaks still overlay on top of the theme module
-		theme = {
-			selected_item_fg = "#1b1d2b",
+		header = {
+			left = "{username|fg=cyan;style=bold}@{hostname|fg=cyan}:{current_file|fg=#ffd866}:{current_file_name|fg=red}",
+			right = "{current_file_size|fg=gray}  {owner|fg=cyan}  {current_file_permissions|fg=gray}  {current_file_ctime|fg=gray}",
 		},
+		theme = require("themes/catppuccin"), -- or: theme = require("themes/catppuccin")
+		confirm_delete = true,
 	},
 })
 
