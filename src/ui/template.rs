@@ -1,9 +1,8 @@
 use crate::app::App;
 use ratatui::{
-  style::{Color, Modifier, Style},
+  style::{Modifier, Style},
   text::Span,
 };
-use unicode_width::UnicodeWidthChar;
 
 #[derive(Clone, Default)]
 pub struct HeaderSide
@@ -57,6 +56,10 @@ pub fn format_header_side(
     .as_ref()
     .map(|e| e.path.display().to_string())
     .unwrap_or_else(|| cwd_s.clone());
+  let current_file_dir = sel_opt
+    .as_ref()
+    .map(|e| e.path.parent().unwrap_or(app.get_cwd_path().as_path()).display().to_string())
+    .unwrap_or_else(|| cwd_s.clone());
   let owner = sel_opt
     .as_ref()
     .map(|e| super::owner_string(&e.path))
@@ -87,6 +90,10 @@ pub fn format_header_side(
     .and_then(|e| {
       e.path.extension().and_then(|s| s.to_str()).map(|s| s.to_string())
     })
+    .unwrap_or_default();
+  let name_now = sel_opt
+    .as_ref()
+    .and_then(|e| e.path.file_name().and_then(|s| s.to_str()).map(|s| s.to_string()))
     .unwrap_or_default();
   let date_fmt_binding = app.get_date_format();
   let date_fmt = date_fmt_binding.as_deref().unwrap_or("%Y-%m-%d %H:%M");
@@ -133,6 +140,8 @@ pub fn format_header_side(
       "time" => time_s.clone(),
       "cwd" => cwd_s.clone(),
       "current_file" => current_file.clone(),
+      "current_file_dir" => current_file_dir.clone(),
+      "current_file_name" => name_now.clone(),
       "username" => username.clone(),
       "hostname" => hostname.clone(),
       "current_file_permissions" => perms.clone(),
@@ -229,6 +238,8 @@ pub fn format_header_side(
           "time",
           "cwd",
           "current_file",
+          "current_file_dir",
+          "current_file_name",
           "username",
           "hostname",
           "current_file_permissions",

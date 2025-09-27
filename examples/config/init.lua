@@ -25,7 +25,7 @@ lsv.config({
 		row = { middle = "" },
 		row_widths = { icon = 2, left = 40, right = 14 },
 		header = {
-			left = "{username|fg=cyan;style=bold}@{hostname|fg=cyan}:{current_file|fg=#ffd866}:{current_file_name|fg=red}",
+			left = "{username|fg=cyan;style=bold}@{hostname|fg=cyan}:{cwd|fg=#ffd866}/{current_file_name|fg=#ffd866;style=bold}",
 			right = "{current_file_size|fg=gray}  {owner|fg=cyan}  {current_file_permissions|fg=gray}  {current_file_ctime|fg=gray}",
 		},
 		theme = require("themes/catppuccin"), -- or: theme = require("themes/catppuccin")
