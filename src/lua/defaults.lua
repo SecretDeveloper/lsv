@@ -1,4 +1,15 @@
 -- Built-in defaults for lsv. Loaded before user config.
+--
+-- config.context passed to Lua actions contains:
+--   cwd                        -- current working directory
+--   selected_index             -- selected row index (0-based)
+--   current_len                -- number of entries in current pane
+--   current_file               -- full path of highlighted item (or cwd)
+--   current_file_dir           -- parent directory of highlighted item
+--   current_file_name          -- basename of highlighted item
+--   current_file_extension     -- extension (no dot) of highlighted item
+--   current_file_ctime         -- creation time (formatted per ui.date_format)
+--   current_file_mtime         -- modified time (formatted per ui.date_format)
 
 -- Provide entries for all config values; users can override any of these.
 lsv.config({
@@ -6,11 +17,15 @@ lsv.config({
 	icons = { enabled = false, preset = nil, font = nil },
 	keys = { sequence_timeout_ms = 0 },
 	ui = {
-		panes = { parent = 20, current = 30, preview = 50 },
+		panes = { parent = 10, current = 20, preview = 70 },
 		show_hidden = false,
 		date_format = "%Y-%m-%d %H:%M",
+		-- header format strings with placeholders
+		header = {
+			left = "{username}@{hostname}:{current_file}",
+			right = "{current_file_size}  {owner}  {current_file_permissions}  {current_file_ctime}",
+		},
 		display_mode = "absolute", -- or "friendly"
-		preview_lines = 100,
 		max_list_items = 5000,
 		confirm_delete = true,
 		-- initial listing/format defaults
@@ -155,6 +170,6 @@ lsv.map_action("D", "Delete selected", function(lsv, config)
 	lsv.delete_selected_all()
 end)
 -- Escape key binding (also close overlays via helper)
-lsv.map_action("<Esc>", "Escape", function(lsv, config)
+lsv.map_action("<Esc>", "Cancel Action / Close Popups", function(lsv, config)
 	lsv.close_overlays()
 end)

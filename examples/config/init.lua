@@ -1,3 +1,15 @@
+--
+-- About config.context passed to actions:
+--   config.context.cwd                       -- current working directory
+--   config.context.selected_index            -- selected row index (0-based)
+--   config.context.current_len               -- number of entries in current pane
+--   config.context.current_file              -- full path of highlighted item (or cwd)
+--   config.context.current_file_dir          -- parent directory of highlighted item
+--   config.context.current_file_name         -- basename of highlighted item
+--   config.context.current_file_extension    -- extension (no dot) of highlighted item
+--   config.context.current_file_ctime        -- creation time (formatted per ui.date_format)
+--   config.context.current_file_mtime        -- modified time (formatted per ui.date_format)
+--
 -- Override a few UI defaults
 lsv.config({
 	ui = {
@@ -16,21 +28,30 @@ lsv.config({
 
 -- Previewer: markdown via glow, images via viu, text via bat
 lsv.set_previewer(function(ctx)
-	if ctx.extension == "md" or ctx.extension == "markdown" then
-		return "glow --style=dark --width=" .. tostring(ctx.width) .. " {path}"
+	if ctx.current_file_extension == "md" or ctx.current_file_extension == "markdown" then
+		return string.format("glow --style=dark --width=%d %s", ctx.preview_width, shquote(ctx.current_file))
 	end
 	if
-		ctx.extension == "jpg"
-		or ctx.extension == "jpeg"
-		or ctx.extension == "png"
-		or ctx.extension == "gif"
-		or ctx.extension == "bmp"
-		or ctx.extension == "tiff"
+		ctx.current_file_extension == "jpg"
+		or ctx.current_file_extension == "jpeg"
+		or ctx.current_file_extension == "png"
+		or ctx.current_file_extension == "gif"
+		or ctx.current_file_extension == "bmp"
+		or ctx.current_file_extension == "tiff"
 	then
-		return "viu --width '{width}' --height '{height}' '{path}'"
+		return string.format(
+			"viu --width %d --height %d %s",
+			ctx.preview_width,
+			ctx.preview_height,
+			shquote(ctx.current_file)
+		)
 	end
 	if not ctx.is_binary then
-		return "bat --color=always --style=numbers --paging=never --wrap=never --line-range=:120 {path}"
+		return string.format(
+			"bat --color=always --style=numbers --paging=never --wrap=never --line-range=:%d %s",
+			ctx.preview_height,
+			shquote(ctx.current_file)
+		)
 	end
 	return nil
 end)
@@ -47,19 +68,19 @@ end
 
 lsv.map_action("t", "New tmux window here", function(lsv, config)
 	local dir = (config.context and config.context.cwd) or "."
-	lsv.os_run("tmux new-window -c " .. shquote(dir))
+	lsv.os_run(string.format("tmux new-window -c %s", shquote(dir)))
 end)
 
 lsv.map_action("gs", "Git Status", function(lsv, config)
 	local dir = (config.context and config.context.cwd) or "."
-	lsv.os_run("git -C " .. shquote(dir) .. " status")
+	lsv.os_run(string.format("git -C %s status", shquote(dir)))
 end)
 
 lsv.map_action("E", "Open in tmux pane", function(lsv, config)
-	local path = (config.context and config.context.cwd) or "."
-	lsv.os_run_interactive("&tmux split-window -h nvim " .. shquote(path))
+	local path = (config.context and config.context.current_file) or "."
+	lsv.os_run_interactive(string.format("&tmux split-window -h nvim %s", shquote(path)))
 end)
 lsv.map_action("e", "Edit in nvim", function(lsv, config)
-	local path = (config.context and config.context.path) or "."
-	lsv.os_run_interactive("nvim " .. shquote(path))
+	local path = (config.context and config.context.current_file) or "."
+	lsv.os_run_interactive(string.format("nvim %s", shquote(path)))
 end)

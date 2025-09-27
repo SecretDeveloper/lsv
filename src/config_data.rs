@@ -65,7 +65,6 @@ pub struct UiData
   pub show_hidden:    bool,
   pub date_format:    Option<String>,
   pub display_mode:   crate::app::DisplayMode,
-  pub preview_lines:  usize,
   pub max_list_items: usize,
   pub confirm_delete: bool,
   pub row:            UiRowData,
@@ -120,7 +119,6 @@ pub fn to_lua_config_table(
     ui.set("date_format", fmt.as_str())?;
   }
   ui.set("display_mode", crate::enums::display_mode_to_str(app.display_mode))?;
-  ui.set("preview_lines", app.config.ui.preview_lines as u64)?;
   ui.set("max_list_items", app.config.ui.max_list_items as u64)?;
   ui.set("confirm_delete", app.config.ui.confirm_delete)?;
 
@@ -131,24 +129,54 @@ pub fn to_lua_config_table(
   ctx.set("selected_index", sel_idx)?;
   ctx.set("current_len", app.current_entries.len() as u64)?;
   // Include commonly used path fields for convenience in actions
+  use chrono::{
+    DateTime,
+    Local,
+  };
   if let Some(sel) = app.selected_entry()
   {
-    ctx.set("path", sel.path.to_string_lossy().to_string())?;
-    let parent = sel.path.parent().unwrap_or(&app.cwd).to_path_buf();
-    ctx.set("parent_dir", parent.to_string_lossy().to_string())?;
-    if let Some(name) = sel.path.file_name()
+    let path_s = sel.path.to_string_lossy().to_string();
+    let dir_s =
+      sel.path.parent().unwrap_or(&app.cwd).to_string_lossy().to_string();
+    let name_s = sel
+      .path
+      .file_name()
+      .map(|s| s.to_string_lossy().to_string())
+      .unwrap_or_default();
+    let ext_s =
+      sel.path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+    ctx.set("current_file", path_s)?;
+    ctx.set("current_file_dir", dir_s)?;
+    ctx.set("current_file_name", name_s)?;
+    ctx.set("current_file_extension", ext_s)?;
+    if let Some(ct) = sel.ctime
     {
-      ctx.set("name", name.to_string_lossy().to_string())?;
+      let fmt =
+        app.config.ui.date_format.as_deref().unwrap_or("%Y-%m-%d %H:%M");
+      let dt: DateTime<Local> = DateTime::from(ct);
+      ctx.set("current_file_ctime", dt.format(fmt).to_string())?;
+    }
+    if let Some(mt) = sel.mtime
+    {
+      let fmt =
+        app.config.ui.date_format.as_deref().unwrap_or("%Y-%m-%d %H:%M");
+      let dt: DateTime<Local> = DateTime::from(mt);
+      ctx.set("current_file_mtime", dt.format(fmt).to_string())?;
     }
   }
   else
   {
-    ctx.set("path", app.cwd.to_string_lossy().to_string())?;
-    ctx.set("parent_dir", app.cwd.to_string_lossy().to_string())?;
-    if let Some(name) = app.cwd.file_name()
-    {
-      ctx.set("name", name.to_string_lossy().to_string())?;
-    }
+    let path_s = app.cwd.to_string_lossy().to_string();
+    let dir_s = app.cwd.to_string_lossy().to_string();
+    let name_s = app
+      .cwd
+      .file_name()
+      .map(|s| s.to_string_lossy().to_string())
+      .unwrap_or_default();
+    ctx.set("current_file", path_s)?;
+    ctx.set("current_file_dir", dir_s)?;
+    ctx.set("current_file_name", name_s)?;
+    ctx.set("current_file_extension", "")?;
   }
   ui.set(
     "context_note",
@@ -309,7 +337,6 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
     .ok_or_else(|| {
       "ui.display_mode must be 'absolute' or 'friendly'".to_string()
     })?;
-  let preview_lines_u64 = get_u64(&ui_tbl, "preview_lines")?;
   let max_list_items_u64 = get_u64(&ui_tbl, "max_list_items")?;
   let confirm_delete = get_bool(&ui_tbl, "confirm_delete")?;
   let row_tbl: Table = get_req_tbl(&ui_tbl, "row")?;
@@ -355,7 +382,6 @@ pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
     show_hidden,
     date_format,
     display_mode,
-    preview_lines: preview_lines_u64 as usize,
     max_list_items: max_list_items_u64 as usize,
     confirm_delete,
     row,

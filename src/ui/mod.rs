@@ -83,47 +83,161 @@ fn draw_header(
   app: &crate::App,
 )
 {
-  // Left: {user}@{host}:{current_dir}
-  let user = whoami::username();
-  let host = whoami::fallible::hostname().unwrap_or_default();
-  let left_full = format!("{}@{}:{}", user, host, app.cwd.display());
-
-  // Right: details for selected entry: perms, owner, size, created
-  let right_full = if let Some(sel) = app.selected_entry()
+  fn render_header_side(
+    app: &crate::App,
+    tpl_opt: Option<&String>,
+  ) -> String
   {
-    let owner = owner_string(&sel.path);
-    let size_s = if sel.is_dir
+    // Validate placeholders against allowed set; log unknowns
+    fn placeholders_in(s: &str) -> Vec<String>
     {
-      "-".to_string()
-    }
-    else
-    {
-      match app.display_mode
+      let mut out = Vec::new();
+      let mut i = 0;
+      let b = s.as_bytes();
+      while i < b.len()
       {
-        crate::app::DisplayMode::Friendly =>
+        if b[i] == b'{'
+          && let Some(j) = s[i + 1..].find('}')
         {
-          crate::ui::panes::human_size(sel.size)
+          let end = i + 1 + j + 1;
+          let name = &s[i + 1..end - 1];
+          if !name.is_empty()
+          {
+            out.push(name.to_string());
+          }
+          i = end;
+          continue;
         }
-        crate::app::DisplayMode::Absolute => format!("{} B", sel.size),
+        let ch = s[i..].chars().next().unwrap();
+        i += ch.len_utf8();
       }
-    };
-    let perms = crate::ui::panes::permissions_string(sel);
-    let created_s = if let Some(ct) = sel.ctime
-    {
-      let fmt =
-        app.config.ui.date_format.as_deref().unwrap_or("%Y-%m-%d %H:%M");
-      crate::ui::panes::format_time_abs(ct, fmt)
+      out
     }
-    else
+
+    use chrono::Local;
+    let now = Local::now();
+    let date_s = now.format("%Y-%m-%d").to_string();
+    let time_s = now.format("%H:%M").to_string();
+    let username = whoami::username();
+    let hostname = whoami::fallible::hostname().unwrap_or_default();
+    let cwd_s = app.cwd.display().to_string();
+    let sel_opt = app.selected_entry();
+    let current_file = sel_opt
+      .as_ref()
+      .map(|e| e.path.display().to_string())
+      .unwrap_or_else(|| cwd_s.clone());
+    let owner = sel_opt
+      .as_ref()
+      .map(|e| owner_string(&e.path))
+      .unwrap_or_else(|| String::from("-"));
+    let perms = sel_opt
+      .as_ref()
+      .map(|e| crate::ui::panes::permissions_string(e))
+      .unwrap_or_else(|| String::from("---------"));
+    let size_s = sel_opt
+      .as_ref()
+      .map(|e| {
+        if e.is_dir
+        {
+          "-".to_string()
+        }
+        else
+        {
+          match app.display_mode
+          {
+            crate::app::DisplayMode::Friendly =>
+            {
+              crate::ui::panes::human_size(e.size)
+            }
+            crate::app::DisplayMode::Absolute => format!("{} B", e.size),
+          }
+        }
+      })
+      .unwrap_or_else(|| String::from("-"));
+    let ext = sel_opt
+      .as_ref()
+      .and_then(|e| {
+        e.path.extension().and_then(|s| s.to_str()).map(|s| s.to_string())
+      })
+      .unwrap_or_default();
+    let ctime_s = sel_opt
+      .as_ref()
+      .and_then(|e| e.ctime)
+      .map(|t| {
+        let fmt =
+          app.config.ui.date_format.as_deref().unwrap_or("%Y-%m-%d %H:%M");
+        crate::ui::panes::format_time_abs(t, fmt)
+      })
+      .unwrap_or_else(|| String::from("-"));
+    let mtime_s = sel_opt
+      .as_ref()
+      .and_then(|e| e.mtime)
+      .map(|t| {
+        let fmt =
+          app.config.ui.date_format.as_deref().unwrap_or("%Y-%m-%d %H:%M");
+        crate::ui::panes::format_time_abs(t, fmt)
+      })
+      .unwrap_or_else(|| String::from("-"));
+
+    let tpl = tpl_opt.cloned().unwrap_or_default();
+
+    // Allowed placeholders for header templates
+    let allowed = [
+      "date",
+      "time",
+      "cwd",
+      "current_file",
+      "username",
+      "hostname",
+      "current_file_permissions",
+      "current_file_size",
+      "current_file_ctime",
+      "current_file_mtime",
+      "current_file_extension",
+      "owner",
+    ];
+    for ph in placeholders_in(&tpl)
     {
-      String::from("-")
-    };
-    format!("{}  {}  {}  {}", size_s, owner, perms, created_s)
+      if !allowed.iter().any(|&a| a == ph)
+      {
+        crate::trace::log(format!("[header] unknown placeholder '{{{}}}'", ph));
+      }
+    }
+    tpl
+      .replace("{date}", &date_s)
+      .replace("{time}", &time_s)
+      .replace("{cwd}", &cwd_s)
+      .replace("{current_file}", &current_file)
+      .replace("{username}", &username)
+      .replace("{hostname}", &hostname)
+      .replace("{current_file_permissions}", &perms)
+      .replace("{current_file_size}", &size_s)
+      .replace("{current_file_ctime}", &ctime_s)
+      .replace("{current_file_mtime}", &mtime_s)
+      .replace("{current_file_extension}", &ext)
+      .replace("{owner}", &owner)
   }
-  else
-  {
-    String::new()
-  };
+
+  // Prefer user-configured templates; fall back to a sensible default
+  let left_tpl = app
+    .config
+    .ui
+    .header_left
+    .as_ref()
+    .cloned()
+    .or_else(|| Some("{username}@{hostname}:{current_file}".to_string()));
+  let right_tpl = app.config.ui.header_right.as_ref().cloned().or_else(|| {
+    Some(
+      "{current_file_size}  {owner}  {current_file_permissions}  \
+       {current_file_ctime}"
+        .to_string(),
+    )
+  });
+
+  let left_full = render_header_side(app, left_tpl.as_ref());
+  let right_full = render_header_side(app, right_tpl.as_ref());
+
+  // right_full already rendered via template
 
   let total = area.width as usize;
   let right_w = UnicodeWidthStr::width(right_full.as_str());

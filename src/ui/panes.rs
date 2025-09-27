@@ -200,6 +200,78 @@ pub fn draw_whichkey_panel(
   app: &crate::App,
 )
 {
+  // Small helpers: tokenization and display formatting for key sequences
+  fn tokenize_seq(s: &str) -> Vec<String>
+  {
+    let mut out = Vec::new();
+    let mut i = 0;
+    let b = s.as_bytes();
+    while i < b.len()
+    {
+      if b[i] == b'<'
+      {
+        // find closing '>'
+        if let Some(j) = s[i + 1..].find('>')
+        {
+          let end = i + 1 + j + 1; // include '>'
+          out.push(s[i..end].to_string());
+          i = end;
+          continue;
+        }
+      }
+      // fallback: single char token
+      let ch = s[i..].chars().next().unwrap();
+      out.push(ch.to_string());
+      i += ch.len_utf8();
+    }
+    out
+  }
+
+  fn format_token(tok: &str) -> String
+  {
+    match tok
+    {
+      " " => "Space".to_string(),
+      "\t" => "Tab".to_string(),
+      "\n" => "Enter".to_string(),
+      "<Esc>" => "Escape".to_string(),
+      _ =>
+      {
+        // Map common modifiers for readability: <C-x> -> Ctrl-x, <M-x> ->
+        // Alt-x, <S-x> -> Super-x, <Sh-x> -> Shift-x
+        if tok.starts_with('<') && tok.ends_with('>')
+        {
+          let inner = &tok[1..tok.len() - 1];
+          if let Some(rest) = inner.strip_prefix("C-")
+          {
+            return format!("Ctrl-{}", rest);
+          }
+          if let Some(rest) = inner.strip_prefix("M-")
+          {
+            return format!("Alt-{}", rest);
+          }
+          if let Some(rest) = inner.strip_prefix("S-")
+          {
+            return format!("Super-{}", rest);
+          }
+          if let Some(rest) = inner.strip_prefix("Sh-")
+          {
+            return format!("Shift-{}", rest);
+          }
+        }
+        tok.to_string()
+      }
+    }
+  }
+
+  fn format_seq_for_display(s: &str) -> String
+  {
+    let toks = tokenize_seq(s);
+    let formatted: Vec<String> =
+      toks.into_iter().map(|t| format_token(&t)).collect();
+    formatted.join("")
+  }
+
   // Build lookup: last mapping wins for duplicate sequences
   use std::collections::HashMap;
   let mut map: HashMap<&str, (&str, &str)> = HashMap::new();
@@ -214,25 +286,24 @@ pub fn draw_whichkey_panel(
     crate::app::Overlay::WhichKey { ref prefix } => prefix.as_str(),
     _ => "",
   };
-  // Bucket by next-prefix (prefix + next char)
+  // Bucket by next-prefix (prefix + next token)
   let mut buckets: HashMap<String, Vec<(&str, &str)>> = HashMap::new();
+  let prefix_toks = tokenize_seq(prefix);
   for (seq, (_, label)) in map.into_iter()
   {
-    if seq.starts_with(prefix) && seq.len() > prefix.len()
+    let seq_toks = tokenize_seq(seq);
+    if seq_toks.len() > prefix_toks.len()
     {
-      let mut np = String::with_capacity(prefix.len() + 1);
-      np.push_str(prefix);
-      if let Some(ch) = seq.chars().nth(prefix.chars().count())
+      // compare prefix by tokens
+      if seq_toks[..prefix_toks.len()] == prefix_toks[..]
       {
-        np.push(ch);
+        let mut np_toks = prefix_toks.clone();
+        np_toks.push(seq_toks[prefix_toks.len()].clone());
+        let np = np_toks.concat();
+        buckets.entry(np).or_default().push((seq, label));
       }
-      else
-      {
-        continue;
-      }
-      buckets.entry(np).or_default().push((seq, label));
     }
-    else if seq == prefix
+    else if seq_toks.len() == prefix_toks.len() && seq_toks == prefix_toks
     {
       // exact match binding at current prefix (unlikely); treat as its own
       // bucket
@@ -268,7 +339,7 @@ pub fn draw_whichkey_panel(
     {
       let (_seq, label) = list[0];
       entries.push(Entry {
-        left:     k.clone(),
+        left:     format_seq_for_display(&k),
         right:    label.to_string(),
         is_group: false,
       });
@@ -285,7 +356,7 @@ pub fn draw_whichkey_panel(
         format!("({} bindings)", n)
       };
       entries.push(Entry {
-        left:     k.clone(),
+        left:     format_seq_for_display(&k),
         right:    label,
         is_group: true,
       });
@@ -305,7 +376,7 @@ pub fn draw_whichkey_panel(
   }
   else
   {
-    format!("Keys: prefix '{}'", prefix)
+    format!("Keys: prefix '{}'", format_seq_for_display(prefix))
   };
   let mut block = Block::default().borders(Borders::ALL).title(Span::styled(
     title_str,

@@ -466,7 +466,8 @@ impl App
       }
     };
 
-    let preview_limit = self.config.ui.preview_lines;
+    const PREVIEW_LINES_LIMIT: usize = 200;
+    let preview_limit = PREVIEW_LINES_LIMIT;
     if is_dir
     {
       match self.read_dir_sorted(&path)
@@ -629,16 +630,7 @@ impl App
   {
     self.config.ui.date_format.clone()
   }
-  pub fn preview_line_limit(&self) -> usize
-  {
-    self.config.ui.preview_lines
-  }
-
-  // Backwards compatibility for tests and callers expecting the old name
-  pub fn get_preview_lines(&self) -> usize
-  {
-    self.preview_line_limit()
-  }
+  // preview_lines removed: internal cap used instead
   pub fn set_force_full_redraw(
     &mut self,
     v: bool,

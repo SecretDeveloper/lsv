@@ -11,7 +11,6 @@ lsv.config({
     show_hidden = true,
     panes = { parent = 10, current = 20, preview = 70 },
     date_format = "%Y",
-    preview_lines = 80,
     max_list_items = 1234,
     row = { icon = "X ", left = "{name}", middle = "", right = "{info}" },
     row_widths = { icon = 2, left = 40, middle = 0, right = 12 },
@@ -38,7 +37,6 @@ lsv.set_previewer(function(ctx) return nil end)
     assert_eq!(cfg.config_version, 1);
     assert_eq!(cfg.keys.sequence_timeout_ms, 600);
     assert!(cfg.ui.show_hidden);
-    assert_eq!(cfg.ui.preview_lines, 80);
     assert_eq!(cfg.ui.max_list_items, 1234);
     assert_eq!(
       cfg.ui.panes.as_ref().map(|p| (p.parent, p.current, p.preview)),
@@ -301,26 +299,7 @@ mod apply_tests
     );
   }
 
-  #[test]
-  fn apply_config_overlay_refresh_preview_only_on_preview_lines()
-  {
-    let mut app = lsv::app::App::new().expect("app new");
-    app.set_force_full_redraw(false);
-    let lua = mlua::Lua::new();
-    let tbl =
-      lsv::config_data::to_lua_config_table(&lua, &app).expect("to table");
-    let ui: mlua::Table = tbl.get("ui").expect("ui table");
-    let new_lines = app.get_preview_lines() + 1;
-    ui.set("preview_lines", new_lines as u64).expect("set preview_lines");
-    let data =
-      lsv::config_data::from_lua_config_table(tbl).expect("from table");
-    lsv::actions::apply::apply_config_overlay(&mut app, &data);
-    assert_eq!(app.get_preview_lines(), new_lines);
-    assert!(
-      !app.get_force_full_redraw(),
-      "preview-only changes should not force full redraw"
-    );
-  }
+  // Removed: preview_lines no longer configurable; internal cap used
 
   #[test]
   fn apply_effects_selection_and_overlays()
@@ -649,7 +628,7 @@ lsv.config({
     // Spot-check a few defaults set in defaults.lua
     assert_eq!(cfg.keys.sequence_timeout_ms, 0);
     assert!(!cfg.ui.show_hidden);
-    assert_eq!(cfg.ui.preview_lines, 100);
+    // preview_lines removed; engine uses internal cap
     assert_eq!(cfg.ui.max_list_items, 5000);
     assert_eq!(cfg.ui.row.as_ref().map(|r| r.left.as_str()), Some("{name}"));
   }
@@ -659,11 +638,9 @@ lsv.config({
   {
     let code = r#"
 lsv.config({ ui = { display_mode = 'friendly' } })
-lsv.config({ ui = { preview_lines = 77 } })
 "#;
     let (cfg, _maps, _eng) =
       lsv::config::load_config_from_code(code, None).expect("load config");
-    assert_eq!(cfg.ui.preview_lines, 77);
     assert_eq!(cfg.ui.display_mode.as_deref(), Some("friendly"));
   }
 
@@ -679,12 +656,12 @@ lsv.config({ ui = { preview_lines = 77 } })
       .expect("write module");
     let code = r#"
 local v = require('sub.mod')
-lsv.config({ ui = { preview_lines = v } })
+lsv.config({ ui = { max_list_items = v } })
 "#;
     let (cfg, _maps, _eng) =
       lsv::config::load_config_from_code(code, Some(&root))
         .expect("load config");
-    assert_eq!(cfg.ui.preview_lines, 33);
+    assert_eq!(cfg.ui.max_list_items, 33);
   }
 
   #[test]
@@ -719,7 +696,7 @@ lsv.config({ ui = { preview_lines = v } })
 lsv.config({
   keys = { sequence_timeout_ms = 'abc' },  -- wrong type
   ui = {
-    preview_lines = 'foo',      -- wrong type
+    -- preview_lines removed
     row_widths = { icon = 'x', left = 'y', middle = 'z', right = 'w' },
     theme = { item_fg = 123 },  -- wrong type
   },
@@ -729,7 +706,6 @@ lsv.config({
       lsv::config::load_config_from_code(code, None).expect("load config");
     // Defaults remain because bad types are ignored
     assert_eq!(cfg.keys.sequence_timeout_ms, 0);
-    assert_eq!(cfg.ui.preview_lines, 100);
     assert_eq!(
       cfg.ui.row_widths.as_ref().map(|w| (w.icon, w.left, w.middle, w.right)),
       Some((0, 0, 0, 0))
@@ -872,7 +848,6 @@ mod config_data_tests
     ui.set("show_hidden", true).unwrap();
     ui.set("date_format", "%Y").unwrap();
     ui.set("display_mode", "friendly").unwrap();
-    ui.set("preview_lines", 80u64).unwrap();
     ui.set("max_list_items", 2345u64).unwrap();
     let row: mlua::Table = ui.get("row").unwrap();
     row.set("icon", "X ").unwrap();
@@ -906,7 +881,6 @@ mod config_data_tests
     assert!(cfgd.ui.show_hidden);
     assert_eq!(cfgd.ui.date_format.as_deref(), Some("%Y"));
     assert!(matches!(cfgd.ui.display_mode, lsv::app::DisplayMode::Friendly));
-    assert_eq!(cfgd.ui.preview_lines, 80);
     assert_eq!(cfgd.ui.max_list_items, 2345);
     assert_eq!(cfgd.ui.row.icon.as_str(), "X ");
     assert_eq!(cfgd.ui.row.left.as_str(), "{name}");
@@ -1214,11 +1188,7 @@ mod app_rs_tests
     let content = (0..10).map(|i| format!("line-{i}\n")).collect::<String>();
     fs::write(&file, content).unwrap();
     let mut app = lsv::app::App::new().expect("app new");
-    // Set preview_lines to 3 via config overlay injection
-    let code = r#"lsv.config({ ui = { preview_lines = 3 } })"#;
-    let (cfg, _maps, _eng) =
-      lsv::config::load_config_from_code(code, None).unwrap();
-    app.set_config(cfg);
+    // Preview uses engine cap; file has 10 lines, expect all 10
     app.set_cwd(dir);
     // Select the long file
     if let Some(pos) = (0..100)
@@ -1226,7 +1196,7 @@ mod app_rs_tests
     {
       app.select_index(pos);
       // Refresh preview (selection change already triggers it), check length
-      assert_eq!(app.preview_line_count(), 3);
+      assert_eq!(app.preview_line_count(), 10);
     }
   }
 }
@@ -1277,14 +1247,6 @@ mod util_rs_tests
     let out = lsv::util::sanitize_line(input);
     // tab -> 4 spaces, CR removed, control -> space
     assert_eq!(out, "a    bc d");
-  }
-
-  #[test]
-  fn shell_escape_quotes_and_handles_empty()
-  {
-    assert_eq!(lsv::util::shell_escape(""), "''");
-    assert_eq!(lsv::util::shell_escape("abc"), "'abc'");
-    assert_eq!(lsv::util::shell_escape("a'b"), "'a'\\''b'");
   }
 
   #[test]
@@ -1522,7 +1484,7 @@ local function shquote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 lsv.map_action('e', 'Edit', function(lsv, config)
-  local path = (config.context and config.context.path) or "."
+  local path = (config.context and config.context.current_file) or "."
   -- Simulate editor by printing the argument we pass
   lsv.os_run("printf 'EDIT:%s' " .. shquote(path))
 end)

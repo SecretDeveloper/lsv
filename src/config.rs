@@ -80,9 +80,10 @@ pub struct UiConfig
 {
   pub panes:          Option<UiPanes>,
   pub show_hidden:    bool,
-  pub preview_lines:  usize,
   pub max_list_items: usize,
   pub date_format:    Option<String>,
+  pub header_left:    Option<String>,
+  pub header_right:   Option<String>,
   pub row:            Option<UiRowFormat>,
   pub row_widths:     Option<UiRowWidths>,
   pub display_mode:   Option<String>,
@@ -102,9 +103,10 @@ impl Default for UiConfig
     Self {
       panes:          None,
       show_hidden:    false,
-      preview_lines:  100,
       max_list_items: 5000,
       date_format:    None,
+      header_left:    None,
+      header_right:   None,
       row:            None,
       row_widths:     None,
       display_mode:   None,
@@ -704,10 +706,6 @@ fn install_lsv_api(
       {
         cfg_mut.ui.show_hidden = b;
       }
-      if let Ok(n) = ui_tbl.get::<u64>("preview_lines")
-      {
-        cfg_mut.ui.preview_lines = n as usize;
-      }
       if let Ok(n) = ui_tbl.get::<u64>("max_list_items")
       {
         cfg_mut.ui.max_list_items = n as usize;
@@ -715,6 +713,17 @@ fn install_lsv_api(
       if let Ok(s) = ui_tbl.get::<String>("date_format")
       {
         cfg_mut.ui.date_format = Some(s);
+      }
+      if let Ok(h_tbl) = ui_tbl.get::<Table>("header")
+      {
+        if let Ok(s) = h_tbl.get::<String>("left")
+        {
+          cfg_mut.ui.header_left = Some(s);
+        }
+        if let Ok(s) = h_tbl.get::<String>("right")
+        {
+          cfg_mut.ui.header_right = Some(s);
+        }
       }
       if let Ok(row_tbl) = ui_tbl.get::<Table>("row")
       {

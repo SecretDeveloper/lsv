@@ -48,29 +48,3 @@ pub fn sanitize_line(s: &str) -> String
   }
   out
 }
-
-/// Minimal POSIX shell-escaping helper used when building commands.
-pub fn shell_escape(s: &str) -> String
-{
-  if s.is_empty()
-  {
-    "''".to_string()
-  }
-  else
-  {
-    let mut out = String::from("'");
-    for ch in s.chars()
-    {
-      if ch == '\''
-      {
-        out.push_str("'\\''");
-      }
-      else
-      {
-        out.push(ch);
-      }
-    }
-    out.push('\'');
-    out
-  }
-}

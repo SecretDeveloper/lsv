@@ -24,6 +24,10 @@ use ratatui::{
 
 use crate::ui::ansi::ansi_spans;
 
+// Internal safety cap on how many preview lines we ingest/render.
+// Not configurable via user config; prevents runaway output.
+const PREVIEW_LINES_LIMIT: usize = 1000;
+
 pub fn draw_preview_panel(
   f: &mut ratatui::Frame,
   area: Rect,
@@ -47,7 +51,7 @@ pub fn draw_preview_panel(
       else
       {
         dynamic_lines =
-          run_previewer(app, &sel.path, area, app.config.ui.preview_lines);
+          run_previewer(app, &sel.path, area, PREVIEW_LINES_LIMIT);
         app.preview.cache_key = Some(key);
         app.preview.cache_lines = dynamic_lines.clone();
       }
@@ -83,7 +87,7 @@ pub fn draw_preview_panel(
       let inner_w = block_inner.width;
       let fmt = app.config.ui.row.clone().unwrap_or_default();
       let list = app.read_dir_sorted(&sel.path).unwrap_or_default();
-      let limit = app.config.ui.preview_lines.min(list.len());
+      let limit = PREVIEW_LINES_LIMIT.min(list.len());
       list
         .into_iter()
         .take(limit)
@@ -189,37 +193,27 @@ fn run_previewer(
       let ext =
         path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
       let is_binary = file_is_binary(path);
+      let name_now = path
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
       if let Ok(ctx) = lua.create_table()
       {
-        let _ = ctx.set("path", path_str.clone());
-        let _ = ctx.set("directory", dir_str.clone());
-        let _ = ctx.set("extension", ext);
+        let _ = ctx.set("current_file", path_str.clone());
+        let _ = ctx.set("current_file_dir", dir_str.clone());
+        let _ = ctx.set("current_file_name", name_now.clone());
+        let _ = ctx.set("current_file_extension", ext);
         let _ = ctx.set("is_binary", is_binary);
-        let _ = ctx.set("height", area.height as i64);
-        let _ = ctx.set("width", area.width as i64);
+        let _ = ctx.set("preview_height", area.height as i64);
+        let _ = ctx.set("preview_width", area.width as i64);
         let _ = ctx.set("preview_x", area.x as i64);
         let _ = ctx.set("preview_y", area.y as i64);
-        if let Ok(Some(mut cmd)) = func.call::<Option<String>>(ctx)
+        if let Ok(Some(cmd)) = func.call::<Option<String>>(ctx)
         {
           let name_str = path
             .file_name()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-          let ext_str =
-            path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
-          cmd = cmd.replace("{path}", &crate::util::shell_escape(&path_str));
-          cmd =
-            cmd.replace("{directory}", &crate::util::shell_escape(&dir_str));
-          cmd = cmd.replace("{dir}", &crate::util::shell_escape(&dir_str));
-          cmd = cmd.replace("{name}", &crate::util::shell_escape(&name_str));
-          cmd =
-            cmd.replace("{extension}", &crate::util::shell_escape(&ext_str));
-          let w = area.width.saturating_sub(10);
-          let h = area.height.saturating_sub(10);
-          cmd = cmd.replace("{width}", &w.to_string());
-          cmd = cmd.replace("{height}", &h.to_string());
-          cmd = cmd.replace("{preview_x}", &area.x.to_string());
-          cmd = cmd.replace("{preview_y}", &area.y.to_string());
           return run_previewer_command(
             &cmd, &dir_str, &path_str, &name_str, limit,
           );

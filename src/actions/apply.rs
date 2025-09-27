@@ -159,7 +159,7 @@ pub fn apply_config_overlay(
   let mut relist = false;
   let mut redraw_only = false;
   let mut layout_change = false;
-  let mut refresh_preview_only = false;
+  let refresh_preview_only = false;
 
   // Preserve selection by name on relist
   let selected_name = app.selected_entry().map(|e| e.name.clone());
@@ -210,12 +210,7 @@ pub fn apply_config_overlay(
     redraw_only = true;
   }
 
-  // Preview lines: affects preview trimming
-  if app.config.ui.preview_lines != data.ui.preview_lines
-  {
-    app.config.ui.preview_lines = data.ui.preview_lines;
-    refresh_preview_only = true;
-  }
+  // Preview lines removed: engine uses internal cap
 
   // Confirm delete: runtime toggle
   if app.config.ui.confirm_delete != data.ui.confirm_delete
