@@ -1,6 +1,9 @@
 use crate::app::App;
 use ratatui::{
-  style::{Modifier, Style},
+  style::{
+    Modifier,
+    Style,
+  },
   text::Span,
 };
 
@@ -58,7 +61,13 @@ pub fn format_header_side(
     .unwrap_or_else(|| cwd_s.clone());
   let current_file_dir = sel_opt
     .as_ref()
-    .map(|e| e.path.parent().unwrap_or(app.get_cwd_path().as_path()).display().to_string())
+    .map(|e| {
+      e.path
+        .parent()
+        .unwrap_or(app.get_cwd_path().as_path())
+        .display()
+        .to_string()
+    })
     .unwrap_or_else(|| cwd_s.clone());
   let owner = sel_opt
     .as_ref()
@@ -93,7 +102,9 @@ pub fn format_header_side(
     .unwrap_or_default();
   let name_now = sel_opt
     .as_ref()
-    .and_then(|e| e.path.file_name().and_then(|s| s.to_str()).map(|s| s.to_string()))
+    .and_then(|e| {
+      e.path.file_name().and_then(|s| s.to_str()).map(|s| s.to_string())
+    })
     .unwrap_or_default();
   let date_fmt_binding = app.get_date_format();
   let date_fmt = date_fmt_binding.as_deref().unwrap_or("%Y-%m-%d %H:%M");
@@ -197,11 +208,13 @@ pub fn format_header_side(
               {
                 st = st.add_modifier(Modifier::UNDERLINED)
               }
-              _ => {}
+              _ =>
+              {}
             }
           }
         }
-        _ => {}
+        _ =>
+        {}
       }
     }
     st
@@ -217,7 +230,8 @@ pub fn format_header_side(
     if bytes[i] == b'{' && tpl[i + 1..].contains('}')
     {
       // flush previous plain segment
-      if seg_start < i && let Some(seg) = tpl.get(seg_start..i)
+      if seg_start < i
+        && let Some(seg) = tpl.get(seg_start..i)
       {
         out.text.push_str(seg);
         out.spans.push(Span::raw(seg.to_string()));
@@ -262,7 +276,10 @@ pub fn format_header_side(
         }
         else
         {
-          crate::trace::log(format!("[header] unknown placeholder '{{{}}}'", token));
+          crate::trace::log(format!(
+            "[header] unknown placeholder '{{{}}}'",
+            token
+          ));
           // pass through literally
           let lit = format!("{{{}}}", token);
           out.text.push_str(&lit);

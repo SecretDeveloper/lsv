@@ -1212,7 +1212,8 @@ fn compute_icon(
     .and_then(|s| s.to_str())
     .map(|s| s.to_lowercase())
     .unwrap_or_default();
-  if !ext.is_empty() && let Some(sym) = ic.extensions.get(&ext)
+  if !ext.is_empty()
+    && let Some(sym) = ic.extensions.get(&ext)
   {
     return sym.clone();
   }

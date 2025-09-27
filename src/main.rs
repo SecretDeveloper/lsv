@@ -15,11 +15,13 @@ mod util;
 pub use app::App;
 // helpers moved to dedicated modules
 
-fn print_version() {
+fn print_version()
+{
   println!("lsv {}", env!("CARGO_PKG_VERSION"));
 }
 
-fn print_help() {
+fn print_help()
+{
   println!(
     "Usage: lsv [OPTIONS] [DIR]\n\n\
      Options:\n\
@@ -56,7 +58,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
       }
       s if s == "--trace" || s.starts_with("--trace=") =>
       {
-        let file = if let Some(eq) = s.split_once('=') { eq.1.to_string() } else { String::new() };
+        let file = if let Some(eq) = s.split_once('=')
+        {
+          eq.1.to_string()
+        }
+        else
+        {
+          String::new()
+        };
         // Enable trace
         unsafe { env::set_var("LSV_TRACE", "1") };
         if !file.is_empty()

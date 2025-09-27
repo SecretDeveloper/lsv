@@ -754,7 +754,8 @@ fn install_lsv_api(
                 }
               }
             }
-            _ => {}
+            _ =>
+            {}
           }
         }
       }
@@ -796,7 +797,8 @@ fn install_lsv_api(
                 }
               }
             }
-            _ => {}
+            _ =>
+            {}
           }
         }
       }
@@ -820,7 +822,9 @@ fn install_lsv_api(
                     let n = name.trim();
                     if !n.is_empty()
                     {
-                      icons.extensions.insert(n.to_lowercase(), icon.to_string());
+                      icons
+                        .extensions
+                        .insert(n.to_lowercase(), icon.to_string());
                     }
                   }
                 }
@@ -840,7 +844,8 @@ fn install_lsv_api(
                   }
                 }
               }
-              _ => {}
+              _ =>
+              {}
             }
           }
         }
@@ -881,7 +886,8 @@ fn install_lsv_api(
                   }
                 }
               }
-              _ => {}
+              _ =>
+              {}
             }
           }
         }
@@ -891,7 +897,8 @@ fn install_lsv_api(
       {
         for pair in f_tbl.pairs::<mlua::Value, mlua::Value>()
         {
-          let (k, v) = pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+          let (k, v) =
+            pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
           match (k, v)
           {
             (mlua::Value::String(ks), mlua::Value::String(vs)) =>
@@ -923,7 +930,8 @@ fn install_lsv_api(
                 }
               }
             }
-            _ => {}
+            _ =>
+            {}
           }
         }
       }
@@ -932,7 +940,8 @@ fn install_lsv_api(
       {
         for pair in f_tbl.pairs::<mlua::Value, mlua::Value>()
         {
-          let (k, v) = pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+          let (k, v) =
+            pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
           if let (mlua::Value::String(ks), mlua::Value::String(vs)) = (k, v)
             && let (Ok(k), Ok(v)) = (ks.to_str(), vs.to_str())
           {

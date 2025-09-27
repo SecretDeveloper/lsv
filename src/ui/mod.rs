@@ -85,8 +85,10 @@ fn draw_header(
 )
 {
   // Paint background row based on explicit header_bg or theme title_bg
-  if let Some(bg_s) = app.config.ui.header_bg.as_ref()
-    .or_else(|| app.config.ui.theme.as_ref().and_then(|t| t.title_bg.as_ref()))
+  if let Some(bg_s) =
+    app.config.ui.header_bg.as_ref().or_else(|| {
+      app.config.ui.theme.as_ref().and_then(|t| t.title_bg.as_ref())
+    })
     && let Some(bg) = crate::ui::colors::parse_color(bg_s)
   {
     let blk = ratatui::widgets::Block::default()
@@ -299,12 +301,11 @@ fn draw_header(
   // Draw left and right in the same row using two aligned paragraphs
   // Apply default title fg/bg to spans only where not explicitly set
   let mut left_spans_final = left_spans;
-  let mut right_spans_final: Vec<ratatui::text::Span<'static>> =
-    right_side
-      .spans
-      .into_iter()
-      .map(|s| ratatui::text::Span::styled(s.content.into_owned(), s.style))
-      .collect();
+  let mut right_spans_final: Vec<ratatui::text::Span<'static>> = right_side
+    .spans
+    .into_iter()
+    .map(|s| ratatui::text::Span::styled(s.content.into_owned(), s.style))
+    .collect();
   // Apply default fg/bg to spans where not explicitly set
   if let Some(th) = app.config.ui.theme.as_ref()
   {
@@ -315,7 +316,9 @@ fn draw_header(
       .header_fg
       .as_ref()
       .and_then(|s| crate::ui::colors::parse_color(s))
-      .or_else(|| th.title_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)));
+      .or_else(|| {
+        th.title_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+      });
     if let Some(fg) = fg_opt
     {
       for sp in &mut left_spans_final
@@ -340,7 +343,9 @@ fn draw_header(
       .header_bg
       .as_ref()
       .and_then(|s| crate::ui::colors::parse_color(s))
-      .or_else(|| th.title_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)));
+      .or_else(|| {
+        th.title_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+      });
     if let Some(bg) = bg_opt
     {
       for sp in &mut left_spans_final
