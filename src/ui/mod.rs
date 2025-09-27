@@ -84,6 +84,15 @@ fn draw_header(
   app: &crate::App,
 )
 {
+  // Paint background row based on explicit header_bg or theme title_bg
+  if let Some(bg_s) = app.config.ui.header_bg.as_ref()
+    .or_else(|| app.config.ui.theme.as_ref().and_then(|t| t.title_bg.as_ref()))
+    && let Some(bg) = crate::ui::colors::parse_color(bg_s)
+  {
+    let blk = ratatui::widgets::Block::default()
+      .style(ratatui::style::Style::default().bg(bg));
+    f.render_widget(blk, area);
+  }
   // helper removed; header rendering now lives in template::format_header_side
   let _unused = (); // retain function body start for patching
   #[allow(dead_code)]
@@ -296,10 +305,18 @@ fn draw_header(
       .into_iter()
       .map(|s| ratatui::text::Span::styled(s.content.into_owned(), s.style))
       .collect();
+  // Apply default fg/bg to spans where not explicitly set
   if let Some(th) = app.config.ui.theme.as_ref()
   {
-    if let Some(fg) =
-      th.title_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    // Prefer explicit ui.header_fg if provided, else theme title_fg
+    let fg_opt = app
+      .config
+      .ui
+      .header_fg
+      .as_ref()
+      .and_then(|s| crate::ui::colors::parse_color(s))
+      .or_else(|| th.title_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)));
+    if let Some(fg) = fg_opt
     {
       for sp in &mut left_spans_final
       {
@@ -316,8 +333,15 @@ fn draw_header(
         }
       }
     }
-    if let Some(bg) =
-      th.title_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    // Prefer explicit ui.header_bg if provided, else theme title_bg
+    let bg_opt = app
+      .config
+      .ui
+      .header_bg
+      .as_ref()
+      .and_then(|s| crate::ui::colors::parse_color(s))
+      .or_else(|| th.title_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s)));
+    if let Some(bg) = bg_opt
     {
       for sp in &mut left_spans_final
       {
@@ -515,26 +539,4 @@ pub fn clear_owner_cache()
 #[cfg(not(unix))]
 pub fn clear_owner_cache() {}
 
-fn truncate_to_width(
-  s: &str,
-  max_w: usize,
-) -> String
-{
-  if max_w == 0
-  {
-    return String::new();
-  }
-  let mut out = String::new();
-  let mut w = 0usize;
-  for ch in s.chars()
-  {
-    let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-    if w + cw > max_w
-    {
-      break;
-    }
-    out.push(ch);
-    w += cw;
-  }
-  out
-}
+// (unused)

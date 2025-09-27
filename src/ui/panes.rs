@@ -1198,6 +1198,12 @@ fn compute_icon(
   }
   if e.is_dir
   {
+    // Folder name specific icon override
+    let name_lc = e.name.to_lowercase();
+    if let Some(sym) = ic.folders.get(&name_lc)
+    {
+      return sym.clone();
+    }
     return ic.default_dir.clone().unwrap_or_else(|| "📁".to_string());
   }
   let ext = e
@@ -1206,12 +1212,9 @@ fn compute_icon(
     .and_then(|s| s.to_str())
     .map(|s| s.to_lowercase())
     .unwrap_or_default();
-  if !ext.is_empty()
+  if !ext.is_empty() && let Some(sym) = ic.extensions.get(&ext)
   {
-    if let Some(sym) = ic.extensions.get(&ext)
-    {
-      return sym.clone();
-    }
+    return sym.clone();
   }
   ic.default_file.clone().unwrap_or_else(|| "📄".to_string())
 }

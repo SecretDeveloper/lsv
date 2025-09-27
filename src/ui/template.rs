@@ -115,6 +115,8 @@ pub fn format_header_side(
     "time",
     "cwd",
     "current_file",
+    "current_file_dir",
+    "current_file_name",
     "username",
     "hostname",
     "current_file_permissions",
@@ -126,14 +128,14 @@ pub fn format_header_side(
   ];
   for ph in placeholders_in(&tpl)
   {
-    if !allowed.iter().any(|&a| a == ph)
+    if !allowed.contains(&ph.as_str())
     {
       crate::trace::log(format!("[header] unknown placeholder '{{{}}}'", ph));
     }
   }
 
   // Helper to resolve placeholder value
-  let mut value_for = |name: &str| -> String {
+  let value_for = |name: &str| -> String {
     match name
     {
       "date" => date_s.clone(),
@@ -215,13 +217,10 @@ pub fn format_header_side(
     if bytes[i] == b'{' && tpl[i + 1..].contains('}')
     {
       // flush previous plain segment
-      if seg_start < i
+      if seg_start < i && let Some(seg) = tpl.get(seg_start..i)
       {
-        if let Some(seg) = tpl.get(seg_start..i)
-        {
-          out.text.push_str(seg);
-          out.spans.push(Span::raw(seg.to_string()));
-        }
+        out.text.push_str(seg);
+        out.spans.push(Span::raw(seg.to_string()));
       }
       // find end
       if let Some(rel) = tpl[i + 1..].find('}')
@@ -249,7 +248,7 @@ pub fn format_header_side(
           "current_file_extension",
           "owner",
         ];
-        if allowed.iter().any(|&a| a == name)
+        if allowed.contains(&name)
         {
           let val = value_for(name);
           out.text.push_str(&val);

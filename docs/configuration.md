@@ -127,7 +127,7 @@ lsv.config({
     font = "Nerd",               -- set your terminal to a Nerd Font
     default_file = "",
     default_dir = "",
-    extensions = ext_icons,       -- table returned by the module above
+    mappings = require("icons"), -- combined extensions/folders table
   },
   ui = {
     row_widths = { icon = 2, left = 40, middle = 0, right = 14 },
@@ -139,6 +139,17 @@ Notes:
 - Keys in `icons.extensions` are matched case-insensitively by lowering at load time.
 - If no mapping exists for a file, `default_file` is used; directories use `default_dir`.
 - Ensure your terminal uses a Nerd Font to render these glyphs.
+
+### Folder-specific icons
+
+You can also assign icons to specific folder names (case-insensitive) via `mappings.folders` in the same module:
+
+```lua
+return {
+  extensions = { md = "", rs = "" },
+  folders    = { src = "󰅪", docs = "󰈙", tests = "󰙨" },
+}
+```
 
 ## Previewer Commands
 

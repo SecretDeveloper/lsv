@@ -18,7 +18,7 @@ lsv.config({
 		font = "Nerd",
 		default_file = "",
 		default_dir = "",
-		extensions = require("icons"),
+		mappings = require("icons"),
 	},
 	ui = {
 		display_mode = "friendly",
@@ -26,7 +26,9 @@ lsv.config({
 		row_widths = { icon = 2, left = 40, right = 14 },
 		header = {
 			left = "{username|fg=cyan;style=bold}@{hostname|fg=cyan}:{cwd|fg=#ffd866}/{current_file_name|fg=#ffd866;style=bold}",
-			right = "{current_file_size|fg=gray}  {owner|fg=cyan}  {current_file_permissions|fg=gray}  {current_file_ctime|fg=gray}",
+			right = "{current_file_size|fg=gray}  {owner|fg=gray}  {current_file_permissions|fg=gray}  {current_file_ctime|fg=gray}",
+			fg = "gray",
+			bg = "#181825",
 		},
 		theme = require("themes/catppuccin"), -- or: theme = require("themes/catppuccin")
 		confirm_delete = true,
@@ -94,4 +96,8 @@ end)
 lsv.map_action("e", "Edit in nvim", function(lsv, config)
 	local path = (config.context and config.context.current_file) or "."
 	lsv.os_run_interactive(string.format("$EDITOR %s", shquote(path)))
+end)
+lsv.map_action("i", "View file", function(lsv, config)
+	local path = (config.context and config.context.current_file) or "."
+	lsv.os_run_interactive(string.format("bat --paging=always %s", shquote(path)))
 end)

@@ -40,6 +40,8 @@ pub struct IconsConfig
   pub default_file: Option<String>,
   pub default_dir:  Option<String>,
   pub extensions:   std::collections::HashMap<String, String>,
+  // Optional per-folder-name icon overrides (lowercased keys)
+  pub folders:      std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -88,6 +90,8 @@ pub struct UiConfig
   pub date_format:    Option<String>,
   pub header_left:    Option<String>,
   pub header_right:   Option<String>,
+  pub header_bg:      Option<String>,
+  pub header_fg:      Option<String>,
   pub row:            Option<UiRowFormat>,
   pub row_widths:     Option<UiRowWidths>,
   pub display_mode:   Option<String>,
@@ -111,6 +115,8 @@ impl Default for UiConfig
       date_format:    None,
       header_left:    None,
       header_right:   None,
+      header_bg:      None,
+      header_fg:      None,
       row:            None,
       row_widths:     None,
       display_mode:   None,
@@ -717,12 +723,38 @@ fn install_lsv_api(
         {
           let (k, v) =
             pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
-          if let (mlua::Value::String(ks), mlua::Value::String(vs)) = (k, v)
+          match (k, v)
           {
-            if let (Ok(k), Ok(v)) = (ks.to_str(), vs.to_str())
+            (mlua::Value::String(ks), mlua::Value::String(vs)) =>
             {
-              icons.extensions.insert(k.to_lowercase(), v.to_string());
+              if let (Ok(k), Ok(icon)) = (ks.to_str(), vs.to_str())
+              {
+                for name in k.split([',', '|', ';', '/'])
+                {
+                  let n = name.trim();
+                  if !n.is_empty()
+                  {
+                    icons.extensions.insert(n.to_lowercase(), icon.to_string());
+                  }
+                }
+              }
             }
+            (mlua::Value::Table(t), _) =>
+            {
+              if let Ok(icon) = t.get::<String>("icon")
+                && let Ok(list) = t.get::<Table>("names")
+              {
+                for n in list.sequence_values::<String>().flatten()
+                {
+                  let n = n.trim().to_string();
+                  if !n.is_empty()
+                  {
+                    icons.extensions.insert(n.to_lowercase(), icon.clone());
+                  }
+                }
+              }
+            }
+            _ => {}
           }
         }
       }
@@ -733,12 +765,178 @@ fn install_lsv_api(
         {
           let (k, v) =
             pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
-          if let (mlua::Value::String(ks), mlua::Value::String(vs)) = (k, v)
+          match (k, v)
           {
-            if let (Ok(k), Ok(v)) = (ks.to_str(), vs.to_str())
+            (mlua::Value::String(ks), mlua::Value::String(vs)) =>
             {
-              icons.extensions.insert(k.to_lowercase(), v.to_string());
+              if let (Ok(k), Ok(icon)) = (ks.to_str(), vs.to_str())
+              {
+                for name in k.split([',', '|', ';', '/'])
+                {
+                  let n = name.trim();
+                  if !n.is_empty()
+                  {
+                    icons.extensions.insert(n.to_lowercase(), icon.to_string());
+                  }
+                }
+              }
             }
+            (mlua::Value::Table(t), _) =>
+            {
+              if let Ok(icon) = t.get::<String>("icon")
+                && let Ok(list) = t.get::<Table>("names")
+              {
+                for n in list.sequence_values::<String>().flatten()
+                {
+                  let n = n.trim().to_string();
+                  if !n.is_empty()
+                  {
+                    icons.extensions.insert(n.to_lowercase(), icon.clone());
+                  }
+                }
+              }
+            }
+            _ => {}
+          }
+        }
+      }
+      // Combined mappings table: { extensions = {..}, folders = {..} }
+      if let Ok(map_tbl) = icons_tbl.get::<Table>("mappings")
+      {
+        if let Ok(ext_tbl) = map_tbl.get::<Table>("extensions")
+        {
+          for pair in ext_tbl.pairs::<mlua::Value, mlua::Value>()
+          {
+            let (k, v) =
+              pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+            match (k, v)
+            {
+              (mlua::Value::String(ks), mlua::Value::String(vs)) =>
+              {
+                if let (Ok(k), Ok(icon)) = (ks.to_str(), vs.to_str())
+                {
+                  for name in k.split([',', '|', ';', '/'])
+                  {
+                    let n = name.trim();
+                    if !n.is_empty()
+                    {
+                      icons.extensions.insert(n.to_lowercase(), icon.to_string());
+                    }
+                  }
+                }
+              }
+              (mlua::Value::Table(t), _) =>
+              {
+                if let Ok(icon) = t.get::<String>("icon")
+                  && let Ok(list) = t.get::<Table>("names")
+                {
+                  for n in list.sequence_values::<String>().flatten()
+                  {
+                    let n = n.trim().to_string();
+                    if !n.is_empty()
+                    {
+                      icons.extensions.insert(n.to_lowercase(), icon.clone());
+                    }
+                  }
+                }
+              }
+              _ => {}
+            }
+          }
+        }
+        if let Ok(f_tbl) = map_tbl.get::<Table>("folders")
+        {
+          for pair in f_tbl.pairs::<mlua::Value, mlua::Value>()
+          {
+            let (k, v) =
+              pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+            match (k, v)
+            {
+              (mlua::Value::String(ks), mlua::Value::String(vs)) =>
+              {
+                if let (Ok(k), Ok(icon)) = (ks.to_str(), vs.to_str())
+                {
+                  for name in k.split([',', '|', ';', '/'])
+                  {
+                    let n = name.trim();
+                    if !n.is_empty()
+                    {
+                      icons.folders.insert(n.to_lowercase(), icon.to_string());
+                    }
+                  }
+                }
+              }
+              (mlua::Value::Table(t), _) =>
+              {
+                if let Ok(icon) = t.get::<String>("icon")
+                  && let Ok(list) = t.get::<Table>("names")
+                {
+                  for n in list.sequence_values::<String>().flatten()
+                  {
+                    let n = n.trim().to_string();
+                    if !n.is_empty()
+                    {
+                      icons.folders.insert(n.to_lowercase(), icon.clone());
+                    }
+                  }
+                }
+              }
+              _ => {}
+            }
+          }
+        }
+      }
+      // icons.folders: folder name -> icon
+      if let Ok(f_tbl) = icons_tbl.get::<Table>("folders")
+      {
+        for pair in f_tbl.pairs::<mlua::Value, mlua::Value>()
+        {
+          let (k, v) = pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+          match (k, v)
+          {
+            (mlua::Value::String(ks), mlua::Value::String(vs)) =>
+            {
+              if let (Ok(k), Ok(icon)) = (ks.to_str(), vs.to_str())
+              {
+                for name in k.split([',', '|', ';', '/'])
+                {
+                  let n = name.trim();
+                  if !n.is_empty()
+                  {
+                    icons.folders.insert(n.to_lowercase(), icon.to_string());
+                  }
+                }
+              }
+            }
+            (mlua::Value::Table(t), _) =>
+            {
+              if let Ok(icon) = t.get::<String>("icon")
+                && let Ok(list) = t.get::<Table>("names")
+              {
+                for n in list.sequence_values::<String>().flatten()
+                {
+                  let n = n.trim().to_string();
+                  if !n.is_empty()
+                  {
+                    icons.folders.insert(n.to_lowercase(), icon.clone());
+                  }
+                }
+              }
+            }
+            _ => {}
+          }
+        }
+      }
+      // Legacy alias: icons.by_name
+      if let Ok(f_tbl) = icons_tbl.get::<Table>("by_name")
+      {
+        for pair in f_tbl.pairs::<mlua::Value, mlua::Value>()
+        {
+          let (k, v) = pair.map_err(|e| LuaError::RuntimeError(e.to_string()))?;
+          if let (mlua::Value::String(ks), mlua::Value::String(vs)) = (k, v)
+            && let (Ok(k), Ok(v)) = (ks.to_str(), vs.to_str())
+          {
+            icons.folders.insert(k.to_lowercase(), v.to_string());
           }
         }
       }
@@ -799,6 +997,22 @@ fn install_lsv_api(
         {
           cfg_mut.ui.header_right = Some(s);
         }
+        if let Ok(bg) = h_tbl.get::<String>("bg")
+        {
+          cfg_mut.ui.header_bg = Some(bg);
+        }
+        if let Ok(fg) = h_tbl.get::<String>("fg")
+        {
+          cfg_mut.ui.header_fg = Some(fg);
+        }
+      }
+      if let Ok(s) = ui_tbl.get::<String>("header_bg")
+      {
+        cfg_mut.ui.header_bg = Some(s);
+      }
+      if let Ok(s) = ui_tbl.get::<String>("header_fg")
+      {
+        cfg_mut.ui.header_fg = Some(s);
       }
       if let Ok(row_tbl) = ui_tbl.get::<Table>("row")
       {

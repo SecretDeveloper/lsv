@@ -20,10 +20,12 @@ lsv.config({
 		panes = { parent = 10, current = 20, preview = 70 },
 		show_hidden = false,
 		date_format = "%Y-%m-%d %H:%M",
-		-- header format strings with placeholders
+		-- header format strings with placeholders + default background colour
 		header = {
 			left = "{username}@{hostname}:{current_file}",
 			right = "{current_file_size}  {owner}  {current_file_permissions}  {current_file_ctime}",
+			fg = "gray",
+			bg = "#101114",
 		},
 		display_mode = "absolute", -- or "friendly"
 		max_list_items = 5000,
