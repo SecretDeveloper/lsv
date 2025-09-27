@@ -621,14 +621,10 @@ pub fn load_config_from_code(
 
   // 2) Execute provided code
   crate::trace::log("[lua] exec inline init.lua");
-  lua
-    .load(code)
-    .set_name("inline init.lua")
-    .exec()
-    .map_err(|e| {
-      crate::trace::log(format!("[lua] inline init.lua error: {}", e));
-      io_err(format!("inline init.lua execution failed: {e}"))
-    })?;
+  lua.load(code).set_name("inline init.lua").exec().map_err(|e| {
+    crate::trace::log(format!("[lua] inline init.lua error: {}", e));
+    io_err(format!("inline init.lua execution failed: {e}"))
+  })?;
 
   let cfg = config_acc.borrow().clone();
   let maps = keymaps_acc.borrow().clone();
@@ -1002,10 +998,12 @@ fn install_lsv_api(
   lsv.set("mapkey", mapkey_fn)?;
   lsv.set("set_previewer", set_previewer_fn)?;
   lsv.set("map_action", map_action_fn)?;
-  // lsv.getenv(name, default?) -> string|nil: safe env access for config, actions, previewers
-  let getenv_fn = lua.create_function(|_, (name, default): (String, Option<String>)| {
-    Ok(std::env::var(&name).ok().or(default))
-  })?;
+  // lsv.getenv(name, default?) -> string|nil: safe env access for config,
+  // actions, previewers
+  let getenv_fn =
+    lua.create_function(|_, (name, default): (String, Option<String>)| {
+      Ok(std::env::var(&name).ok().or(default))
+    })?;
   lsv.set("getenv", getenv_fn)?;
   // Add metatable to error on unknown lsv.* at config time
   let mt = lua.create_table()?;

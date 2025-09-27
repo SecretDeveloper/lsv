@@ -1,6 +1,6 @@
 use std::{
   path::Path,
-  process::Command
+  process::Command,
 };
 
 use ratatui::{
@@ -212,34 +212,31 @@ fn run_previewer(
 
         match func.call::<LuaValue>(ctx)
         {
-          Ok(LuaValue::String(s)) =>
+          Ok(LuaValue::String(s)) => match s.to_str()
           {
-            match s.to_str()
+            Ok(cmd) =>
             {
-              Ok(cmd) =>
-              {
-                let cmd = cmd.to_string();
-                crate::trace::log(format!(
-                  "[preview] lua cmd='{}' cwd='{}' file='{}'",
-                  cmd, dir_str, path_str
-                ));
-                let name_str = path
-                  .file_name()
-                  .map(|s| s.to_string_lossy().to_string())
-                  .unwrap_or_default();
-                return run_previewer_command(
-                  &cmd, &dir_str, &path_str, &name_str, limit,
-                );
-              }
-              Err(e) =>
-              {
-                crate::trace::log(format!(
-                  "[preview] lua previewer returned non-utf8 string: {}",
-                  e
-                ));
-              }
+              let cmd = cmd.to_string();
+              crate::trace::log(format!(
+                "[preview] lua cmd='{}' cwd='{}' file='{}'",
+                cmd, dir_str, path_str
+              ));
+              let name_str = path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+              return run_previewer_command(
+                &cmd, &dir_str, &path_str, &name_str, limit,
+              );
             }
-          }
+            Err(e) =>
+            {
+              crate::trace::log(format!(
+                "[preview] lua previewer returned non-utf8 string: {}",
+                e
+              ));
+            }
+          },
           Ok(LuaValue::Nil) =>
           {
             crate::trace::log(format!(
