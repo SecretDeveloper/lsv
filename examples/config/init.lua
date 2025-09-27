@@ -18,7 +18,7 @@ lsv.config({
 		font = "Nerd",
 		default_file = "",
 		default_dir = "",
-		mappings = require("icons"),
+		mappings = require("nerdfont-icons"),
 	},
 	ui = {
 		display_mode = "friendly",
