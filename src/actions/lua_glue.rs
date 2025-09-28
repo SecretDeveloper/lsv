@@ -393,6 +393,42 @@ fn build_ui_helpers(
   out
     .set("open_theme_picker", open_theme_picker_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // show_find(): open command/search pane
+  let cfg_ref_find = cfg_tbl.clone();
+  let show_find_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref_find.set("find", "open")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("show_find", show_find_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // find_next()
+  let cfg_ref_find_n = cfg_tbl.clone();
+  let find_next_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref_find_n.set("find", "next")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("find_next", find_next_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // find_prev()
+  let cfg_ref_find_p = cfg_tbl.clone();
+  let find_prev_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref_find_p.set("find", "prev")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("find_prev", find_prev_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
   Ok(())
 }
 

@@ -24,6 +24,7 @@ pub struct ActionEffects
   pub confirm:        ConfirmCommand,
   pub select:         SelectCommand,
   pub clipboard:      ClipboardCommand,
+  pub find:           FindCommand,
 }
 use mlua::Table;
 
@@ -73,6 +74,16 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
     && tp == "open"
   {
     fx.theme_picker = ThemePickerCommand::Open;
+  }
+  if let Ok(s) = tbl.get::<String>("find")
+  {
+    fx.find = match s.as_str()
+    {
+      "open" => FindCommand::Open,
+      "next" => FindCommand::Next,
+      "prev" | "previous" => FindCommand::Prev,
+      _ => FindCommand::None,
+    };
   }
   if let Ok(p) = tbl.get::<String>("prompt")
   {
@@ -175,4 +186,14 @@ pub enum ClipboardCommand
   MoveArm,
   Paste,
   Clear,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FindCommand
+{
+  #[default]
+  None,
+  Open,
+  Next,
+  Prev,
 }

@@ -194,6 +194,75 @@ pub fn draw_current_panel(
   f.render_stateful_widget(list, list_area, &mut app.list_state);
 }
 
+pub fn draw_command_pane(
+  f: &mut ratatui::Frame,
+  full: Rect,
+  app: &crate::App,
+)
+{
+  // Prefer a 2-row area (border + input). Fall back to 1 row when space is
+  // tight.
+  let use_two = full.height >= 2;
+  let height = if use_two { 2 } else { 1 };
+  let area = Rect {
+    x: full.x,
+    y: full.y + full.height.saturating_sub(height),
+    width: full.width,
+    height,
+  };
+  f.render_widget(Clear, area);
+  let mut prompt = String::from(":");
+  let mut input = String::new();
+  let mut cursor_x = 0u16;
+  let cursor_y = area.y + if use_two { 1 } else { 0 };
+  if let crate::app::Overlay::CommandPane(ref st_box) = app.overlay
+  {
+    let st = st_box.as_ref();
+    prompt = st.prompt.clone();
+    input = st.input.clone();
+    cursor_x = area.x + (prompt.len() as u16) + (st.cursor as u16);
+  }
+  let text = format!("{}{}", prompt, input);
+  if use_two
+  {
+    // Draw a top border with background and put text on the second row
+    let mut block = Block::default().borders(Borders::TOP);
+    if let Some(th) = app.config.ui.theme.as_ref()
+    {
+      if let Some(bg) =
+        th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+      {
+        block = block.style(Style::default().bg(bg));
+      }
+      if let Some(bfg) =
+        th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+      {
+        block = block.border_style(Style::default().fg(bfg));
+      }
+    }
+    f.render_widget(block, area);
+    let inner = Rect {
+      x:      area.x,
+      y:      area.y + 1,
+      width:  area.width,
+      height: 1,
+    };
+    let para = Paragraph::new(text);
+    f.render_widget(para, inner);
+  }
+  else
+  {
+    // Single-row fallback: just write the text
+    let para = Paragraph::new(text);
+    f.render_widget(para, area);
+  }
+  // Place cursor
+  f.set_cursor_position((
+    cursor_x.min(area.x + area.width.saturating_sub(1)),
+    cursor_y,
+  ));
+}
+
 pub fn draw_whichkey_panel(
   f: &mut ratatui::Frame,
   area: Rect,

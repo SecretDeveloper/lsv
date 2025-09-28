@@ -84,6 +84,16 @@ pub fn apply_effects(
     {}
   }
 
+  // Find/command pane
+  match fx.find
+  {
+    crate::actions::effects::FindCommand::Open => app.open_search(),
+    crate::actions::effects::FindCommand::Next => app.search_next(),
+    crate::actions::effects::FindCommand::Prev => app.search_prev(),
+    crate::actions::effects::FindCommand::None =>
+    {}
+  }
+
   // Prompt overlay
   match fx.prompt
   {

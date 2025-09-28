@@ -72,6 +72,7 @@ pub enum Overlay
   ThemePicker(Box<ThemePickerState>),
   Prompt(Box<PromptState>),
   Confirm(Box<ConfirmState>),
+  CommandPane(Box<CommandPaneState>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -155,6 +156,14 @@ pub struct ConfirmState
   pub kind:        ConfirmKind,
 }
 
+#[derive(Debug, Clone)]
+pub struct CommandPaneState
+{
+  pub prompt: String,
+  pub input:  String,
+  pub cursor: usize,
+}
+
 /// Mutable application state driving the three-pane UI.
 pub struct App
 {
@@ -180,6 +189,9 @@ pub struct App
   pub(crate) display_mode:      DisplayMode,
   // Signal to exit after handling a key/action
   pub(crate) should_quit:       bool,
+  // Search state
+  pub(crate) search_query:      Option<String>,
+  pub(crate) _search_locked:    bool,
   // Key sequence handling
   // moved into `keys`
   // (which-key prefix moves under overlay)
@@ -285,6 +297,8 @@ impl App
       info_mode: InfoMode::None,
       display_mode: DisplayMode::Absolute,
       should_quit: false,
+      search_query: None,
+      _search_locked: false,
     };
     // Discover configuration paths (entry not executed yet)
     if let Ok(paths) = crate::config::discover_config_paths()
@@ -346,6 +360,130 @@ impl App
     }
     app.refresh_preview();
     Ok(app)
+  }
+
+  pub(crate) fn open_search(&mut self)
+  {
+    self.overlay = Overlay::CommandPane(Box::new(CommandPaneState {
+      prompt: "/".to_string(),
+      input:  String::new(),
+      cursor: 0,
+    }));
+    self.force_full_redraw = true;
+  }
+
+  fn find_match_from(
+    &self,
+    start: usize,
+    pat: &str,
+    backwards: bool,
+  ) -> Option<usize>
+  {
+    if self.current_entries.is_empty() || pat.is_empty()
+    {
+      return None;
+    }
+    let pat_l = pat.to_lowercase();
+    let len = self.current_entries.len();
+    if backwards
+    {
+      let mut idx = start;
+      for _ in 0..len
+      {
+        if let Some(e) = self.current_entries.get(idx)
+          && e.name.to_lowercase().contains(&pat_l)
+        {
+          return Some(idx);
+        }
+        if idx == 0
+        {
+          idx = len - 1;
+        }
+        else
+        {
+          idx -= 1;
+        }
+      }
+    }
+    else
+    {
+      let mut idx = start;
+      for _ in 0..len
+      {
+        if let Some(e) = self.current_entries.get(idx)
+          && e.name.to_lowercase().contains(&pat_l)
+        {
+          return Some(idx);
+        }
+        idx = (idx + 1) % len;
+      }
+    }
+    None
+  }
+
+  pub(crate) fn search_next(&mut self)
+  {
+    if let Some(ref q) = self.search_query
+    {
+      let start = self.list_state.selected().unwrap_or(0);
+      // start from next index to avoid re-matching current
+      let next = if self.current_entries.is_empty()
+      {
+        None
+      }
+      else
+      {
+        self.find_match_from((start + 1) % self.current_entries.len(), q, false)
+      };
+      if let Some(i) = next
+      {
+        self.list_state.select(Some(i));
+        self.refresh_preview();
+        // regular draw is enough
+      }
+    }
+  }
+
+  pub(crate) fn search_prev(&mut self)
+  {
+    if let Some(ref q) = self.search_query
+    {
+      let start = self.list_state.selected().unwrap_or(0);
+      let len = self.current_entries.len();
+      let prev_start = if len == 0 { 0 } else { (start + len - 1) % len };
+      let prev = self.find_match_from(prev_start, q, true);
+      if let Some(i) = prev
+      {
+        self.list_state.select(Some(i));
+        self.refresh_preview();
+        // regular draw is enough
+      }
+    }
+  }
+
+  #[allow(dead_code)]
+  pub(crate) fn update_search_live(
+    &mut self,
+    q: &str,
+  )
+  {
+    if q.is_empty()
+    {
+      return;
+    }
+    let start = self.list_state.selected().unwrap_or(0);
+    let len = self.current_entries.len();
+    if len == 0
+    {
+      return;
+    }
+    // Try from current to include current when first typing
+    if let Some(i) = self.find_match_from(start, q, false)
+    {
+      self.list_state.select(Some(i));
+      self.refresh_preview();
+      // regular draw is enough
+    }
   }
 
   /// Test helper: inject a prepared Lua engine and registered action keys.

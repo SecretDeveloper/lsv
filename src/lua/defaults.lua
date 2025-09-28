@@ -154,6 +154,17 @@ lsv.map_action("zo", "Show output", function(lsv, config)
 	lsv.toggle_output()
 end)
 
+-- Find in current listing
+lsv.map_action("/", "Find in current", function(lsv, config)
+	lsv.show_find()
+end)
+lsv.map_action("n", "Find: next match", function(lsv, config)
+	lsv.find_next()
+end)
+lsv.map_action("b", "Find: previous match", function(lsv, config)
+	lsv.find_prev()
+end)
+
 lsv.map_action({ "ut", "Ut" }, "UI Theme picker", function(lsv, config)
 	lsv.open_theme_picker()
 end)

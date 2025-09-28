@@ -53,6 +53,10 @@ pub fn draw(
     {
       panes::draw_whichkey_panel(f, f.area(), app);
     }
+    crate::app::Overlay::CommandPane(_) =>
+    {
+      panes::draw_command_pane(f, f.area(), app);
+    }
     crate::app::Overlay::Messages =>
     {
       panes::draw_messages_panel(f, f.area(), app);

@@ -217,6 +217,84 @@ pub fn handle_key(
     return Ok(false);
   }
 
+  // Command pane (search input)
+  if let crate::app::Overlay::CommandPane(ref mut st_box) = app.overlay
+  {
+    let st = st_box.as_mut();
+    let mut live_update: Option<String> = None;
+    match key.code
+    {
+      KeyCode::Esc =>
+      {
+        app.overlay = crate::app::Overlay::None;
+      }
+      KeyCode::Enter =>
+      {
+        let pat = st.input.trim().to_string();
+        if !pat.is_empty()
+        {
+          app.search_query = Some(pat);
+        }
+        app.overlay = crate::app::Overlay::None;
+      }
+      KeyCode::Backspace =>
+      {
+        if st.cursor > 0 && st.cursor <= st.input.len()
+        {
+          st.input.remove(st.cursor - 1);
+          st.cursor -= 1;
+          live_update = Some(st.input.clone());
+          // incremental update handled via search_live
+        }
+      }
+      KeyCode::Left =>
+      {
+        if st.cursor > 0
+        {
+          st.cursor -= 1;
+          // incremental update handled via search_live
+        }
+      }
+      KeyCode::Right =>
+      {
+        if st.cursor < st.input.len()
+        {
+          st.cursor += 1;
+          app.force_full_redraw = true;
+        }
+      }
+      KeyCode::Home =>
+      {
+        st.cursor = 0;
+        app.force_full_redraw = true;
+      }
+      KeyCode::End =>
+      {
+        st.cursor = st.input.len();
+        app.force_full_redraw = true;
+      }
+      KeyCode::Char(ch) =>
+      {
+        if !key.modifiers.contains(KeyModifiers::CONTROL)
+          && !key.modifiers.contains(KeyModifiers::ALT)
+          && !key.modifiers.contains(KeyModifiers::SUPER)
+        {
+          st.input.insert(st.cursor, ch);
+          st.cursor += ch.len_utf8();
+          live_update = Some(st.input.clone());
+          app.force_full_redraw = true;
+        }
+      }
+      _ =>
+      {}
+    }
+    if let Some(s) = live_update
+    {
+      app.update_search_live(&s);
+    }
+    return Ok(false);
+  }
+
   // Confirm overlay input handling (y/n)
   if let crate::app::Overlay::Confirm(ref mut st_box) = app.overlay
   {
