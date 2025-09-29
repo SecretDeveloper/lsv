@@ -80,9 +80,9 @@ lsv.config({
 	},
 })
 
--- Internal quick quit
+-- Quick quit via Lua so users can rebind consistently
 lsv.map_action("q", "Quit lsv", function(lsv, config)
-	return { quit = true }
+  lsv.quit()
 end)
 
 -- Sort actions

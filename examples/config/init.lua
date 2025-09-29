@@ -43,7 +43,12 @@ end
 -- Previewer: markdown via glow, images via viu, text via bat
 lsv.set_previewer(function(ctx)
 	if ctx.current_file_extension == "md" or ctx.current_file_extension == "markdown" then
-		return string.format("glow --style=dark --width=%d %s", ctx.preview_width, shquote(ctx.current_file))
+		return string.format(
+			"head -n %d %s | glow --style=dark --line-numbers=true --width %d",
+			ctx.preview_height,
+			shquote(ctx.current_file),
+			ctx.preview_width - 2
+		)
 	elseif
 		ctx.current_file_extension == "jpg"
 		or ctx.current_file_extension == "jpeg"
@@ -52,10 +57,13 @@ lsv.set_previewer(function(ctx)
 		or ctx.current_file_extension == "bmp"
 		or ctx.current_file_extension == "tiff"
 	then
+		-- Force text/ANSI rendering inside TUI; disable kitty/iterm image protocol
+		-- to avoid sequences that won't render within ratatui panels.
+		-- You can remove --static if your terminal supports sixel and you add support later.
 		return string.format(
-			"viu --width %d --height %d %s",
-			ctx.preview_width,
-			ctx.preview_height,
+			"VIU_NO_KITTY=1 viu --static --width %d --height %d %s",
+			ctx.preview_width - 2,
+			ctx.preview_height - 4,
 			shquote(ctx.current_file)
 		)
 	elseif not ctx.is_binary then
@@ -65,11 +73,10 @@ lsv.set_previewer(function(ctx)
 			shquote(ctx.current_file)
 		)
 	else
-		return string.format(
-			"bat --color=always --style=numbers --paging=never --wrap=never --line-range=:%d %s",
-			ctx.preview_height,
-			shquote(ctx.current_file)
-		)
+		-- Binary file: render a compact hex view with hexyl if available
+		-- Show roughly 16 bytes per row times the available height
+		local bytes = math.max(256, (ctx.preview_height - 4 or 20) * 16)
+		return string.format("hexyl -n %d %s", bytes, shquote(ctx.current_file))
 	end
 end)
 

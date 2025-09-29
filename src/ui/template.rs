@@ -139,7 +139,8 @@ pub fn format_header_side(
   ];
   for ph in placeholders_in(&tpl)
   {
-    if !allowed.contains(&ph.as_str())
+    let base = ph.split('|').next().unwrap_or(ph.as_str());
+    if !allowed.contains(&base)
     {
       crate::trace::log(format!("[header] unknown placeholder '{{{}}}'", ph));
     }

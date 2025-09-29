@@ -274,6 +274,7 @@ fn run_previewer_command(
   limit: usize,
 ) -> Option<Vec<String>>
 {
+  let started = std::time::Instant::now();
   crate::trace::log(format!(
     "[preview] run: shell='{}' cwd='{}' cmd='{}' file='{}'",
     if cfg!(windows) { "cmd" } else { "sh" },
@@ -307,6 +308,7 @@ fn run_previewer_command(
   {
     Ok(out) =>
     {
+      let elapsed = started.elapsed().as_millis();
       let mut buf = Vec::new();
       buf.extend_from_slice(&out.stdout);
       if !out.stderr.is_empty()
@@ -316,10 +318,11 @@ fn run_previewer_command(
       }
       let text = String::from_utf8_lossy(&buf).replace('\r', "");
       crate::trace::log(format!(
-        "[preview] done: success={} exit_code={:?} bytes_out={}",
+        "[preview] done: success={} exit_code={:?} bytes_out={} elapsed_ms={}",
         out.status.success(),
         out.status.code(),
-        text.len()
+        text.len(),
+        elapsed
       ));
       if !out.status.success()
       {
