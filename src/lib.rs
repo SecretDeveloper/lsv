@@ -7,6 +7,7 @@
 
 pub mod actions;
 pub mod app;
+pub mod commands;
 pub mod config;
 pub mod config_data;
 pub mod core;

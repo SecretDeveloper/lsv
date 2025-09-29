@@ -200,10 +200,28 @@ pub fn draw_command_pane(
   app: &crate::App,
 )
 {
-  // Prefer a 2-row area (border + input). Fall back to 1 row when space is
-  // tight.
-  let use_two = full.height >= 2;
-  let height = if use_two { 2 } else { 1 };
+  // Prefer a 2-row area (border + input). If suggestions are enabled, try to
+  // use 3 rows.
+  let (_is_cmd, show_suggest) = match app.overlay
+  {
+    crate::app::Overlay::CommandPane(ref st) =>
+    {
+      (st.prompt == ":", st.show_suggestions && st.prompt == ":")
+    }
+    _ => (false, false),
+  };
+  let mut want_rows: u16 = 1;
+  if full.height >= 2
+  {
+    want_rows = 2;
+  }
+  if show_suggest && full.height >= 3
+  {
+    want_rows = 3;
+  }
+  let use_two = want_rows >= 2;
+  let use_three = want_rows >= 3;
+  let height = want_rows;
   let area = Rect {
     x: full.x,
     y: full.y + full.height.saturating_sub(height),
@@ -215,12 +233,14 @@ pub fn draw_command_pane(
   let mut input = String::new();
   let mut cursor_x = 0u16;
   let cursor_y = area.y + if use_two { 1 } else { 0 };
+  // No external suggestions source yet; compute suggestions inline below
   if let crate::app::Overlay::CommandPane(ref st_box) = app.overlay
   {
     let st = st_box.as_ref();
     prompt = st.prompt.clone();
     input = st.input.clone();
     cursor_x = area.x + (prompt.len() as u16) + (st.cursor as u16);
+    // suggestions line will be built later from a consolidated command list
   }
   let text = format!("{}{}", prompt, input);
   if use_two
@@ -249,6 +269,43 @@ pub fn draw_command_pane(
     };
     let para = Paragraph::new(text);
     f.render_widget(para, inner);
+    if use_three
+    {
+      let inner2 = Rect {
+        x:      area.x,
+        y:      area.y + 2,
+        width:  area.width,
+        height: 1,
+      };
+      // Compute suggestions from a known list of commands
+      let mut line = String::new();
+      let prefix = input.trim();
+      let cmds = crate::commands::all();
+      for c in cmds.iter()
+      {
+        if prefix.is_empty() || c.starts_with(prefix)
+        {
+          if !line.is_empty()
+          {
+            line.push_str("  ");
+          }
+          line.push_str(c);
+        }
+      }
+      if line.is_empty()
+      {
+        line.push_str("<no matches>");
+      }
+      let mut style = Style::default().fg(Color::DarkGray);
+      if let Some(th) = app.config.ui.theme.as_ref()
+        && let Some(fg) =
+          th.info_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+      {
+        style = Style::default().fg(fg);
+      }
+      let para2 = Paragraph::new(line).style(style);
+      f.render_widget(para2, inner2);
+    }
   }
   else
   {

@@ -149,6 +149,31 @@ pub fn apply_effects(
     {}
   }
 
+  // Marks commands from Lua and select_paths overlay
+  if let Some(paths) = fx.select_paths
+  {
+    for p in paths
+    {
+      let pb = std::path::PathBuf::from(&p);
+      app.selected.insert(pb);
+    }
+  }
+  match fx.marks
+  {
+    crate::actions::effects::MarksCommand::AddWait =>
+    {
+      app.pending_mark = true;
+      app.add_message("Mark: type a letter to save this directory");
+    }
+    crate::actions::effects::MarksCommand::GotoWait =>
+    {
+      app.pending_goto = true;
+      app.add_message("Goto: type a letter to jump to its mark");
+    }
+    crate::actions::effects::MarksCommand::None =>
+    {}
+  }
+
   if fx.redraw
   {
     app.force_full_redraw = true;

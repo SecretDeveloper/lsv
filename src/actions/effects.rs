@@ -25,6 +25,8 @@ pub struct ActionEffects
   pub select:         SelectCommand,
   pub clipboard:      ClipboardCommand,
   pub find:           FindCommand,
+  pub marks:          MarksCommand,
+  pub select_paths:   Option<Vec<String>>,
 }
 use mlua::Table;
 
@@ -85,6 +87,17 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
       _ => FindCommand::None,
     };
   }
+
+  // marks: "add_wait" | "goto_wait"
+  if let Ok(s) = tbl.get::<String>("marks")
+  {
+    fx.marks = match s.as_str()
+    {
+      "add_wait" => MarksCommand::AddWait,
+      "goto_wait" => MarksCommand::GotoWait,
+      _ => MarksCommand::None,
+    };
+  }
   if let Ok(p) = tbl.get::<String>("prompt")
   {
     if p == "add_entry" || p == "add" || p == "new"
@@ -114,6 +127,24 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
       }
       _ =>
       {}
+    }
+  }
+
+  // select_paths: table of strings (absolute or relative paths)
+  if let Ok(list_tbl) = tbl.get::<Table>("select_paths")
+  {
+    let mut acc: Vec<String> = Vec::new();
+    for v in list_tbl.sequence_values::<String>().flatten()
+    {
+      let s = v.trim();
+      if !s.is_empty()
+      {
+        acc.push(s.to_string());
+      }
+    }
+    if !acc.is_empty()
+    {
+      fx.select_paths = Some(acc);
     }
   }
 
@@ -196,4 +227,13 @@ pub enum FindCommand
   Open,
   Next,
   Prev,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarksCommand
+{
+  #[default]
+  None,
+  AddWait,
+  GotoWait,
 }

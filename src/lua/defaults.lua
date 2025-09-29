@@ -165,6 +165,16 @@ lsv.map_action("b", "Find: previous match", function(lsv, config)
 	lsv.find_prev()
 end)
 
+-- Marks (saved locations)
+-- 'm' then letter: save current directory as that mark
+lsv.map_action("m", "Mark current directory", function(lsv, config)
+	lsv.mark_add_wait()
+end)
+-- 'j' then letter: jump to that mark
+lsv.map_action("j", "Jump to mark", function(lsv, config)
+	lsv.goto_mark_wait()
+end)
+
 lsv.map_action({ "ut", "Ut" }, "UI Theme picker", function(lsv, config)
 	lsv.open_theme_picker()
 end)

@@ -1,5 +1,6 @@
 mod actions;
 mod app;
+mod commands;
 mod config;
 mod config_data;
 mod core;

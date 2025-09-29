@@ -429,6 +429,29 @@ fn build_ui_helpers(
   out
     .set("find_prev", find_prev_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // Mark flows
+  let cfg_ref_m_add = cfg_tbl.clone();
+  let mark_add_wait_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref_m_add.set("marks", "add_wait")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("mark_add_wait", mark_add_wait_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  let cfg_ref_m_goto = cfg_tbl.clone();
+  let mark_goto_wait_fn = lua
+    .create_function(move |_, ()| {
+      cfg_ref_m_goto.set("marks", "goto_wait")?;
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("goto_mark_wait", mark_goto_wait_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
   Ok(())
 }
 

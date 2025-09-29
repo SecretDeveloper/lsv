@@ -228,14 +228,66 @@ pub fn handle_key(
       {
         app.overlay = crate::app::Overlay::None;
       }
+      KeyCode::Tab =>
+      {
+        if st.prompt == ":"
+        {
+          // Attempt completion against known commands.
+          let prefix = st.input.trim();
+          let mut matches: Vec<String> = Vec::new();
+          if !prefix.is_empty()
+          {
+            for c in crate::commands::all().iter()
+            {
+              if c.starts_with(prefix)
+              {
+                matches.push((*c).to_string());
+              }
+            }
+          }
+          if matches.len() == 1
+          {
+            st.input = matches[0].clone();
+            st.cursor = st.input.len();
+          }
+          else if matches.len() > 1
+          {
+            let (pre, _suf) = crate::app::common_affixes(&matches);
+            if pre.len() > prefix.len()
+            {
+              st.input = pre;
+              st.cursor = st.input.len();
+            }
+          }
+          // Always show suggestions after Tab
+          st.show_suggestions = true;
+          app.force_full_redraw = true;
+        }
+      }
       KeyCode::Enter =>
       {
-        let pat = st.input.trim().to_string();
-        if !pat.is_empty()
+        if st.prompt == "/"
         {
-          app.search_query = Some(pat);
+          let pat = st.input.trim().to_string();
+          if !pat.is_empty()
+          {
+            app.search_query = Some(pat);
+          }
+          app.overlay = crate::app::Overlay::None;
         }
-        app.overlay = crate::app::Overlay::None;
+        else if st.prompt == ":"
+        {
+          let line = st.input.clone();
+          // Close the command pane before executing to allow
+          // execute_command_line to set a new overlay (e.g., Output)
+          // without being overwritten.
+          app.overlay = crate::app::Overlay::None;
+          app.execute_command_line(&line);
+        }
+        else
+        {
+          app.overlay = crate::app::Overlay::None;
+        }
       }
       KeyCode::Backspace =>
       {
@@ -243,7 +295,10 @@ pub fn handle_key(
         {
           st.input.remove(st.cursor - 1);
           st.cursor -= 1;
-          live_update = Some(st.input.clone());
+          if st.prompt == "/"
+          {
+            live_update = Some(st.input.clone());
+          }
           // incremental update handled via search_live
         }
       }
@@ -263,6 +318,7 @@ pub fn handle_key(
           app.force_full_redraw = true;
         }
       }
+      // (duplicate Tab arm removed; handled earlier)
       KeyCode::Home =>
       {
         st.cursor = 0;
@@ -281,7 +337,10 @@ pub fn handle_key(
         {
           st.input.insert(st.cursor, ch);
           st.cursor += ch.len_utf8();
-          live_update = Some(st.input.clone());
+          if st.prompt == "/"
+          {
+            live_update = Some(st.input.clone());
+          }
           app.force_full_redraw = true;
         }
       }
@@ -291,6 +350,51 @@ pub fn handle_key(
     if let Some(s) = live_update
     {
       app.update_search_live(&s);
+    }
+    return Ok(false);
+  }
+
+  // Open command pane with ':'
+  if let KeyCode::Char(':') = key.code
+  {
+    app.open_command();
+    return Ok(false);
+  }
+
+  // Pending mark/goto capture
+  if app.pending_mark
+  {
+    match key.code
+    {
+      KeyCode::Char(ch) =>
+      {
+        app.pending_mark = false;
+        app.add_mark(ch);
+      }
+      KeyCode::Esc =>
+      {
+        app.pending_mark = false;
+      }
+      _ =>
+      {}
+    }
+    return Ok(false);
+  }
+  if app.pending_goto
+  {
+    match key.code
+    {
+      KeyCode::Char(ch) =>
+      {
+        app.pending_goto = false;
+        app.goto_mark(ch);
+      }
+      KeyCode::Esc =>
+      {
+        app.pending_goto = false;
+      }
+      _ =>
+      {}
     }
     return Ok(false);
   }
@@ -423,6 +527,16 @@ pub fn handle_key(
   }
   match (key.code, key.modifiers)
   {
+    (KeyCode::Char('m'), KeyModifiers::NONE) =>
+    {
+      app.pending_mark = true;
+      app.add_message("Mark: type a letter to save this directory");
+    }
+    (KeyCode::Char('`'), KeyModifiers::NONE) =>
+    {
+      app.pending_goto = true;
+      app.add_message("Goto: type a letter to jump to its mark");
+    }
     (KeyCode::Char('q'), _) => return Ok(true),
     (KeyCode::Esc, _mods) =>
     {
@@ -450,7 +564,7 @@ pub fn handle_key(
         app.refresh_preview();
       }
     }
-    (KeyCode::Down, _) | (KeyCode::Char('j'), _) =>
+    (KeyCode::Down, _) =>
     {
       if let Some(sel) = app.list_state.selected()
       {
