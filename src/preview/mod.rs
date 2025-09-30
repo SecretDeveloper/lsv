@@ -353,8 +353,7 @@ fn run_previewer_command(
       {
         crate::trace::log(
           "[preview] hint: ensure the command is available in cmd.exe or \
-           adjust your previewer to use Windows-compatible tooling."
-            .to_string(),
+           adjust your previewer to use Windows-compatible tooling.",
         );
       }
       None

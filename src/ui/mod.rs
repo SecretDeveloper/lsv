@@ -13,13 +13,10 @@ use ratatui::{
   },
   widgets::Paragraph,
 };
-use std::{
-  collections::HashMap,
-  sync::{
-    OnceLock,
-    RwLock,
-  },
-};
+#[cfg(unix)]
+use std::collections::HashMap;
+#[cfg(unix)]
+use std::sync::{OnceLock, RwLock};
 use unicode_width::UnicodeWidthStr;
 
 pub fn draw(
