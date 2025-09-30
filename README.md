@@ -164,6 +164,8 @@ lsv.set_previewer(function(ctx)
 	return nil
 end)
 
+```
+
 ### Full Example Config
 
 Below is a fuller example (see `examples/config/init.lua` in the repo) showing icons, themed header, previewer rules, and custom actions:
@@ -231,7 +233,7 @@ lsv.map_action("e", "Edit in $EDITOR", function(lsv, config)
 	local path = (config.context and config.context.current_file) or "."
 	lsv.os_run_interactive(string.format("$EDITOR %s", shquote(path)))
 end)
-```
+
 ```
 
 ### Keybindings: Actions
@@ -300,8 +302,3 @@ Header and row template placeholders (e.g., `{cwd}`, `{current_file_size}`) are 
 - Enable with `LSV_TRACE=1` (default log path: `$TMPDIR/lsv-trace.log`, `/tmp/lsv-trace.log`, or `%TEMP%\lsv-trace.log` on Windows).
 - Override path with `LSV_TRACE_FILE=/path/to/log`.
 - Logs include executed commands, exit codes, bytes written, and a snippet of preview output.
-
-## Status
-
-- Legacy configuration methods are removed. Use the Lua APIs described above.
-- Planned: robust MIME detection (optional), async preview.
