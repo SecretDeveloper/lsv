@@ -1243,7 +1243,6 @@ mod util_rs_tests
     // tab -> 4 spaces, CR removed, control -> space
     assert_eq!(out, "a    bc d");
   }
-
 }
 mod partial_return_tests
 {

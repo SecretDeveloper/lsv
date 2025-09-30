@@ -2,7 +2,10 @@
 
 use std::{
   fs::File,
-  io::{self, Read},
+  io::{
+    self,
+    Read,
+  },
   path::Path,
 };
 
