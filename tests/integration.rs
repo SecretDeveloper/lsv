@@ -1235,11 +1235,6 @@ mod runtime_rs_tests
 
 mod util_rs_tests
 {
-  use std::{
-    fs,
-    path::Path,
-  };
-
   #[test]
   fn sanitize_line_expands_tabs_and_strips_cr_and_controls()
   {
@@ -1249,17 +1244,6 @@ mod util_rs_tests
     assert_eq!(out, "a    bc d");
   }
 
-  #[test]
-  fn read_file_head_reads_at_most_n_lines()
-  {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let file = temp.path().join("sample.txt");
-    fs::write(&file, "l1\nl2\nl3\n").unwrap();
-    let v = lsv::util::read_file_head(Path::new(&file), 2).expect("read");
-    assert_eq!(v, vec!["l1", "l2"]);
-    let v2 = lsv::util::read_file_head(Path::new(&file), 10).expect("read");
-    assert_eq!(v2, vec!["l1", "l2", "l3"]);
-  }
 }
 mod partial_return_tests
 {

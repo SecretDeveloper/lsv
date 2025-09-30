@@ -851,12 +851,27 @@ impl App
     }
     else
     {
-      self.preview.static_lines =
-        crate::util::read_file_head(&path, preview_limit)
-          .map(|v| {
-            v.into_iter().map(|s| crate::util::sanitize_line(&s)).collect()
-          })
-          .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
+      // Detect binary early to avoid rendering junk or huge wrapped lines
+      if crate::util::is_binary(&path)
+      {
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        self.preview.static_lines = vec![
+          String::from("<binary file>"),
+          format!("size: {} bytes", size),
+          String::from("tip: configure a previewer for this type"),
+        ];
+      }
+      else
+      {
+        // Cap bytes and lines to avoid runaway previews for huge files
+        const HEAD_BYTES_LIMIT: usize = 128 * 1024; // 128 KiB cap
+        self.preview.static_lines =
+          crate::util::read_file_head_safe(&path, HEAD_BYTES_LIMIT, preview_limit)
+            .map(|v| {
+              v.into_iter().map(|s| crate::util::sanitize_line(&s)).collect()
+            })
+            .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
+      }
       // Invalidate dynamic preview cache when selection changes
       self.preview.cache_key = None;
       self.preview.cache_lines = None;
@@ -868,11 +883,15 @@ impl App
     path: &Path,
   ) -> io::Result<Vec<DirEntryInfo>>
   {
+    let need_meta = !matches!(self.info_mode, InfoMode::None)
+      || !matches!(self.sort_key, SortKey::Name);
     crate::core::listing::read_dir_sorted(
       path,
       self.config.ui.show_hidden,
       self.sort_key,
       self.sort_reverse,
+      need_meta,
+      self.config.ui.max_list_items,
     )
   }
 

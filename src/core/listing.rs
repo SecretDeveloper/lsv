@@ -12,6 +12,8 @@ pub fn read_dir_sorted(
   show_hidden: bool,
   sort_key: SortKey,
   sort_reverse: bool,
+  need_meta: bool,
+  max_items: usize,
 ) -> io::Result<Vec<crate::app::DirEntryInfo>>
 {
   use std::fs;
@@ -28,22 +30,55 @@ pub fn read_dir_sorted(
       {
         Ok(ft) =>
         {
-          let meta = fs::metadata(&path).ok();
-          let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-          let mtime = meta.as_ref().and_then(|m| m.modified().ok());
-          let ctime = meta.as_ref().and_then(|m| m.created().ok());
-          Some(crate::app::DirEntryInfo {
-            name,
-            path,
-            is_dir: ft.is_dir(),
-            size,
-            mtime,
-            ctime,
-          })
+          if need_meta && !matches!(sort_key, SortKey::Name)
+          {
+            // Sorting by size/mtime/ctime requires metadata for accuracy
+            let meta = fs::metadata(&path).ok();
+            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let mtime = meta.as_ref().and_then(|m| m.modified().ok());
+            let ctime = meta.as_ref().and_then(|m| m.created().ok());
+            Some(crate::app::DirEntryInfo {
+              name,
+              path,
+              is_dir: ft.is_dir(),
+              size,
+              mtime,
+              ctime,
+            })
+          }
+          else if need_meta
+          {
+            // Name sort but meta requested for UI info; fetch once
+            let meta = fs::metadata(&path).ok();
+            let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+            let mtime = meta.as_ref().and_then(|m| m.modified().ok());
+            let ctime = meta.as_ref().and_then(|m| m.created().ok());
+            Some(crate::app::DirEntryInfo {
+              name,
+              path,
+              is_dir: ft.is_dir(),
+              size,
+              mtime,
+              ctime,
+            })
+          }
+          else
+          {
+            // Fast path: avoid metadata when not needed
+            Some(crate::app::DirEntryInfo {
+              name,
+              path,
+              is_dir: ft.is_dir(),
+              size: 0,
+              mtime: None,
+              ctime: None,
+            })
+          }
         }
         Err(_) => None,
       }
     })
+    .take(max_items)
     .collect();
 
   entries.sort_by(|a, b| {
