@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit checks:
+#  1) rustfmt check (no diffs allowed)
+#  2) clippy (warnings as errors)
+#  3) tests (workspace, all features)
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-commit: cargo not found in PATH" >&2
+  exit 1
+fi
+
+echo "pre-commit: running cargo fmt --all -- --check"
+if ! cargo +nightly fmt --all -- --check; then
+  cat >&2 <<'EOF'
+pre-commit: formatting issues detected by rustfmt.
+
+To fix automatically, run:
+  cargo fmt --all
+
+Then re-stage your changes and commit again.
+EOF
+  exit 1
+fi
+
+echo "pre-commit: running cargo clippy --all-targets --all-features -- -D warnings"
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
+  cat >&2 <<'EOF'
+pre-commit: clippy reported warnings or errors.
+
+Please address the lints locally. For more context, try:
+  cargo clippy --all-targets --all-features -- -W clippy::pedantic -W clippy::nursery
+
+If you must bypass (not recommended), commit with:
+  git commit --no-verify
+EOF
+  exit 1
+fi
+
+echo "pre-commit: running cargo test --all-features --workspace"
+if ! cargo test --all-features --workspace; then
+  cat >&2 <<'EOF'
+pre-commit: tests failed.
+
+Please fix failing tests before committing. To run a single test, use:
+  cargo test <test-name>
+EOF
+  exit 1
+fi
+
+exit 0

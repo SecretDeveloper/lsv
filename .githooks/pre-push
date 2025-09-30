@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run clippy with warnings as errors across all targets and features.
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-push: cargo not found in PATH" >&2
+  exit 1
+fi
+
+echo "pre-push: running cargo clippy --all-targets --all-features -- -D warnings"
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
+  cat >&2 <<'EOF'
+pre-push: clippy reported warnings or errors.
+
+Please address the lints locally. If you need help understanding a lint,
+run:
+  cargo clippy --all-targets --all-features -- -W clippy::pedantic -W clippy::nursery
+
+To skip temporarily (not recommended), push with:
+  git push --no-verify
+EOF
+  exit 1
+fi
+
+exit 0
+

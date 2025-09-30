@@ -50,6 +50,27 @@ See the [documentation overview](docs/README.md) for setup guides, configuration
 - Run: `cargo run`
 - Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run` (Windows PowerShell: `$env:LSV_TRACE=1; $env:LSV_TRACE_FILE=$env:TEMP+'\\lsv-trace.log'; cargo run`)
 
+## Git Hooks (format on commit)
+
+To block commits that aren’t rustfmt‑clean, install the provided pre‑commit hook:
+
+```
+bash scripts/install-git-hooks.sh
+```
+
+This sets `core.hooksPath` to `.githooks` and ensures the hooks are executable.
+
+Pre-commit runs:
+- `cargo fmt --all -- --check` (fails commit if formatting is needed)
+- `cargo clippy --all-targets --all-features -- -D warnings` (fails on lints)
+- `cargo test --all-features --workspace` (fails on test failures)
+
+Optional pre-push hook is also provided (clippy) but redundant if pre-commit passes.
+
+Fix formatting with `cargo fmt --all`. Address clippy warnings and test failures locally. To bypass temporarily (not recommended):
+- `git commit --no-verify`
+- `git push --no-verify`
+
 ## Navigation (defaults)
 
 - Up/Down or k/j: move selection in the Current pane
