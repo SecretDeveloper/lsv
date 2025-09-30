@@ -217,9 +217,19 @@ fn build_lsv_helpers(
          LSV_NAME='{}'",
         cwd_capture, cmd, rendered, path_capture, dir_capture, name_capture
       ));
-      let out = std::process::Command::new("sh")
-        .arg("-lc")
-        .arg(&cmd)
+      #[cfg(windows)]
+      let mut command = {
+        let mut c = std::process::Command::new("cmd");
+        c.arg("/C").arg(&rendered);
+        c
+      };
+      #[cfg(not(windows))]
+      let mut command = {
+        let mut c = std::process::Command::new("sh");
+        c.arg("-lc").arg(&rendered);
+        c
+      };
+      let out = command
         .current_dir(&cwd_capture)
         .env("LSV_PATH", &path_capture)
         .env("LSV_DIR", &dir_capture)
@@ -278,9 +288,19 @@ fn build_lsv_helpers(
       let _ = disable_raw_mode();
       let mut out = std::io::stdout();
       let _ = execute!(out, LeaveAlternateScreen);
-      let status = std::process::Command::new("sh")
-        .arg("-lc")
-        .arg(&cmd)
+      #[cfg(windows)]
+      let mut command = {
+        let mut c = std::process::Command::new("cmd");
+        c.arg("/C").arg(&rendered);
+        c
+      };
+      #[cfg(not(windows))]
+      let mut command = {
+        let mut c = std::process::Command::new("sh");
+        c.arg("-lc").arg(&rendered);
+        c
+      };
+      let status = command
         .current_dir(&cwd_str_i)
         .env("LSV_PATH", &path_str_i)
         .env("LSV_DIR", &dir_str_i)

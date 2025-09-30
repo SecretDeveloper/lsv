@@ -436,7 +436,13 @@ pub struct ConfigPaths
 
 /// Discover the effective configuration directory and entry point.
 ///
-/// Checks `LSV_CONFIG_DIR`, then `XDG_CONFIG_HOME/lsv`, then `~/.config/lsv`.
+/// Checks `LSV_CONFIG_DIR`, then `XDG_CONFIG_HOME/lsv`.
+///
+/// Platform-specific fallbacks:
+/// - Unix: `~/.config/lsv`
+/// - Windows: `%LOCALAPPDATA%\lsv`, then `%APPDATA%\lsv`, then
+///   `%USERPROFILE%\.config\lsv`
+///
 /// The returned struct includes the root directory, the path to `init.lua`, and
 /// whether the file currently exists.
 pub fn discover_config_paths() -> std::io::Result<ConfigPaths>
@@ -457,17 +463,48 @@ pub fn discover_config_paths() -> std::io::Result<ConfigPaths>
     over
   }
   else if let Ok(xdg) = env::var("XDG_CONFIG_HOME")
+    && !xdg.trim().is_empty()
   {
     Path::new(&xdg).join("lsv")
   }
-  else if let Ok(home) = env::var("HOME")
-  {
-    Path::new(&home).join(".config").join("lsv")
-  }
   else
   {
-    // Fallback to current dir .config/lsv to avoid empty paths in exotic envs
-    Path::new(".config").join("lsv")
+    // Platform-specific fallbacks
+    #[cfg(windows)]
+    {
+      if let Ok(local) = env::var("LOCALAPPDATA")
+        && !local.trim().is_empty()
+      {
+        Path::new(&local).join("lsv")
+      }
+      else if let Ok(app) = env::var("APPDATA")
+        && !app.trim().is_empty()
+      {
+        Path::new(&app).join("lsv")
+      }
+      else if let Ok(up) = env::var("USERPROFILE")
+        && !up.trim().is_empty()
+      {
+        Path::new(&up).join(".config").join("lsv")
+      }
+      else
+      {
+        Path::new(".config").join("lsv")
+      }
+    }
+    #[cfg(not(windows))]
+    {
+      if let Ok(home) = env::var("HOME")
+        && !home.trim().is_empty()
+      {
+        Path::new(&home).join(".config").join("lsv")
+      }
+      else
+      {
+        // Fallback to a relative path to avoid empty env in exotic setups
+        Path::new(".config").join("lsv")
+      }
+    }
   };
 
   let entry = root.join("init.lua");

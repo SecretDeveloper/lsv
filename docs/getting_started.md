@@ -40,7 +40,9 @@ Configuration lives in Lua. lsv loads the first file it finds:
 
 1. `$LSV_CONFIG_DIR/init.lua`
 2. `$XDG_CONFIG_HOME/lsv/init.lua`
-3. `~/.config/lsv/init.lua`
+3. Platform fallbacks:
+   - Windows: `%LOCALAPPDATA%\lsv\init.lua`, then `%APPDATA%\lsv\init.lua`, then `%USERPROFILE%\.config\lsv\init.lua`
+   - macOS/Linux: `~/.config/lsv/init.lua`
 
 Create the directory if it doesn’t exist and copy a starter config:
 
@@ -61,7 +63,6 @@ Edit `~/.config/lsv/init.lua` to tweak UI or keybindings. Example:
 lsv.config({
   ui = {
     display_mode = "friendly",
-    preview_lines = 60,
     row_widths = { icon = 2, left = 36, right = 16 },
   },
 })
@@ -82,6 +83,14 @@ If something acts up, enable verbose logging:
 
 ```bash
 LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log lsv
+
+On Windows (PowerShell):
+
+```
+$env:LSV_TRACE=1
+$env:LSV_TRACE_FILE = "$env:TEMP\lsv-trace.log"
+lsv
+```
 ```
 
 The log records key actions, preview commands, and external tooling output. Useful when preview commands fail (particularly on Windows).

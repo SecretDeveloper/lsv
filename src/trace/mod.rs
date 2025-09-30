@@ -70,10 +70,12 @@ fn file_path() -> Option<PathBuf>
     return Some(PathBuf::from(fp));
   }
   if let Ok(tmp) = std::env::var("TMPDIR")
+    && !tmp.is_empty()
   {
     return Some(PathBuf::from(tmp).join("lsv-trace.log"));
   }
-  Some(PathBuf::from("/tmp/lsv-trace.log"))
+  // Cross-platform fallback to the system temp directory
+  Some(std::env::temp_dir().join("lsv-trace.log"))
 }
 
 fn now_millis() -> u128

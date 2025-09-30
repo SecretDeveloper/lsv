@@ -5,7 +5,7 @@
 [![docs.rs](https://img.shields.io/docsrs/lsv)](https://docs.rs/lsv)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![lsv screenshot](docs/lsv.jpeg)
+![lsv (dark)](docs/lsv-dark.jpg)
 
 lsv is a fast, curses‑based file viewer for the terminal. It presents three panes side by side:
 
@@ -15,11 +15,31 @@ lsv is a fast, curses‑based file viewer for the terminal. It presents three pa
 
 The app is keyboard‑driven, configurable via Lua, and supports rich, ANSI‑colored previews from external tools (e.g., bat, glow).
 
+## Capabilities
+
+- Three‑pane navigation (parent/current/preview) with fast sorting and filtering
+- Keyboard‑driven UX with multi‑key sequences and a which‑key overlay
+- Lua configuration: themes, keymaps, actions, and a programmable previewer
+- External command integration: captured output or fully interactive shells
+- File operations: add/rename/delete; multi‑select with copy/move/paste
+- Marks: save and jump to directories with single keystrokes
+- Display modes: absolute vs. friendly sizes/dates; toggle hidden files
+- Command palette (`:`) with suggestions and Tab‑completion
+- Cross‑platform support: macOS, Linux, and Windows (see notes under Troubleshooting)
+
 ## Install
 
 - From crates.io: `cargo install lsv`
 
 See the [documentation overview](docs/README.md) for setup guides, configuration reference, keybindings, and troubleshooting tips.
+
+## Screenshots
+
+![lsv (light)](docs/lsv-light.jpg)
+
+![lsv Which‑Key](docs/lsv-whichkey.jpg)
+
+![Theme Picker](docs/lsv-select-theme.png)
 
 ## Build & Run (from source)
 
@@ -28,7 +48,7 @@ See the [documentation overview](docs/README.md) for setup guides, configuration
 
 - Build: `cargo build`
 - Run: `cargo run`
-- Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run`
+- Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run` (Windows PowerShell: `$env:LSV_TRACE=1; $env:LSV_TRACE_FILE=$env:TEMP+'\\lsv-trace.log'; cargo run`)
 
 ## Navigation (defaults)
 
@@ -108,42 +128,110 @@ end)
 
 -- Previewer function (ctx):
 -- ctx = {
---   path       = absolute file path (string)
---   directory  = parent directory (string)
---   extension  = file extension without dot (string, may be empty)
---   is_binary  = boolean (simple heuristic)
---   height     = preview pane height in rows (number)
---   width      = preview pane width in columns (number)
---   preview_x  = top-left x of preview pane (number)
---   preview_y  = top-left y of preview pane (number)
+--   current_file            = absolute file path (string)
+--   current_file_dir        = parent directory (string)
+--   current_file_name       = file name (string)
+--   current_file_extension  = extension without dot (string, may be empty)
+--   is_binary               = boolean (simple heuristic)
+--   preview_height          = preview pane height (rows)
+--   preview_width           = preview pane width (cols)
+--   preview_x, preview_y    = top-left coordinates of preview pane
 -- }
--- Return a shell command string (placeholders are expanded: {path},{directory},{name},{extension}), or nil to use default head preview.
+-- Return a shell command string to run, or nil to use the built‑in head preview.
 lsv.set_previewer(function(ctx)
 	-- Render Markdown with glow, respecting pane width
-	if ctx.extension == "md" or ctx.extension == "markdown" then
-		-- You can build a command with placeholders:
-		return "glow --style=dark --width=" .. tostring(ctx.width) .. " {path}"
+	if ctx.current_file_extension == "md" or ctx.current_file_extension == "markdown" then
+		return string.format("glow --style=dark --width %d %s", ctx.preview_width, shquote(ctx.current_file))
 	end
 
 	if
-		ctx.extension == "jpg"
-		or ctx.extension == "jpeg"
-		or ctx.extension == "png"
-		or ctx.extension == "gif"
-		or ctx.extension == "bmp"
-		or ctx.extension == "tiff"
+		ctx.current_file_extension == "jpg"
+		or ctx.current_file_extension == "jpeg"
+		or ctx.current_file_extension == "png"
+		or ctx.current_file_extension == "gif"
+		or ctx.current_file_extension == "bmp"
+		or ctx.current_file_extension == "tiff"
 	then
 		-- image preview using viu (needs installation)
-		return "viu --width '{width}' --height '{height}' '{path}'"
+		return string.format("viu --width %d --height %d %s", ctx.preview_width, ctx.preview_height, shquote(ctx.current_file))
 	end
 	-- For non-binary, colorize with bat (first 120 lines, no wrapping)
 	if not ctx.is_binary then
-		return "bat --color=always --style=numbers --paging=never --wrap=never --line-range=:120 {path}"
+		return string.format("bat --color=always --style=numbers --paging=never --wrap=never --line-range=:120 %s", shquote(ctx.current_file))
 	end
 
 	-- Fallback to default preview (first N lines)
 	return nil
 end)
+
+### Full Example Config
+
+Below is a fuller example (see `examples/config/init.lua` in the repo) showing icons, themed header, previewer rules, and custom actions:
+
+```lua
+-- About config.context passed to actions:
+--   config.context.cwd, selected_index, current_len
+--   config.context.current_file, current_file_dir, current_file_name
+--   config.context.current_file_extension, current_file_ctime, current_file_mtime
+
+lsv.config({
+	icons = {
+		enabled = true,
+		font = "Nerd",
+		default_file = "",
+		default_dir = "",
+		mappings = require("nerdfont-icons"),
+	},
+	ui = {
+		display_mode = "friendly",
+		row = { middle = "" },
+		row_widths = { icon = 2, left = 40, right = 14 },
+		header = {
+			left = "{username|fg=cyan;style=bold}@{hostname|fg=cyan}:{cwd|fg=#ffd866}/{current_file_name|fg=#ffd866;style=bold}",
+			right = "{current_file_size|fg=gray}  {owner|fg=gray}  {current_file_permissions|fg=gray}  {current_file_ctime|fg=gray}",
+			fg = "gray",
+			bg = "#181825",
+		},
+		theme = require("themes/catppuccin"),
+		confirm_delete = true,
+	},
+})
+
+local function shquote(s)
+	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+lsv.set_previewer(function(ctx)
+	if ctx.current_file_extension == "md" or ctx.current_file_extension == "markdown" then
+		return string.format("glow --style=dark --line-numbers=true --width %d %s", ctx.preview_width - 2, shquote(ctx.current_file))
+	elseif
+		ctx.current_file_extension == "jpg" or ctx.current_file_extension == "jpeg" or
+		ctx.current_file_extension == "png" or ctx.current_file_extension == "gif" or
+		ctx.current_file_extension == "bmp" or ctx.current_file_extension == "tiff" then
+		return string.format("VIU_NO_KITTY=1 viu --static --width %d --height %d %s", ctx.preview_width - 2, ctx.preview_height - 4, shquote(ctx.current_file))
+	elseif not ctx.is_binary then
+		return string.format("bat --color=always --style=numbers --paging=never --wrap=never --line-range=:%d %s", ctx.preview_height, shquote(ctx.current_file))
+	else
+		local bytes = math.max(256, (ctx.preview_height - 4) * 16)
+		return string.format("hexyl -n %d %s", bytes, shquote(ctx.current_file))
+	end
+end)
+
+lsv.map_action("ss", "Sort by size + show size", function(lsv, config)
+	config.ui.sort = "size"
+	config.ui.show = "size"
+end)
+
+lsv.map_action("gs", "Git Status", function(lsv, config)
+	local dir = (config.context and config.context.cwd) or "."
+	lsv.os_run(string.format("git -C %s status", shquote(dir)))
+end)
+
+lsv.map_action("e", "Edit in $EDITOR", function(lsv, config)
+	local path = (config.context and config.context.current_file) or "."
+	lsv.os_run_interactive(string.format("$EDITOR %s", shquote(path)))
+end)
+```
 ```
 
 ### Keybindings: Actions
@@ -194,27 +282,22 @@ Configure row sections under `ui.row`:
 - Dates: `display:absolute` uses `ui.date_format` (default `%Y-%m-%d %H:%M`); `display:friendly` uses relative strings (e.g., `3d ago`).
 - Sizes: `display:absolute` shows raw bytes with `B`; `display:friendly` uses human units (KB/MB/...).
 
-### Placeholders (expanded in preview and commands)
+### Command Environment & Helpers
 
-- `{path}`: absolute file path
-- `{directory}` (alias `{dir}`): parent directory
-- `{name}`: basename of file
-- `{extension}`: extension without dot
-- `{width}`, `{height}`: preview pane size in characters
-- `{preview_x}`, `{preview_y}`: preview pane top‑left coordinates
-- `$f`: shorthand for `{path}`
+- For commands launched via actions and the previewer, lsv sets these environment variables:
+  - `LSV_PATH` (selected file), `LSV_DIR` (directory), `LSV_NAME` (basename)
+- Use your Lua `ctx` values to compose commands (see examples above). If you need to inject values via environment expansion, you can also include `$LSV_PATH`, `$LSV_DIR`, `$LSV_NAME` (or `${LSV_*}`) in your string; lsv will expand those before invoking the shell.
 
-Environment for external commands:
-- `LSV_PATH` (selected file), `LSV_DIR` (directory), `LSV_NAME` (basename)
+Header and row template placeholders (e.g., `{cwd}`, `{current_file_size}`) are specific to UI templates, not shell commands.
 
 ### Preview Notes
 
 - lsv captures the command’s output and renders ANSI colors (SGR). If your tool disables color when piped, add `--color=always` (bat) or set styles (glow). lsv sets `FORCE_COLOR=1` and `CLICOLOR_FORCE=1` for preview commands.
-- For very large outputs, lsv trims to `ui.preview_lines` lines.
+- Output is trimmed to fit the preview pane height; older `ui.preview_lines` has been removed.
 
 ## Tracing (debugging)
 
-- Enable with `LSV_TRACE=1` (default log path: `$TMPDIR/lsv-trace.log` or `/tmp/lsv-trace.log`).
+- Enable with `LSV_TRACE=1` (default log path: `$TMPDIR/lsv-trace.log`, `/tmp/lsv-trace.log`, or `%TEMP%\lsv-trace.log` on Windows).
 - Override path with `LSV_TRACE_FILE=/path/to/log`.
 - Logs include executed commands, exit codes, bytes written, and a snippet of preview output.
 

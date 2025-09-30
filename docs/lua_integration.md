@@ -82,10 +82,10 @@ Helpers injected into Lua action functions:
 @startuml
 participant "Lua action" as LUA
 participant "Rust (AA)" as AA
-participant "sh (Command)" as SH
+participant "shell (cmd/sh)" as SH
 participant "Output Panel" as OP
 LUA -> AA: lsv.os_run(cmd)
-AA -> SH: spawn sh -lc cmd (captured)
+AA -> SH: (Windows) cmd /C cmd; (Unix) sh -lc cmd (captured)
 SH --> AA: exit code + stdout/stderr
 AA -> AA: set output_text/output_title in config
 AA -> OP: display output
@@ -102,10 +102,10 @@ AA -> OP: display output
 participant "Lua action" as LUA
 participant "Rust (AA)" as AA
 participant "TUI" as TUI
-participant "sh (Command)" as SH
+participant "shell (cmd/sh)" as SH
 LUA -> AA: lsv.os_run_interactive(cmd)
 AA -> TUI: disable_raw_mode + LeaveAlternateScreen
-AA -> SH: sh -lc cmd (attached to terminal)
+AA -> SH: (Windows) cmd /C cmd; (Unix) sh -lc cmd (attached to terminal)
 SH --> AA: exit code
 AA -> TUI: enable_raw_mode + EnterAlternateScreen
 AA -> AA: set redraw=true; if nonzero, set output_text/message
@@ -126,7 +126,7 @@ participant "sh (Command)" as SH
 UI -> UI: compute preview pane size
 UI -> PREV: call preview fn with ctx
 PREV --> UI: returns command or nil
-UI -> SH: sh -lc cmd (captured)
+UI -> SH: (Windows) cmd /C cmd; (Unix) sh -lc cmd (captured)
 SH --> UI: output
 UI -> UI: cache by (path,width,height) to avoid reruns
 @enduml
@@ -145,7 +145,7 @@ UI -> UI: cache by (path,width,height) to avoid reruns
 
 ## Tracing (diagnostics)
 
-Set `LSV_TRACE=1` to log to `/tmp/lsv-trace.log` (or `LSV_TRACE_FILE=/path/to/log`).
+Set `LSV_TRACE=1` to log to the system temp dir (`/tmp/lsv-trace.log` on Unix, `%TEMP%\lsv-trace.log` on Windows). Override with `LSV_TRACE_FILE=/path/to/log`.
 - Logs include:
   - Lua action calls: start, errors, and runtime in ms
   - os_run/os_run_interactive calls: cmd, cwd, env, exit code, output sizes
@@ -158,4 +158,3 @@ This helps identify crashes or slow paths — especially when calling external t
 - lsv executes shell commands only as requested by your Lua actions or preview functions.
 - Use quoting helpers in Lua (e.g., `shquote`) to avoid unintended shell expansion.
 - Prefer read-only tools in previewers to avoid accidental modification of files.
-

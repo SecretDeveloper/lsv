@@ -1380,60 +1380,65 @@ fn truncate_with_tilde(
   out
 }
 
+#[cfg(unix)]
 pub(crate) fn permissions_string(e: &crate::app::DirEntryInfo) -> String
 {
-  #[cfg(unix)]
+  use std::os::unix::fs::PermissionsExt;
+  let mut s = String::new();
+  let (type_ch, mode) = if let Ok(meta) = std::fs::metadata(&e.path)
   {
-    use std::os::unix::fs::PermissionsExt;
-    let mut s = String::new();
-    let (type_ch, mode) = if let Ok(meta) = std::fs::metadata(&e.path)
-    {
-      let ft = meta.file_type();
-      let t = if e.is_dir || ft.is_dir() { 'd' } else { '-' };
-      (t, meta.permissions().mode())
-    }
-    else
-    {
-      ('?', 0)
-    };
-    s.push(type_ch);
-    if mode == 0
-    {
-      s.push_str("?????????");
-      return s;
-    }
-    // user
-    s.push(if mode & 0o400 != 0 { 'r' } else { '-' });
-    s.push(if mode & 0o200 != 0 { 'w' } else { '-' });
-    s.push(match (mode & 0o100 != 0, mode & 0o4000 != 0)
-    {
-      (true, true) => 's',
-      (false, true) => 'S',
-      (true, false) => 'x',
-      (false, false) => '-',
-    });
-    // group
-    s.push(if mode & 0o040 != 0 { 'r' } else { '-' });
-    s.push(if mode & 0o020 != 0 { 'w' } else { '-' });
-    s.push(match (mode & 0o010 != 0, mode & 0o2000 != 0)
-    {
-      (true, true) => 's',
-      (false, true) => 'S',
-      (true, false) => 'x',
-      (false, false) => '-',
-    });
-    // other
-    s.push(if mode & 0o004 != 0 { 'r' } else { '-' });
-    s.push(if mode & 0o002 != 0 { 'w' } else { '-' });
-    s.push(match (mode & 0o001 != 0, mode & 0o1000 != 0)
-    {
-      (true, true) => 't',
-      (false, true) => 'T',
-      (true, false) => 'x',
-      (false, false) => '-',
-    });
-    s
+    let ft = meta.file_type();
+    let t = if e.is_dir || ft.is_dir() { 'd' } else { '-' };
+    (t, meta.permissions().mode())
   }
+  else
+  {
+    ('?', 0)
+  };
+  s.push(type_ch);
+  if mode == 0
+  {
+    s.push_str("?????????");
+    return s;
+  }
+  // user
+  s.push(if mode & 0o400 != 0 { 'r' } else { '-' });
+  s.push(if mode & 0o200 != 0 { 'w' } else { '-' });
+  s.push(match (mode & 0o100 != 0, mode & 0o4000 != 0)
+  {
+    (true, true) => 's',
+    (false, true) => 'S',
+    (true, false) => 'x',
+    (false, false) => '-',
+  });
+  // group
+  s.push(if mode & 0o040 != 0 { 'r' } else { '-' });
+  s.push(if mode & 0o020 != 0 { 'w' } else { '-' });
+  s.push(match (mode & 0o010 != 0, mode & 0o2000 != 0)
+  {
+    (true, true) => 's',
+    (false, true) => 'S',
+    (true, false) => 'x',
+    (false, false) => '-',
+  });
+  // other
+  s.push(if mode & 0o004 != 0 { 'r' } else { '-' });
+  s.push(if mode & 0o002 != 0 { 'w' } else { '-' });
+  s.push(match (mode & 0o001 != 0, mode & 0o1000 != 0)
+  {
+    (true, true) => 't',
+    (false, true) => 'T',
+    (true, false) => 'x',
+    (false, false) => '-',
+  });
+  s
+}
+
+#[cfg(not(unix))]
+pub(crate) fn permissions_string(_e: &crate::app::DirEntryInfo) -> String
+{
+  // Windows permissions formatting not implemented; return placeholders
+  "---------".to_string()
 }
 
 fn build_row_item(
@@ -1535,5 +1540,11 @@ fn is_executable(path: &std::path::Path) -> bool
     let mode = meta.permissions().mode();
     return (mode & 0o111) != 0;
   }
+  false
+}
+
+#[cfg(not(unix))]
+fn is_executable(_path: &std::path::Path) -> bool
+{
   false
 }

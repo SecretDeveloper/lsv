@@ -5,7 +5,7 @@ Common issues, diagnostics, and platform-specific tips for **lsv**.
 ## General Checklist
 
 1. **Update to the latest build.** `cargo install lsv --force` will refresh from crates.io.
-2. **Enable tracing.** Run `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log lsv` and reproduce the issue. Inspect the log afterwards.
+2. **Enable tracing.** Run `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log lsv` (or on Windows PowerShell: `$env:LSV_TRACE=1; $env:LSV_TRACE_FILE="$env:TEMP\\lsv-trace.log"; lsv`). Inspect the log afterwards.
 3. **Verify your Lua config.** Comment out recent changes or run with `LSV_CONFIG_DIR` pointing to an empty folder to rule out configuration errors.
 
 ## Preview Commands Not Working (Windows)

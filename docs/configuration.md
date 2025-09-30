@@ -8,9 +8,10 @@ lsv searches for `init.lua` in the following order:
 
 1. `$LSV_CONFIG_DIR/init.lua`
 2. `$XDG_CONFIG_HOME/lsv/init.lua`
-3. `~/.config/lsv/init.lua`
-
-On Windows, `%USERPROFILE%\.config\lsv\init.lua` is the default fallback. Set `LSV_CONFIG_DIR` explicitly if you want to keep the config elsewhere.
+3. Platform fallbacks:
+   - Windows: `%LOCALAPPDATA%\lsv\init.lua`, then `%APPDATA%\lsv\init.lua`, then `%USERPROFILE%\.config\lsv\init.lua`
+   - macOS/Linux: `~/.config/lsv/init.lua`
+   - As a last resort, `./.config/lsv/init.lua`
 
 ## Lua API Overview
 
@@ -51,7 +52,7 @@ lsv.config({
     show_hidden   = false,
     date_format   = "%Y-%m-%d %H:%M",
     display_mode  = "absolute",   -- or "friendly"
-    preview_lines = 100,
+    -- preview_lines removed; the viewer uses pane height
     max_list_items = 5000,
     sort          = "name",
     sort_reverse  = false,
