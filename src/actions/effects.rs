@@ -13,20 +13,25 @@ pub enum OverlayToggle
 #[derive(Default, Debug, Clone)]
 pub struct ActionEffects
 {
-  pub selection:      Option<usize>,
-  pub quit:           bool,
-  pub redraw:         bool,
-  pub messages:       OverlayToggle,
-  pub output_overlay: OverlayToggle,
-  pub output:         Option<(String, String)>, // (title, text)
-  pub theme_picker:   ThemePickerCommand,
-  pub prompt:         PromptCommand,
-  pub confirm:        ConfirmCommand,
-  pub select:         SelectCommand,
-  pub clipboard:      ClipboardCommand,
-  pub find:           FindCommand,
-  pub marks:          MarksCommand,
-  pub select_paths:   Option<Vec<String>>,
+  pub selection:       Option<usize>,
+  pub quit:            bool,
+  pub redraw:          bool,
+  pub messages:        OverlayToggle,
+  pub output_overlay:  OverlayToggle,
+  pub output:          Option<(String, String)>, // (title, text)
+  pub message_text:    Option<String>,
+  pub error_text:      Option<String>,
+  pub theme_picker:    ThemePickerCommand,
+  pub theme_set_name:  Option<String>,
+  pub prompt:          PromptCommand,
+  pub confirm:         ConfirmCommand,
+  pub select:          SelectCommand,
+  pub clipboard:       ClipboardCommand,
+  pub find:            FindCommand,
+  pub marks:           MarksCommand,
+  pub select_paths:    Option<Vec<String>>,
+  pub clear_messages:  bool,
+  pub preview_run_cmd: Option<String>,
 }
 use mlua::Table;
 
@@ -69,6 +74,16 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
       .unwrap_or_else(|_| String::from("Output"));
     fx.output = Some((title, text));
   }
+  // Messages and errors
+  if let Ok(m) = tbl.get::<String>("message_text")
+  {
+    fx.message_text = Some(m);
+  }
+  if let Ok(e) = tbl.get::<String>("error_text")
+  {
+    fx.error_text = Some(e);
+  }
+  fx.clear_messages = tbl.get::<bool>("clear_messages").unwrap_or(false);
   // redraw/quit
   fx.redraw = tbl.get::<bool>("redraw").unwrap_or(false);
   fx.quit = tbl.get::<bool>("quit").unwrap_or(false);
@@ -76,6 +91,16 @@ pub fn parse_effects_from_lua(tbl: &Table) -> ActionEffects
     && tp == "open"
   {
     fx.theme_picker = ThemePickerCommand::Open;
+  }
+  if let Ok(name) = tbl.get::<String>("theme_set_name")
+    && !name.trim().is_empty()
+  {
+    fx.theme_set_name = Some(name);
+  }
+  if let Ok(cmd) = tbl.get::<String>("preview_run_cmd")
+    && !cmd.trim().is_empty()
+  {
+    fx.preview_run_cmd = Some(cmd);
   }
   if let Ok(s) = tbl.get::<String>("find")
   {

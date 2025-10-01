@@ -82,7 +82,7 @@ lsv.config({
 
 -- Quick quit via Lua so users can rebind consistently
 lsv.map_action("q", "Quit lsv", function(lsv, config)
-  lsv.quit()
+	lsv.quit()
 end)
 
 -- Sort actions
@@ -133,6 +133,12 @@ end)
 
 lsv.map_action("zm", "Show messages", function(lsv, config)
 	lsv.toggle_show_messages()
+end)
+
+-- Force redraw (Ctrl+r)
+lsv.map_action("<C-r>", "Force redraw", function(lsv, config)
+	config.redraw = true
+	lsv.show_message("redraw event")
 end)
 
 -- Display mode

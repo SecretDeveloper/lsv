@@ -23,6 +23,8 @@ Three entry points are injected into the Lua runtime:
 | `lsv.map_action(keys, description, fn)` | Bind keys to a Lua function. The function can mutate the config table or call helpers. |
 | `lsv.set_previewer(function(ctx) ... end)` | Provide a command to render the preview for the current file. Return `nil` to fall back to the built-in “head” preview. |
 | `lsv.open_theme_picker()` | Show the interactive theme picker modal for the current session. |
+| `lsv.quote(s)` | Return an OS-appropriate shell-quoted version of string `s` (Windows: `"..."` with doubled quotes; Unix: `'...'` with safe escaping). |
+| `lsv.get_os_name()` | Return a lowercase platform identifier (e.g., `windows`, `macos`, `linux`). |
 
 ### Action Helpers (`lsv` table)
 

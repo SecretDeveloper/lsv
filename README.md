@@ -92,6 +92,8 @@ Top‑level Lua API:
 - `lsv.config({ ... })`: core settings (icons, keys, ui, etc.).
 - `lsv.set_previewer(function(ctx) ... end)`: return a shell command to render preview.
 - `lsv.map_action(key, description, function(lsv, config) ... end)`: bind keys to Lua functions.
+- `lsv.quote(s)`: OS‑aware shell quoting for building safe command arguments.
+- `lsv.get_os_name()`: returns a platform string (e.g., `windows`, `macos`, `linux`).
 
 Action helper functions available on `lsv` inside actions:
 

@@ -73,6 +73,28 @@ pub fn apply_effects(
   {
     app.display_output(&title, &text);
   }
+  if let Some(msg) = fx.message_text.as_ref()
+  {
+    app.add_message(msg);
+  }
+  if let Some(err) = fx.error_text.as_ref()
+  {
+    app.add_message(&format!("Error: {}", err));
+    app.overlay = crate::app::Overlay::Messages;
+  }
+  if fx.clear_messages
+  {
+    app.clear_recent_messages();
+  }
+  if let Some(name) = fx.theme_set_name.as_ref()
+    && !app.set_theme_by_name(name)
+  {
+    app.add_message(&format!("Theme '{}' not found", name));
+  }
+  if let Some(cmd) = fx.preview_run_cmd.as_ref()
+  {
+    app.start_preview_process(cmd);
+  }
 
   match fx.theme_picker
   {

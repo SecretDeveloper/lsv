@@ -200,6 +200,13 @@ pub struct App
   // Key sequence handling
   // moved into `keys`
   // (which-key prefix moves under overlay)
+  // Running preview process (streamed output)
+  pub(crate) running_preview:   Option<RunningPreview>,
+}
+
+pub struct RunningPreview
+{
+  pub rx: std::sync::mpsc::Receiver<Option<String>>,
 }
 
 impl App
@@ -307,6 +314,7 @@ impl App
       marks: std::collections::HashMap::new(),
       pending_mark: false,
       pending_goto: false,
+      running_preview: None,
     };
     // Load marks from config root
     if let Some(root) = app.theme_root_dir()
@@ -811,6 +819,11 @@ impl App
 
   pub(crate) fn refresh_preview(&mut self)
   {
+    if self.running_preview.is_some()
+    {
+      // Live process is writing into preview
+      return;
+    }
     // Avoid borrowing self while mutating by cloning the needed fields first
     let (is_dir, path) = match self.selected_entry()
     {
@@ -896,6 +909,122 @@ impl App
       need_meta,
       self.config.ui.max_list_items,
     )
+  }
+
+  pub fn start_preview_process(
+    &mut self,
+    cmd: &str,
+  )
+  {
+    use std::{
+      process::{
+        Command,
+        Stdio,
+      },
+      sync::mpsc,
+    };
+    // Reset preview buffer and caches
+    self.preview.static_lines.clear();
+    self.preview.cache_key = None;
+    self.preview.cache_lines = None;
+    // Channel to stream lines
+    let (tx, rx) = mpsc::channel::<Option<String>>();
+    // Build platform shell
+    #[cfg(windows)]
+    let mut command = {
+      let mut c = Command::new("cmd");
+      c.arg("/C").arg(cmd);
+      c
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+      let mut c = Command::new("sh");
+      c.arg("-lc").arg(cmd);
+      c
+    };
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    match command.spawn()
+    {
+      Ok(mut child) =>
+      {
+        let mut stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        std::thread::spawn(move || {
+          // Helper to read from a pipe and send lines
+          let read_out = |s: &mut Option<std::process::ChildStdout>| {
+            if let Some(out) = s
+            {
+              let mut buf = [0u8; 8192];
+              let mut acc = Vec::<u8>::new();
+              loop
+              {
+                match std::io::Read::read(out, &mut buf)
+                {
+                  Ok(0) => break,
+                  Ok(n) =>
+                  {
+                    acc.extend_from_slice(&buf[..n]);
+                    while let Some(pos) = acc.iter().position(|&b| b == b'\n')
+                    {
+                      let chunk = acc.drain(..=pos).collect::<Vec<u8>>();
+                      let line = String::from_utf8_lossy(&chunk)
+                        .trim_end_matches('\n')
+                        .to_string();
+                      let _ = tx.send(Some(line));
+                    }
+                  }
+                  Err(_) => break,
+                }
+              }
+              if !acc.is_empty()
+              {
+                let line = String::from_utf8_lossy(&acc).to_string();
+                let _ = tx.send(Some(line));
+              }
+            }
+          };
+          read_out(&mut stdout);
+          // Read stderr separately (duplicate code for type simplicity)
+          if let Some(mut err) = stderr
+          {
+            let mut buf = [0u8; 8192];
+            let mut acc = Vec::<u8>::new();
+            loop
+            {
+              match std::io::Read::read(&mut err, &mut buf)
+              {
+                Ok(0) => break,
+                Ok(n) =>
+                {
+                  acc.extend_from_slice(&buf[..n]);
+                  while let Some(pos) = acc.iter().position(|&b| b == b'\n')
+                  {
+                    let chunk = acc.drain(..=pos).collect::<Vec<u8>>();
+                    let line = String::from_utf8_lossy(&chunk)
+                      .trim_end_matches('\n')
+                      .to_string();
+                    let _ = tx.send(Some(line));
+                  }
+                }
+                Err(_) => break,
+              }
+            }
+            if !acc.is_empty()
+            {
+              let line = String::from_utf8_lossy(&acc).to_string();
+              let _ = tx.send(Some(line));
+            }
+          }
+          let _ = tx.send(None);
+        });
+        self.running_preview = Some(RunningPreview { rx });
+        self.force_full_redraw = true;
+      }
+      Err(e) =>
+      {
+        self.preview.static_lines = vec![format!("<error: {}>", e)];
+      }
+    }
   }
 
   pub(crate) fn rebuild_keymap_lookup(&mut self)
@@ -1234,6 +1363,92 @@ impl App
       let _ = self.recent_messages.drain(0..self.recent_messages.len() - 100);
     }
     self.force_full_redraw = true;
+  }
+
+  pub fn clear_recent_messages(&mut self)
+  {
+    if !self.recent_messages.is_empty()
+    {
+      self.recent_messages.clear();
+      self.force_full_redraw = true;
+    }
+  }
+
+  pub fn set_theme_by_name(
+    &mut self,
+    name: &str,
+  ) -> bool
+  {
+    let root = match self.theme_root_dir()
+    {
+      Some(p) => p,
+      None =>
+      {
+        self.add_message("Theme: unable to determine config directory");
+        return false;
+      }
+    };
+    // Prefer <root>/lua/themes then <root>/themes
+    let themes_dir = {
+      let module_dir = root.join("lua").join("themes");
+      if std::fs::metadata(&module_dir).map(|m| m.is_dir()).unwrap_or(false)
+      {
+        module_dir
+      }
+      else
+      {
+        root.join("themes")
+      }
+    };
+    let rd = match std::fs::read_dir(&themes_dir)
+    {
+      Ok(v) => v,
+      Err(_) => return false,
+    };
+    let target_lower = name.to_lowercase();
+    for ent in rd.flatten()
+    {
+      let path = ent.path();
+      if !path.is_file()
+      {
+        continue;
+      }
+      if let Some(ext) = path.extension().and_then(|s| s.to_str())
+      {
+        if !ext.eq_ignore_ascii_case("lua")
+        {
+          continue;
+        }
+      }
+      else
+      {
+        continue;
+      }
+      let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+      if stem.to_lowercase() == target_lower
+      {
+        match crate::config::load_theme_from_file(&path)
+        {
+          Ok(theme) =>
+          {
+            self.config.ui.theme = Some(theme);
+            self.config.ui.theme_path = Some(path.clone());
+            self.force_full_redraw = true;
+            return true;
+          }
+          Err(e) =>
+          {
+            self.add_message(&format!(
+              "Theme: failed to load {} ({})",
+              path.display(),
+              e
+            ));
+            return false;
+          }
+        }
+      }
+    }
+    false
   }
 
   pub(crate) fn theme_root_dir(&self) -> Option<PathBuf>

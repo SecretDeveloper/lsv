@@ -150,6 +150,13 @@ fn build_lsv_helpers(
     .map_err(|e| io::Error::other(e.to_string()))?;
   tbl.set("quote", quote_fn).map_err(|e| io::Error::other(e.to_string()))?;
 
+  // lsv.get_os_name(): return platform identifier (e.g., "windows", "macos",
+  // "linux")
+  let os_fn = lua
+    .create_function(|_, ()| Ok(std::env::consts::OS.to_string()))
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("get_os_name", os_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
   // getenv(name, default?) -> string|nil
   let getenv_fn = lua
     .create_function(|_, (name, default): (String, Option<String>)| {
@@ -157,6 +164,80 @@ fn build_lsv_helpers(
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
   tbl.set("getenv", getenv_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
+  // force_redraw(): request a full rerender
+  let cfg_ref_redraw = cfg_tbl.clone();
+  let force_redraw_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_redraw.set("redraw", true);
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("force_redraw", force_redraw_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // clear_messages(): clear the UI message list
+  let cfg_ref_cmsg = cfg_tbl.clone();
+  let clear_messages_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_cmsg.set("clear_messages", true);
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("clear_messages", clear_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // set_theme_by_name(name)
+  let cfg_ref_settheme = cfg_tbl.clone();
+  let set_theme_by_name_fn = lua
+    .create_function(move |_, name: String| {
+      let n = name.trim();
+      if !n.is_empty()
+      {
+        let _ = cfg_ref_settheme.set("theme_set_name", n);
+      }
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("set_theme_by_name", set_theme_by_name_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // show_message(text): push a message to the UI message list
+  let cfg_ref_msg = cfg_tbl.clone();
+  let show_message_fn = lua
+    .create_function(move |_, text: String| {
+      let _ = cfg_ref_msg.set("message_text", text);
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("show_message", show_message_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // show_error(text): push an error and show the messages overlay
+  let cfg_ref_err = cfg_tbl.clone();
+  let show_error_fn = lua
+    .create_function(move |_, text: String| {
+      let _ = cfg_ref_err.set("error_text", text);
+      let _ = cfg_ref_err.set("messages", "show");
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("show_error", show_error_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // trace(text): write to trace log if enabled
+  let trace_fn = lua
+    .create_function(|_, text: String| {
+      crate::trace::log(text);
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("trace", trace_fn).map_err(|e| io::Error::other(e.to_string()))?;
 
   // Clipboard helpers
   let cfg_ref_cp = cfg_tbl.clone();
@@ -264,15 +345,27 @@ fn build_lsv_helpers(
             buf.push(b'\n');
             buf.extend_from_slice(&output.stderr);
           }
-          let text = String::from_utf8_lossy(&buf).to_string();
-          let title = format!("$ {}", cmd);
-          let _ = cfg_ref5.set("output_text", text);
-          let _ = cfg_ref5.set("output_title", title);
+          let bytes = buf.len();
+          let success = output.status.success();
           trace::log(format!(
             "[os_run] exit={:?} bytes_out={}",
             output.status.code(),
-            buf.len()
+            bytes
           ));
+          if bytes > 0 || !success
+          {
+            // Show Output overlay only when there is content or a failure
+            let text = String::from_utf8_lossy(&buf).to_string();
+            let title = format!("$ {}", cmd);
+            let _ = cfg_ref5.set("output_text", text);
+            let _ = cfg_ref5.set("output_title", title);
+          }
+          else
+          {
+            // Quiet success: add a small message instead of opening the output
+            // panel
+            let _ = cfg_ref5.set("message_text", format!("$ {}", cmd));
+          }
           Ok(true)
         }
         Err(e) =>
@@ -639,6 +732,43 @@ fn build_clipboard_helpers(
   out
     .set("clear_clipboard", clear_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
+  // clear_messages(): clear the UI message list
+  let cfg_ref_cmsg = cfg_tbl.clone();
+  let clear_messages_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_cmsg.set("clear_messages", true);
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("clear_messages", clear_messages_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  // set_theme_by_name(name)
+  let cfg_ref_settheme = cfg_tbl.clone();
+  let set_theme_by_name_fn = lua
+    .create_function(move |_, name: String| {
+      let n = name.trim();
+      if !n.is_empty()
+      {
+        let _ = cfg_ref_settheme.set("theme_set_name", n);
+      }
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("set_theme_by_name", set_theme_by_name_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  // force_redraw(): request a full rerender
+  let cfg_ref_redraw = cfg_tbl.clone();
+  let force_redraw_fn = lua
+    .create_function(move |_, ()| {
+      let _ = cfg_ref_redraw.set("redraw", true);
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("force_redraw", force_redraw_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
   Ok(())
 }
 
@@ -672,6 +802,23 @@ fn build_process_helpers(
     })
     .map_err(|e| io::Error::other(e.to_string()))?;
   out.set("prompt", prompt_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
+  // open_in_preview(cmd): run a non-interactive command and stream output into
+  // preview
+  let cfg_ref_pr = cfg_tbl.clone();
+  let open_in_preview_fn = lua
+    .create_function(move |_, cmd: String| {
+      let c = cmd.trim();
+      if !c.is_empty()
+      {
+        let _ = cfg_ref_pr.set("preview_run_cmd", c);
+      }
+      Ok(true)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("open_in_preview", open_in_preview_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
 
   // delete_selected / delete_selected_all
   let cfg_ref_del = cfg_tbl.clone();

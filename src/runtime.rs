@@ -36,6 +36,35 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
     let mut result: Result<(), Box<dyn std::error::Error>> = Ok(());
     loop
     {
+      // Drain any running preview process output into the preview buffer
+      if let Some(ref rp) = app.running_preview
+      {
+        while let Ok(opt) = rp.rx.try_recv()
+        {
+          match opt
+          {
+            Some(line) =>
+            {
+              app.preview.static_lines.push(crate::util::sanitize_line(&line));
+              // Trim to a reasonable bound to avoid unbounded growth
+              if app.preview.static_lines.len() > 2000
+              {
+                let _ = app
+                  .preview
+                  .static_lines
+                  .drain(0..app.preview.static_lines.len() - 2000);
+              }
+            }
+            None =>
+            {
+              app.running_preview = None;
+              // Recompute normal preview for current selection
+              app.refresh_preview();
+              break;
+            }
+          }
+        }
+      }
       if app.force_full_redraw
       {
         let _ = terminal.clear();

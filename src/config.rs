@@ -1367,6 +1367,17 @@ fn install_lsv_api(
     }
   })?;
   lsv.set("quote", quote_fn)?;
+  // lsv.get_os_name(): return platform identifier (e.g., "windows", "macos",
+  // "linux")
+  let os_fn =
+    lua.create_function(|_, ()| Ok(std::env::consts::OS.to_string()))?;
+  lsv.set("get_os_name", os_fn)?;
+  // lsv.trace(text): write to trace log if enabled
+  let trace_fn = lua.create_function(|_, text: String| {
+    crate::trace::log(text);
+    Ok(true)
+  })?;
+  lsv.set("trace", trace_fn)?;
   // lsv.getenv(name, default?) -> string|nil: safe env access for config,
   // actions, previewers
   let getenv_fn =

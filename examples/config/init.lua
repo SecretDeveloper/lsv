@@ -39,16 +39,25 @@ lsv.config({
 local function shquote(s)
 	return lsv.quote(tostring(s))
 end
+local OS = lsv.get_os_name() -- "windows", "macos", "linux", ...
 
 -- Previewer: markdown via glow, images via viu, text via bat
 lsv.set_previewer(function(ctx)
 	if ctx.current_file_extension == "md" or ctx.current_file_extension == "markdown" then
-		return string.format(
-			"head -n %d %s | glow --style=dark --line-numbers=true --width %d",
-			ctx.preview_height,
-			shquote(ctx.current_file),
-			ctx.preview_width - 2
-		)
+		if OS == "windows" then
+			return string.format(
+				"glow --style=dark --line-numbers=true --width %d %s",
+				ctx.preview_width - 2,
+				shquote(ctx.current_file)
+			)
+		else
+			return string.format(
+				"head -n %d %s | glow --style=dark --line-numbers=true --width %d",
+				ctx.preview_height,
+				shquote(ctx.current_file),
+				ctx.preview_width - 2
+			)
+		end
 	elseif
 		ctx.current_file_extension == "jpg"
 		or ctx.current_file_extension == "jpeg"
@@ -88,17 +97,21 @@ end)
 
 lsv.map_action("t", "New tmux window here", function(lsv, config)
 	local dir = (config.context and config.context.cwd) or "."
-	lsv.os_run(string.format("tmux new-window -c %s", shquote(dir)))
+	lsv.os_run_interactive(string.format("tmux new-window -c %s", lsv.quote(dir)))
 end)
 
 lsv.map_action("gs", "Git Status", function(lsv, config)
 	local dir = (config.context and config.context.cwd) or "."
-	lsv.os_run(string.format("git -C %s status", shquote(dir)))
+	lsv.os_run_(string.format("git -C %s status", lsv.quote(dir)))
 end)
 
-lsv.map_action("E", "Open in tmux pane", function(lsv, config)
+lsv.map_action("E", "Edit in $EDITOR (preview)", function(lsv, config)
 	local path = (config.context and config.context.current_file) or "."
-	lsv.os_run_interactive(string.format("&tmux split-window -h nvim %s", shquote(path)))
+	local cmd = string.format("%s %s", "$EDITOR", lsv.quote(path))
+	if OS == "windows" then
+		cmd = string.format("bat --paging=always %s", lsv.quote(path))
+	end
+	lsv.os_run_interactive(cmd)
 end)
 lsv.map_action("e", "Edit in nvim", function(lsv, config)
 	local path = (config.context and config.context.current_file) or "."
@@ -107,4 +120,9 @@ end)
 lsv.map_action("i", "View file", function(lsv, config)
 	local path = (config.context and config.context.current_file) or "."
 	lsv.os_run_interactive(string.format("bat --paging=always %s", shquote(path)))
+end)
+
+-- Example: clear messages (Ctrl+m)
+lsv.map_action("<C-m>", "Clear messages", function(lsv, config)
+	lsv.clear_messages()
 end)
