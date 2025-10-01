@@ -69,7 +69,7 @@ lsv.config({
 
 lsv.map_action("gs", "Git Status", function(lsv, config)
   local dir = (config.context and config.context.cwd) or "."
-  lsv.os_run("git -C " .. shquote(dir) .. " status")
+  lsv.os_run("git -C " .. lsv.quote(dir) .. " status")
 end)
 ```
 

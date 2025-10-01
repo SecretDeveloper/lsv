@@ -132,6 +132,24 @@ fn build_lsv_helpers(
   // Process helpers
   build_process_helpers(lua, &tbl, cfg_tbl, app)?;
 
+  // lsv.quote(s): OS-appropriate shell quoting for a single argument
+  let quote_fn = lua
+    .create_function(|_, s: String| {
+      #[cfg(windows)]
+      {
+        let quoted = format!("\"{}\"", s.replace('"', "\"\""));
+        Ok(quoted)
+      }
+      #[cfg(not(windows))]
+      {
+        let escaped = s.replace('\'', "'\\''");
+        let quoted = format!("'{}'", escaped);
+        Ok(quoted)
+      }
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl.set("quote", quote_fn).map_err(|e| io::Error::other(e.to_string()))?;
+
   // getenv(name, default?) -> string|nil
   let getenv_fn = lua
     .create_function(|_, (name, default): (String, Option<String>)| {

@@ -1349,6 +1349,24 @@ fn install_lsv_api(
   lsv.set("mapkey", mapkey_fn)?;
   lsv.set("set_previewer", set_previewer_fn)?;
   lsv.set("map_action", map_action_fn)?;
+  // lsv.quote(s): OS-appropriate shell quoting for a single argument
+  let quote_fn = lua.create_function(|_, s: String| {
+    #[cfg(windows)]
+    {
+      // Wrap in double quotes and escape embedded quotes by doubling them.
+      // Suitable for cmd.exe /C.
+      let quoted = format!("\"{}\"", s.replace('"', "\"\""));
+      Ok(quoted)
+    }
+    #[cfg(not(windows))]
+    {
+      // Wrap in single quotes and escape embedded single quotes safely.
+      let escaped = s.replace('\'', "'\\''");
+      let quoted = format!("'{}'", escaped);
+      Ok(quoted)
+    }
+  })?;
+  lsv.set("quote", quote_fn)?;
   // lsv.getenv(name, default?) -> string|nil: safe env access for config,
   // actions, previewers
   let getenv_fn =

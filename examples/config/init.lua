@@ -35,9 +35,9 @@ lsv.config({
 	},
 })
 
--- Helper used by previewer and actions below
+-- Helper used by previewer and actions below (OS-aware quoting)
 local function shquote(s)
-	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+	return lsv.quote(tostring(s))
 end
 
 -- Previewer: markdown via glow, images via viu, text via bat

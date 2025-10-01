@@ -136,9 +136,9 @@ lsv.config({
   },
 })
 
--- Safe shell quote helper
+-- Safe shell quote helper (OS-aware)
 local function shquote(s)
-  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+  return lsv.quote(tostring(s))
 end
 
 -- Example: bind "gs" to git status of the current directory
