@@ -33,6 +33,22 @@ The app is keyboard‑driven, configurable via Lua, and supports rich, ANSI‑co
 
 See the [documentation overview](docs/README.md) for setup guides, configuration reference, keybindings, and troubleshooting tips.
 
+### Bootstrap Configuration
+
+Create a ready-to-edit config (init.lua, icons, and themes) in your user config directory with:
+
+```
+lsv --init-config
+```
+
+- Add `--yes` to skip the prompt and run non-interactively:
+
+```
+lsv --init-config --yes
+```
+
+The files are copied from the repository’s `examples/config` folder when available; otherwise, lsv writes an embedded copy bundled in the binary. Config is written to the first of `$LSV_CONFIG_DIR`, `$XDG_CONFIG_HOME/lsv`, or `~/.config/lsv` (Windows uses `%LOCALAPPDATA%\lsv` then `%APPDATA%\lsv`).
+
 ## Screenshots
 
 ![lsv (light)](docs/lsv-light.jpg)
@@ -86,6 +102,8 @@ lsv loads a Lua config from the first of:
 1. `$LSV_CONFIG_DIR/init.lua`
 2. `$XDG_CONFIG_HOME/lsv/init.lua`
 3. `~/.config/lsv/init.lua`
+
+Quick start: run `lsv --init-config` to create `init.lua` plus example themes and icons.
 
 Top‑level Lua API:
 

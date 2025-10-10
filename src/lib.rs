@@ -17,6 +17,8 @@ pub mod keymap;
 pub mod runtime_util;
 pub mod trace;
 pub mod util;
+pub mod ui;
+pub use app::App;
 
 /// Dispatch a command string (single action or `;`-separated sequence)
 /// against an [`App`](crate::app::App) instance.

@@ -124,7 +124,7 @@ fn build_lsv_helpers(
   build_ui_helpers(lua, &tbl, cfg_tbl)?;
 
   // Selection and prompts
-  build_selection_helpers(lua, &tbl, cfg_tbl)?;
+  build_selection_helpers(lua, &tbl, cfg_tbl, app)?;
 
   // Clipboard helpers
   build_clipboard_helpers(lua, &tbl, cfg_tbl)?;
@@ -590,6 +590,7 @@ fn build_selection_helpers(
   lua: &Lua,
   out: &Table,
   cfg_tbl: &Table,
+  app: &App,
 ) -> io::Result<()>
 {
   // select_item(index)
@@ -680,6 +681,25 @@ fn build_selection_helpers(
   out
     .set("clear_selection", clear_selection_fn)
     .map_err(|e| io::Error::other(e.to_string()))?;
+
+  // get_selected_paths(): return array-like table of selected file paths
+  let selected_list: Vec<String> =
+    app.selected.iter().map(|p| p.to_string_lossy().to_string()).collect();
+  let get_selected_paths_fn = lua
+    .create_function(move |lua, ()| {
+      let tbl = lua.create_table()?;
+      for (i, p) in selected_list.iter().enumerate()
+      {
+        // 1-based indexing for Lua arrays
+        tbl.set((i + 1) as i64, p.as_str())?;
+      }
+      Ok(tbl)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  out
+    .set("get_selected_paths", get_selected_paths_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
   Ok(())
 }
 

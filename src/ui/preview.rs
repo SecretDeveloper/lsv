@@ -25,8 +25,6 @@ use ratatui::{
 use crate::ui::ansi::ansi_spans;
 use mlua::Value as LuaValue;
 
-// Internal safety cap on how many preview lines we ingest/render.
-// Not configurable via user config; prevents runaway output.
 const PREVIEW_LINES_LIMIT: usize = 1000;
 
 pub fn draw_preview_panel(
@@ -35,10 +33,7 @@ pub fn draw_preview_panel(
   app: &mut crate::App,
 )
 {
-  // Clear area to prevent artifacts when content shrinks or lines are shorter
   f.render_widget(Clear, area);
-  // Try dynamic preview via Lua previewer with simple caching to avoid
-  // re-running when unchanged
   let mut dynamic_lines: Option<Vec<String>> = None;
   if let Some(sel) = app.selected_entry()
   {
@@ -51,8 +46,7 @@ pub fn draw_preview_panel(
       }
       else
       {
-        dynamic_lines =
-          run_previewer(app, &sel.path, area, PREVIEW_LINES_LIMIT);
+        dynamic_lines = run_previewer(app, &sel.path, area, PREVIEW_LINES_LIMIT);
         app.preview.cache_key = Some(key);
         app.preview.cache_lines = dynamic_lines.clone();
       }
@@ -66,20 +60,16 @@ pub fn draw_preview_panel(
   let mut block = Block::default().borders(Borders::ALL);
   if let Some(th) = app.config.ui.theme.as_ref()
   {
-    if let Some(bg) =
-      th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    if let Some(bg) = th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
       block = block.style(Style::default().bg(bg));
     }
-    if let Some(bfg) =
-      th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    if let Some(bfg) = th.border_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
       block = block.border_style(Style::default().fg(bfg));
     }
   }
 
-  // If a directory is selected, draw entries using the same row format as other
-  // panes
   let text: Vec<Line> = if let Some(sel) = app.selected_entry()
   {
     if sel.is_dir
@@ -126,20 +116,6 @@ pub fn draw_preview_panel(
         .collect()
     }
   }
-  else if let Some(lines) = dynamic_lines.as_ref()
-  {
-    if lines.is_empty()
-    {
-      vec![Line::from(Span::styled(
-        "<no selection>",
-        Style::default().fg(Color::DarkGray),
-      ))]
-    }
-    else
-    {
-      lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
-    }
-  }
   else if app.preview.static_lines.is_empty()
   {
     vec![Line::from(Span::styled(
@@ -149,20 +125,23 @@ pub fn draw_preview_panel(
   }
   else
   {
-    app.preview.static_lines.iter().map(|l| Line::from(ansi_spans(l))).collect()
+    app
+      .preview
+      .static_lines
+      .iter()
+      .map(|l| Line::from(ansi_spans(l)))
+      .collect()
   };
 
   let mut para = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
   if let Some(th) = app.config.ui.theme.as_ref()
   {
     let mut st = Style::default();
-    if let Some(fg) =
-      th.item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    if let Some(fg) = th.item_fg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
       st = st.fg(fg);
     }
-    if let Some(bg) =
-      th.item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+    if let Some(bg) = th.item_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
     {
       st = st.bg(bg);
     }
@@ -178,26 +157,16 @@ fn run_previewer(
   limit: usize,
 ) -> Option<Vec<String>>
 {
-  // 1) Lua previewer function (if configured)
-  if let Some(lua) = app.lua.as_ref()
-    && let (engine, Some(key)) = (&lua.engine, lua.previewer.as_ref())
+  if let Some(lua) = app.lua.as_ref() && let (engine, Some(key)) = (&lua.engine, lua.previewer.as_ref())
   {
     let lua = engine.lua();
     if let Ok(func) = lua.registry_value::<mlua::Function>(key)
     {
       let path_str = path.to_string_lossy().to_string();
-      let dir_str = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_string_lossy()
-        .to_string();
-      let ext =
-        path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+      let dir_str = path.parent().unwrap_or_else(|| Path::new(".")).to_string_lossy().to_string();
+      let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
       let is_binary = file_is_binary(path);
-      let name_now = path
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_default();
+      let name_now = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
       if let Ok(ctx) = lua.create_table()
       {
         let _ = ctx.set("current_file", path_str.clone());
@@ -221,13 +190,8 @@ fn run_previewer(
                 "[preview] lua cmd='{}' cwd='{}' file='{}'",
                 cmd, dir_str, path_str
               ));
-              let name_str = path
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-              return run_previewer_command(
-                &cmd, &dir_str, &path_str, &name_str, limit,
-              );
+              let name_str = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+              return run_previewer_command(&cmd, &dir_str, &path_str, &name_str, limit);
             }
             Err(e) =>
             {
@@ -261,8 +225,6 @@ fn run_previewer(
       }
     }
   }
-
-  // No legacy previewer rules; return None to fall back to default head preview
   None
 }
 
@@ -284,18 +246,9 @@ fn run_previewer_command(
   ));
 
   #[cfg(windows)]
-  let mut command = {
-    let mut c = Command::new("cmd");
-    c.arg("/C").arg(cmd);
-    c
-  };
-
+  let mut command = { let mut c = Command::new("cmd"); c.arg("/C").arg(cmd); c };
   #[cfg(not(windows))]
-  let mut command = {
-    let mut c = Command::new("sh");
-    c.arg("-lc").arg(cmd);
-    c
-  };
+  let mut command = { let mut c = Command::new("sh"); c.arg("-lc").arg(cmd); c };
 
   match command
     .current_dir(dir_str)
@@ -319,26 +272,17 @@ fn run_previewer_command(
       let text = String::from_utf8_lossy(&buf).replace('\r', "");
       crate::trace::log(format!(
         "[preview] done: success={} exit_code={:?} bytes_out={} elapsed_ms={}",
-        out.status.success(),
-        out.status.code(),
-        text.len(),
-        elapsed
+        out.status.success(), out.status.code(), text.len(), elapsed
       ));
       if !out.status.success()
       {
-        crate::trace::log(format!(
-          "[preview] non-zero status running '{}'",
-          cmd
-        ));
+        crate::trace::log(format!("[preview] non-zero status running '{}'", cmd));
       }
       let mut lines: Vec<String> = Vec::new();
       for l in text.lines()
       {
         lines.push(l.to_string());
-        if lines.len() >= limit
-        {
-          break;
-        }
+        if lines.len() >= limit { break; }
       }
       Some(lines)
     }
@@ -346,8 +290,7 @@ fn run_previewer_command(
     {
       crate::trace::log(format!(
         "[preview] error spawning via {}: {}",
-        if cfg!(windows) { "cmd" } else { "sh" },
-        e
+        if cfg!(windows) { "cmd" } else { "sh" }, e
       ));
       #[cfg(windows)]
       {
@@ -369,15 +312,10 @@ fn file_is_binary(path: &Path) -> bool
     if let Ok(n) = std::io::Read::read(&mut f, &mut buf)
     {
       let slice = &buf[..n];
-      if slice.contains(&0)
-      {
-        return true;
-      }
-      if std::str::from_utf8(slice).is_err()
-      {
-        return true;
-      }
+      if slice.contains(&0) { return true; }
+      if std::str::from_utf8(slice).is_err() { return true; }
     }
   }
   false
 }
+

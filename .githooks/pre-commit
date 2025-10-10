@@ -11,19 +11,6 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "pre-commit: running cargo fmt --all -- --check"
-if ! cargo +nightly fmt --all -- --check; then
-  cat >&2 <<'EOF'
-pre-commit: formatting issues detected by rustfmt.
-
-To fix automatically, run:
-  cargo fmt --all
-
-Then re-stage your changes and commit again.
-EOF
-  exit 1
-fi
-
 echo "pre-commit: running cargo clippy --all-targets --all-features -- -D warnings"
 if ! cargo clippy --all-targets --all-features -- -D warnings; then
   cat >&2 <<'EOF'

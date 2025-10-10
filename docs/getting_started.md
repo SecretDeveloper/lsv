@@ -34,7 +34,7 @@ lsv /path/to/directory
 
 Use arrow keys or `h/j/k/l` to navigate. Press `?` to view the which-key overlay of available shortcuts.
 
-## 3. Copy the Default Config
+## 3. Create Your Config
 
 Configuration lives in Lua. lsv loads the first file it finds:
 
@@ -44,15 +44,20 @@ Configuration lives in Lua. lsv loads the first file it finds:
    - Windows: `%LOCALAPPDATA%\lsv\init.lua`, then `%APPDATA%\lsv\init.lua`, then `%USERPROFILE%\.config\lsv\init.lua`
    - macOS/Linux: `~/.config/lsv/init.lua`
 
-Create the directory if it doesn’t exist and copy a starter config:
+Easiest: let lsv scaffold a full example config (init.lua, icons, themes):
+
+```bash
+lsv --init-config        # prompts before writing
+lsv --init-config --yes  # non-interactive
+```
+
+lsv writes to `$LSV_CONFIG_DIR` when set, otherwise `$XDG_CONFIG_HOME/lsv` or `~/.config/lsv` (Windows: `%LOCALAPPDATA%\lsv` then `%APPDATA%\lsv`). It copies `examples/config` from the repository if present; otherwise it writes an embedded copy bundled with the binary.
+
+Manual alternative (from source tree):
 
 ```bash
 mkdir -p ~/.config/lsv
-cp examples/config/init.lua ~/.config/lsv/init.lua
-mkdir -p ~/.config/lsv/themes
-cp examples/config/themes/dark.lua ~/.config/lsv/themes/dark.lua
-cp examples/config/themes/light.lua ~/.config/lsv/themes/light.lua
-# Optional: copy any other palette from `examples/config/themes/` (tokyonight, gruvbox, catppuccin, onedark, dracula, everforest, kanagawa, solarized, …).
+cp -r examples/config/* ~/.config/lsv/
 ```
 
 ## 4. Minimal Customisation

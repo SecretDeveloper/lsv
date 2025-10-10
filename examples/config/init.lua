@@ -39,7 +39,8 @@ lsv.config({
 local function shquote(s)
 	return lsv.quote(tostring(s))
 end
-local OS = lsv.get_os_name() -- "windows", "macos", "linux", ...
+-- Determine OS with backward-compat for older lsv versions
+local OS = lsv.get_os_name()
 
 -- Previewer: markdown via glow, images via viu, text via bat
 lsv.set_previewer(function(ctx)
@@ -120,6 +121,34 @@ end)
 lsv.map_action("i", "View file", function(lsv, config)
 	local path = (config.context and config.context.current_file) or "."
 	lsv.os_run_interactive(string.format("bat --paging=always %s", shquote(path)))
+end)
+
+-- Diff: compare two selected files (fd)
+lsv.map_action("fd", "Diff selected files", function(lsv, config)
+	local paths = lsv.get_selected_paths()
+	local n = #paths
+	if n < 2 then
+		lsv.show_error("Diff: select 2 files")
+		return
+	end
+	if n > 2 then
+		lsv.show_message(string.format("Diff: using first 2 of %d", n))
+	end
+	local a = shquote(paths[1])
+	local b = shquote(paths[2])
+	-- Allow overriding via $DIFF_TOOL (e.g., 'delta -s -n' or 'difft')
+	local user_tool = lsv.getenv("DIFF_TOOL")
+	local cmd
+	if user_tool and #user_tool > 0 then
+		cmd = string.format("%s %s %s", user_tool, a, b)
+	elseif OS == "windows" then
+		-- Fallback to git diff on Windows
+		cmd = string.format("git --no-pager diff --no-index --color=always %s %s", a, b)
+	else
+		-- Default: git --no-index to diff arbitrary files
+		cmd = string.format("git --no-pager diff --no-index --color=always %s %s", a, b)
+	end
+	lsv.os_run_interactive(cmd)
 end)
 
 -- Example: clear messages (Ctrl+m)

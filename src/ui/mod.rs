@@ -1,7 +1,11 @@
 pub mod ansi;
 pub mod colors;
+pub mod format;
+pub mod overlays;
 pub mod panes;
+pub mod row;
 pub mod template;
+pub mod preview;
 
 use ratatui::{
   layout::{
@@ -44,7 +48,7 @@ pub fn draw(
 
   panes::draw_parent_panel(f, chunks[0], app);
   panes::draw_current_panel(f, chunks[1], app);
-  crate::preview::draw_preview_panel(f, chunks[2], app);
+  crate::ui::preview::draw_preview_panel(f, chunks[2], app);
 
   // which-key overlay (draw last so it appears on top)
   match app.overlay
