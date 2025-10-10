@@ -13,25 +13,75 @@
 -- Override a few UI defaults
 
 lsv.config({
+	-- Optional config schema/version marker (reserved for future use)
+	config_version = 1,
+
+	-- Icons configuration: enable + mappings (preset/font are informational)
 	icons = {
-		enabled = true,
-		font = "Nerd",
-		default_file = "",
-		default_dir = "",
-		mappings = require("nerdfont-icons"),
+		enabled = true, -- set false to disable icons entirely
+		preset = nil, -- optional preset label for your setup
+		font = "Nerd", -- hint that a Nerd Font is recommended
+		default_file = "", -- fallback icon for files
+		default_dir = "", -- fallback icon for directories
+		mappings = require("nerdfont-icons"), -- combined extensions/folders table
 	},
+
+	-- Key handling configuration
+	keys = {
+		sequence_timeout_ms = 600, -- timeout for multi-key sequences (0=disabled)
+	},
+
+	-- UI configuration block
 	ui = {
-		display_mode = "friendly",
-		row = { middle = "" },
-		row_widths = { icon = 2, left = 40, right = 14 },
+		-- Pane split percentages (parent/current/preview)
+		panes = { parent = 30, current = 40, preview = 30 },
+
+		-- Listing and formatting
+		show_hidden = false, -- show dotfiles
+		max_list_items = 5000, -- soft cap on entries rendered
+		date_format = "%Y-%m-%d %H:%M", -- strftime/chrono format used in templates
+
+		-- Header (top bar) formatting + colours
 		header = {
 			left = "{username|fg=cyan;style=bold}@{hostname|fg=cyan}:{cwd|fg=#ffd866}/{current_file_name|fg=#ffd866;style=bold}",
 			right = "{current_file_size|fg=gray}  {owner|fg=gray}  {current_file_permissions|fg=gray}  {current_file_ctime|fg=gray}",
-			fg = "gray",
-			bg = "#181825",
+			fg = "gray", -- text colour (overridden by header_fg below)
+			bg = "#181825", -- background colour (overridden by header_bg below)
 		},
-		theme = require("themes/catppuccin"), -- or: theme = require("themes/catppuccin")
+		header_fg = nil, -- optional override for header.fg
+		header_bg = nil, -- optional override for header.bg
+
+		-- Row template and optional fixed widths
+		row = {
+			icon = " ", -- icon cell template (often left as a single space)
+			left = "{name}", -- left segment template
+			middle = "", -- middle segment template
+			right = "{info}", -- right segment template
+		},
+		row_widths = { icon = 2, left = 40, middle = 0, right = 14 }, -- 0 = flexible
+
+		-- Display/time formatting for dates in templates: "absolute" | "friendly"
+		display_mode = "friendly",
+
+		-- Sorting controls applied on startup if provided
+		sort = nil, -- one of: "name" | "size" | "mtime" | "created"
+		sort_reverse = false, -- reverse the sort order
+		-- Which info column to show: "none" | "size" | "created" | "modified"
+		show = nil,
+
+		-- Confirmation prompts for destructive actions
 		confirm_delete = true,
+
+		-- Theme controls: choose ONE of the following to load a theme
+		theme = require("themes/catppuccin"), -- preferred: module name under <config>/lua/themes
+		-- theme_path = "themes/dark.lua",     -- legacy: direct Lua file under <config>/themes
+
+		-- Modal sizes (as percentages of the terminal window)
+		modals = {
+			prompt = { width_pct = 50, height_pct = 40 }, -- add/rename prompt
+			confirm = { width_pct = 50, height_pct = 40 }, -- confirmation dialogs
+			theme = { width_pct = 60, height_pct = 60 }, -- theme picker
+		},
 	},
 })
 
@@ -101,9 +151,10 @@ lsv.map_action("t", "New tmux window here", function(lsv, config)
 	lsv.os_run_interactive(string.format("tmux new-window -c %s", lsv.quote(dir)))
 end)
 
+-- Git status in current directory
 lsv.map_action("gs", "Git Status", function(lsv, config)
 	local dir = (config.context and config.context.cwd) or "."
-	lsv.os_run_(string.format("git -C %s status", lsv.quote(dir)))
+	lsv.os_run(string.format("git -C %s status", lsv.quote(dir)))
 end)
 
 lsv.map_action("E", "Edit in $EDITOR (preview)", function(lsv, config)

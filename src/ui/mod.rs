@@ -3,9 +3,9 @@ pub mod colors;
 pub mod format;
 pub mod overlays;
 pub mod panes;
+pub mod preview;
 pub mod row;
 pub mod template;
-pub mod preview;
 
 use ratatui::{
   layout::{

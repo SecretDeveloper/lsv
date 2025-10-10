@@ -210,7 +210,7 @@ pub fn apply_effects(
 // necessary updates (relist, redraw, preview refresh) to keep UI responsive.
 pub fn apply_config_overlay(
   app: &mut App,
-  data: &crate::config_data::ConfigData,
+  data: &crate::config::runtime::data::ConfigData,
 )
 {
   let mut relist = false;

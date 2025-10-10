@@ -1,7 +1,7 @@
 //! Central action dispatcher used by both the binary and integration tests.
 //!
 //! Accepts action strings (optionally `;`-separated sequences), routes
-//! `run_lua:<idx>` entries to [`lua_glue`](super::lua_glue), and executes
+//! `run_lua:<idx>` entries to the Lua runtime glue, and executes
 //! built-in actions parsed by [`internal`](super::internal).
 //! Lua side-effects and configuration overlays are applied immediately.
 use std::io;
@@ -17,9 +17,12 @@ use super::{
     execute_internal_action,
     parse_internal_action,
   },
-  lua_glue::call_lua_action,
+  // moved under config::runtime::glue
 };
-use crate::trace;
+use crate::{
+  config::runtime::glue::call_lua_action,
+  trace,
+};
 
 /// Parse and execute an action string.
 ///

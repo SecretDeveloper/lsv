@@ -13,6 +13,7 @@ categories = ["command-line-utilities", "filesystem"]
 rust-version = "1.90"
 include = [
   "src/**",
+  "tests/**",
   "src/actions/**",
   "src/lua/**",
   "src/ui/**",

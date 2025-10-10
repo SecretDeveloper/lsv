@@ -5,11 +5,20 @@
 //! the current configuration/context, pass it to Lua, and then merge any
 //! returned changes back into Rust structs.
 
-use crate::app::App;
+use crate::{
+  app::App,
+  enums::{
+    display_mode_from_str,
+    display_mode_to_str,
+    info_mode_from_str,
+    info_mode_to_str,
+    sort_key_from_str,
+    sort_key_to_str,
+  },
+};
 use mlua::{
   Lua,
   Table,
-  Value,
 };
 
 /// Values-only snapshot of row formatting data used for Lua round-tripping.
@@ -68,7 +77,7 @@ pub struct UiData
   pub max_list_items: usize,
   pub confirm_delete: bool,
   pub row:            UiRowData,
-  pub row_widths:     Option<super::config::UiRowWidths>,
+  pub row_widths:     Option<crate::config::UiRowWidths>,
   pub theme_path:     Option<String>,
   pub theme:          Option<UiThemeData>,
 }
@@ -118,7 +127,7 @@ pub fn to_lua_config_table(
   {
     ui.set("date_format", fmt.as_str())?;
   }
-  ui.set("display_mode", crate::enums::display_mode_to_str(app.display_mode))?;
+  ui.set("display_mode", display_mode_to_str(app.display_mode))?;
   ui.set("max_list_items", app.config.ui.max_list_items as u64)?;
   ui.set("confirm_delete", app.config.ui.confirm_delete)?;
 
@@ -181,7 +190,7 @@ pub fn to_lua_config_table(
   ui.set(
     "context_note",
     "actions should use top-level context; kept for compatibility",
-  )?; // noop hint
+  )?;
   tbl.set("context", ctx.clone())?;
 
   // row
@@ -288,226 +297,258 @@ pub fn to_lua_config_table(
     }
     ui.set("theme", theme_tbl)?;
   }
-  if let Some(path) = app.config.ui.theme_path.as_ref()
+  if let Some(tp) = app.config.ui.theme_path.as_ref()
   {
-    ui.set("theme_path", path.to_string_lossy().to_string())?;
+    ui.set("theme_path", tp.to_string_lossy().to_string())?;
   }
 
-  tbl.set("ui", ui.clone())?;
+  tbl.set("ui", &ui)?;
 
-  // sort and show as simple values under ui
-  ui.set("sort", crate::enums::sort_key_to_str(app.sort_key))?;
+  // sort/show (under ui)
+  ui.set("sort", sort_key_to_str(app.sort_key))?;
   ui.set("sort_reverse", app.sort_reverse)?;
-
-  // show: simple string label
-  if let Some(lbl) = crate::enums::info_mode_to_str(app.info_mode)
-  {
-    ui.set("show", lbl)?;
-  }
-  else
-  {
-    ui.set("show", "none")?;
-  }
+  let show = info_mode_to_str(app.info_mode).unwrap_or("none");
+  ui.set("show", show)?;
 
   Ok(tbl)
 }
 
-/// Parse a Lua table produced by an action into [`ConfigData`].
-///
-/// The result captures the values-only configuration and can be validated or
-/// merged back into the main [`Config`](crate::config::Config).
+/// Parse a table returned from Lua into a typed overlay.
 pub fn from_lua_config_table(tbl: Table) -> Result<ConfigData, String>
 {
-  // keys
-  let keys_tbl: Table = get_req_tbl(&tbl, "keys")?;
-  let keys_sequence_timeout_ms: u64 =
-    get_u64(&keys_tbl, "sequence_timeout_ms")?;
-
-  // ui
-  let ui_tbl: Table = get_req_tbl(&tbl, "ui")?;
-  let panes_tbl: Table = get_req_tbl(&ui_tbl, "panes")?;
-  let parent = get_u16(&panes_tbl, "parent")?;
-  let current = get_u16(&panes_tbl, "current")?;
-  let preview = get_u16(&panes_tbl, "preview")?;
-  let show_hidden = get_bool(&ui_tbl, "show_hidden")?;
-  let date_format = get_opt_str(&ui_tbl, "date_format")?;
-  let display_mode_str =
-    get_str_or_default(&ui_tbl, "display_mode", "absolute")?;
-  let display_mode = crate::enums::display_mode_from_str(&display_mode_str)
-    .ok_or_else(|| {
-      "ui.display_mode must be 'absolute' or 'friendly'".to_string()
-    })?;
-  let max_list_items_u64 = get_u64(&ui_tbl, "max_list_items")?;
-  let confirm_delete = get_bool(&ui_tbl, "confirm_delete")?;
-  let row_tbl: Table = get_req_tbl(&ui_tbl, "row")?;
-  let row = UiRowData {
-    icon:   get_string(&row_tbl, "icon")?,
-    left:   get_string(&row_tbl, "left")?,
-    middle: get_string(&row_tbl, "middle")?,
-    right:  get_string(&row_tbl, "right")?,
-  };
-  let theme_path = get_opt_str(&ui_tbl, "theme_path")?;
-  let theme = match ui_tbl.get::<Value>("theme")
-  {
-    Ok(Value::Table(t)) =>
-    {
-      let th = UiThemeData {
-        pane_bg:               get_opt_str(&t, "pane_bg")?,
-        border_fg:             get_opt_str(&t, "border_fg")?,
-        item_fg:               get_opt_str(&t, "item_fg")?,
-        item_bg:               get_opt_str(&t, "item_bg")?,
-        selected_item_fg:      get_opt_str(&t, "selected_item_fg")?,
-        selected_item_bg:      get_opt_str(&t, "selected_item_bg")?,
-        title_fg:              get_opt_str(&t, "title_fg")?,
-        title_bg:              get_opt_str(&t, "title_bg")?,
-        info_fg:               get_opt_str(&t, "info_fg")?,
-        dir_fg:                get_opt_str(&t, "dir_fg")?,
-        dir_bg:                get_opt_str(&t, "dir_bg")?,
-        file_fg:               get_opt_str(&t, "file_fg")?,
-        file_bg:               get_opt_str(&t, "file_bg")?,
-        hidden_fg:             get_opt_str(&t, "hidden_fg")?,
-        hidden_bg:             get_opt_str(&t, "hidden_bg")?,
-        exec_fg:               get_opt_str(&t, "exec_fg")?,
-        exec_bg:               get_opt_str(&t, "exec_bg")?,
-        selection_bar_fg:      get_opt_str(&t, "selection_bar_fg")?,
-        selection_bar_copy_fg: get_opt_str(&t, "selection_bar_copy_fg")?,
-        selection_bar_move_fg: get_opt_str(&t, "selection_bar_move_fg")?,
-      };
-      Some(th)
-    }
-    _ => None,
-  };
-  let ui = UiData {
-    panes: UiPanesData { parent, current, preview },
-    show_hidden,
-    date_format,
-    display_mode,
-    max_list_items: max_list_items_u64 as usize,
-    confirm_delete,
-    row,
-    row_widths: match ui_tbl.get::<Value>("row_widths")
-    {
-      Ok(Value::Table(t)) =>
-      {
-        let rw = super::config::UiRowWidths {
-          icon:   t.get::<u64>("icon").unwrap_or(0) as u16,
-          left:   t.get::<u64>("left").unwrap_or(0) as u16,
-          middle: t.get::<u64>("middle").unwrap_or(0) as u16,
-          right:  t.get::<u64>("right").unwrap_or(0) as u16,
-        };
-        Some(rw)
-      }
-      _ => None,
+  let mut data = ConfigData {
+    keys_sequence_timeout_ms: 0,
+    ui: UiData {
+      panes:          UiPanesData { parent: 30, current: 40, preview: 30 },
+      show_hidden:    false,
+      date_format:    None,
+      display_mode:   crate::app::DisplayMode::Friendly,
+      max_list_items: 5000,
+      confirm_delete: true,
+      row:            UiRowData {
+        icon:   " ".into(),
+        left:   "{name}".into(),
+        middle: "".into(),
+        right:  "{info}".into(),
+      },
+      row_widths:     None,
+      theme_path:     None,
+      theme:          None,
     },
-    theme_path,
-    theme,
+    sort_key: crate::actions::SortKey::Name,
+    sort_reverse: false,
+    show_field: crate::app::InfoMode::None,
   };
 
-  // sort (under ui)
-  let sort_key_str = get_string(&ui_tbl, "sort")?;
-  let sort_key =
-    crate::enums::sort_key_from_str(&sort_key_str).ok_or_else(|| {
-      "sort.key must be one of name|size|mtime|created".to_string()
-    })?;
-  let sort_reverse = get_bool(&ui_tbl, "sort_reverse")?;
-
-  // show (under ui)
-  let field_str = get_string(&ui_tbl, "show")?;
-  let show_field = if field_str.eq_ignore_ascii_case("none")
+  let keys = tbl
+    .get::<Table>("keys")
+    .map_err(|_| "missing or invalid table: keys".to_string())?;
+  if let Ok(ms) = keys.get::<u64>("sequence_timeout_ms")
   {
-    crate::app::InfoMode::None
+    data.keys_sequence_timeout_ms = ms;
   }
-  else
+
+  if let Ok(ui) = tbl.get::<Table>("ui")
   {
-    crate::enums::info_mode_from_str(&field_str)
-      .unwrap_or(crate::app::InfoMode::None)
-  };
-
-  Ok(ConfigData {
-    keys_sequence_timeout_ms,
-    ui,
-    sort_key,
-    sort_reverse,
-    show_field,
-  })
-}
-
-// ---------- small helpers ----------
-
-fn get_req_tbl(
-  t: &Table,
-  key: &str,
-) -> Result<Table, String>
-{
-  t.get::<Table>(key).map_err(|_| format!("missing or invalid table: {}", key))
-}
-
-fn get_string(
-  t: &Table,
-  key: &str,
-) -> Result<String, String>
-{
-  t.get::<String>(key).map_err(|_| format!("{} must be string", key))
-}
-
-fn get_opt_str(
-  t: &Table,
-  key: &str,
-) -> Result<Option<String>, String>
-{
-  match t.get::<Value>(key)
-  {
-    Ok(Value::String(s)) =>
+    if let Ok(panes) = ui.get::<Table>("panes")
     {
-      let st = match s.to_str()
+      if let Ok(v) = panes.get::<u64>("parent")
       {
-        Ok(v) => v.to_string(),
-        Err(_) => String::new(),
-      };
-      Ok(Some(st))
+        data.ui.panes.parent = v as u16;
+      }
+      if let Ok(v) = panes.get::<u64>("current")
+      {
+        data.ui.panes.current = v as u16;
+      }
+      if let Ok(v) = panes.get::<u64>("preview")
+      {
+        data.ui.panes.preview = v as u16;
+      }
     }
-    Ok(Value::Nil) | Err(_) => Ok(None),
-    _ => Err(format!("{} must be string or nil", key)),
-  }
-}
-
-fn get_bool(
-  t: &Table,
-  key: &str,
-) -> Result<bool, String>
-{
-  t.get::<bool>(key).map_err(|_| format!("{} must be boolean", key))
-}
-
-fn get_u64(
-  t: &Table,
-  key: &str,
-) -> Result<u64, String>
-{
-  t.get::<u64>(key).map_err(|_| format!("{} must be integer", key))
-}
-
-fn get_u16(
-  t: &Table,
-  key: &str,
-) -> Result<u16, String>
-{
-  t.get::<u16>(key).map_err(|_| format!("{} must be integer (0..=65535)", key))
-}
-
-fn get_str_or_default(
-  t: &Table,
-  key: &str,
-  default: &str,
-) -> Result<String, String>
-{
-  match t.get::<Value>(key)
-  {
-    Ok(Value::String(s)) =>
+    if let Ok(b) = ui.get::<bool>("show_hidden")
     {
-      Ok(s.to_str().map(|st| st.to_string()).unwrap_or(default.to_string()))
+      data.ui.show_hidden = b;
     }
-    Ok(Value::Nil) | Err(_) => Ok(default.to_string()),
-    _ => Err(format!("{} must be string", key)),
+    if let Ok(s) = ui.get::<String>("date_format")
+    {
+      data.ui.date_format = Some(s);
+    }
+    if let Ok(s) = ui.get::<String>("display_mode")
+    {
+      let Some(mode) = display_mode_from_str(&s)
+      else
+      {
+        return Err(
+          "ui.display_mode must be one of: absolute|friendly".to_string(),
+        );
+      };
+      data.ui.display_mode = mode;
+    }
+    if let Ok(n) = ui.get::<u64>("max_list_items")
+    {
+      data.ui.max_list_items = n as usize;
+    }
+    if let Ok(b) = ui.get::<bool>("confirm_delete")
+    {
+      data.ui.confirm_delete = b;
+    }
+
+    if let Ok(row) = ui.get::<Table>("row")
+    {
+      let mut rd = data.ui.row.clone();
+      if let Ok(s) = row.get::<String>("icon")
+      {
+        rd.icon = s;
+      }
+      if let Ok(s) = row.get::<String>("left")
+      {
+        rd.left = s;
+      }
+      if let Ok(s) = row.get::<String>("middle")
+      {
+        rd.middle = s;
+      }
+      if let Ok(s) = row.get::<String>("right")
+      {
+        rd.right = s;
+      }
+      data.ui.row = rd;
+    }
+    if let Ok(rw) = ui.get::<Table>("row_widths")
+    {
+      let mut widths = crate::config::UiRowWidths::default();
+      if let Ok(v) = rw.get::<u64>("icon")
+      {
+        widths.icon = v as u16;
+      }
+      if let Ok(v) = rw.get::<u64>("left")
+      {
+        widths.left = v as u16;
+      }
+      if let Ok(v) = rw.get::<u64>("middle")
+      {
+        widths.middle = v as u16;
+      }
+      if let Ok(v) = rw.get::<u64>("right")
+      {
+        widths.right = v as u16;
+      }
+      data.ui.row_widths = Some(widths);
+    }
+    if let Ok(s) = ui.get::<String>("theme_path")
+    {
+      data.ui.theme_path = Some(s);
+    }
+    if let Ok(theme_tbl) = ui.get::<Table>("theme")
+    {
+      let mut th = UiThemeData::default();
+      if let Ok(v) = theme_tbl.get::<String>("pane_bg")
+      {
+        th.pane_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("border_fg")
+      {
+        th.border_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("item_fg")
+      {
+        th.item_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("item_bg")
+      {
+        th.item_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("selected_item_fg")
+      {
+        th.selected_item_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("selected_item_bg")
+      {
+        th.selected_item_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("title_fg")
+      {
+        th.title_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("title_bg")
+      {
+        th.title_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("info_fg")
+      {
+        th.info_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("dir_fg")
+      {
+        th.dir_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("dir_bg")
+      {
+        th.dir_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("file_fg")
+      {
+        th.file_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("file_bg")
+      {
+        th.file_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("hidden_fg")
+      {
+        th.hidden_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("hidden_bg")
+      {
+        th.hidden_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("exec_fg")
+      {
+        th.exec_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("exec_bg")
+      {
+        th.exec_bg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("selection_bar_fg")
+      {
+        th.selection_bar_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("selection_bar_copy_fg")
+      {
+        th.selection_bar_copy_fg = Some(v);
+      }
+      if let Ok(v) = theme_tbl.get::<String>("selection_bar_move_fg")
+      {
+        th.selection_bar_move_fg = Some(v);
+      }
+      data.ui.theme = Some(th);
+    }
   }
+
+  if let Ok(ui) = tbl.get::<Table>("ui")
+  {
+    if let Ok(v) = ui.get::<String>("sort")
+    {
+      let Some(k) = sort_key_from_str(&v)
+      else
+      {
+        return Err(
+          "sort.key must be one of: name|size|mtime|created".to_string(),
+        );
+      };
+      data.sort_key = k;
+    }
+    if let Ok(b) = ui.get::<bool>("sort_reverse")
+    {
+      data.sort_reverse = b;
+    }
+    if let Ok(v) = ui.get::<String>("show")
+      && let Some(m) = info_mode_from_str(&v)
+    {
+      data.show_field = m;
+    }
+  }
+
+  Ok(data)
 }
