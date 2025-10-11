@@ -625,7 +625,7 @@ lsv.config({
   {
     let (cfg, _maps, _eng) =
       lsv::config::load_config_from_code("", None).expect("load defaults");
-    // Spot-check a few defaults set in defaults.lua
+    // Spot-check a few defaults set by Rust defaults
     assert_eq!(cfg.keys.sequence_timeout_ms, 0);
     assert!(!cfg.ui.show_hidden);
     // preview_lines removed; engine uses internal cap

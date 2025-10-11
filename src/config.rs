@@ -37,7 +37,7 @@ pub use loader::load_config;
 #[allow(unused_imports)]
 pub use loader::load_config_from_code;
 
-const BUILTIN_DEFAULTS_LUA: &str = include_str!("lua/defaults.lua");
+pub mod defaults;
 
 // Theme helpers moved to config/theme.rs
 

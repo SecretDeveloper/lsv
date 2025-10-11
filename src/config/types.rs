@@ -87,7 +87,7 @@ impl Default for UiConfig
       header_right:   None,
       header_bg:      None,
       header_fg:      None,
-      row:            None,
+      row:            Some(UiRowFormat::default()),
       row_widths:     None,
       display_mode:   None,
       sort:           None,

@@ -248,14 +248,14 @@ fn draw_header(
     .header_left
     .as_ref()
     .cloned()
-    .or_else(|| Some("{username}@{hostname}:{current_file}".to_string()));
-  let right_tpl = app.config.ui.header_right.as_ref().cloned().or_else(|| {
-    Some(
-      "{current_file_size}  {owner}  {current_file_permissions}  \
-       {current_file_ctime}"
-        .to_string(),
-    )
-  });
+    .or_else(|| Some(crate::config::defaults::DEFAULT_HEADER_LEFT.to_string()));
+  let right_tpl = app
+    .config
+    .ui
+    .header_right
+    .as_ref()
+    .cloned()
+    .or_else(|| Some(crate::config::defaults::DEFAULT_HEADER_RIGHT.to_string()));
 
   let left_side = template::format_header_side(app, left_tpl.as_ref());
   let right_side = template::format_header_side(app, right_tpl.as_ref());

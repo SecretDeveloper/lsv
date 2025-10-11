@@ -10,7 +10,7 @@ pub enum SortKey
   CTime,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum InternalAction
 {
   Quit,
@@ -20,6 +20,12 @@ pub(crate) enum InternalAction
   SetDisplayMode(crate::app::DisplayMode),
   GoTop,
   GoBottom,
+  RunCommand(String),
+  ClipboardCopy,
+  ClipboardMove,
+  ClipboardPaste,
+  ClipboardClear,
+  CloseOverlays,
 }
 
 pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction>
@@ -74,6 +80,30 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction>
   if low == "nav:bottom" || low == "bottom" || low == "g$"
   {
     return Some(InternalAction::GoBottom);
+  }
+  if let Some(cmd) = low.strip_prefix("cmd:")
+  {
+    return Some(InternalAction::RunCommand(cmd.to_string()));
+  }
+  if low == "clipboard:copy"
+  {
+    return Some(InternalAction::ClipboardCopy);
+  }
+  if low == "clipboard:move"
+  {
+    return Some(InternalAction::ClipboardMove);
+  }
+  if low == "clipboard:paste"
+  {
+    return Some(InternalAction::ClipboardPaste);
+  }
+  if low == "clipboard:clear"
+  {
+    return Some(InternalAction::ClipboardClear);
+  }
+  if low == "overlay:close"
+  {
+    return Some(InternalAction::CloseOverlays);
   }
   None
 }
@@ -144,6 +174,31 @@ pub(crate) fn execute_internal_action(
         app.refresh_preview();
       }
     }
+    InternalAction::RunCommand(cmd) =>
+    {
+      app.execute_command_line(&cmd);
+    }
+    InternalAction::ClipboardCopy =>
+    {
+      app.copy_selection();
+    }
+    InternalAction::ClipboardMove =>
+    {
+      app.move_selection();
+    }
+    InternalAction::ClipboardPaste =>
+    {
+      app.paste_clipboard();
+    }
+    InternalAction::ClipboardClear =>
+    {
+      app.clear_all_selected();
+    }
+    InternalAction::CloseOverlays =>
+    {
+      app.overlay = crate::app::Overlay::None;
+      app.force_full_redraw = true;
+    }
   }
 }
 
@@ -152,7 +207,7 @@ pub(crate) fn execute_internal_action(
 /// configuration or list mutations (sorting, display toggles).
 pub(crate) fn internal_effects(
   app: &crate::app::App,
-  action: InternalAction,
+  action: &InternalAction,
 ) -> Option<super::effects::ActionEffects>
 {
   use super::effects::ActionEffects;

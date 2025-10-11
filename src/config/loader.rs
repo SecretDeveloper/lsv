@@ -43,15 +43,10 @@ pub fn load_config(paths: &ConfigPaths) -> io::Result<ConfigArtifacts>
   super::install_require(lua, &paths.root.join("lua"))
     .map_err(|e| io_err(format!("require install failed: {e}")))?;
 
-  crate::trace::log("[lua] exec builtin/defaults.lua");
+  // Seed Rust-defined default keymaps (no Lua defaults.lua)
   {
-    let chunk =
-      lua.load(super::BUILTIN_DEFAULTS_LUA).set_name("builtin/defaults.lua");
-    if let Err(e) = chunk.exec()
-    {
-      crate::trace::log(format!("[lua] defaults.lua error: {}", e));
-      return Err(io_err(format!("defaults.lua execution failed: {e}")));
-    }
+    let mut maps = keymaps_acc.borrow_mut();
+    maps.extend(super::defaults::rust_default_keymaps());
   }
 
   if paths.exists
@@ -75,6 +70,8 @@ pub fn load_config(paths: &ConfigPaths) -> io::Result<ConfigArtifacts>
   }
 
   let cfg = config_acc.borrow().clone();
+  let mut cfg = cfg;
+  super::defaults::apply_config_defaults(&mut cfg);
   let maps = keymaps_acc.borrow().clone();
   let key_opt = previewer_key_acc.borrow_mut().take();
   let action_keys = std::mem::take(&mut *lua_action_keys_acc.borrow_mut());
@@ -141,15 +138,11 @@ pub fn load_config_from_code(
   super::install_require(lua, &base.join("lua"))
     .map_err(|e| io_err(format!("require install failed: {e}")))?;
 
-  crate::trace::log("[lua] exec builtin/defaults.lua (inline)");
-  lua
-    .load(super::BUILTIN_DEFAULTS_LUA)
-    .set_name("builtin/defaults.lua")
-    .exec()
-    .map_err(|e| {
-      crate::trace::log(format!("[lua] defaults.lua error: {}", e));
-      io_err(format!("defaults.lua execution failed: {e}"))
-    })?;
+  // Seed Rust-defined default keymaps for inline configs as well
+  {
+    let mut maps = keymaps_acc.borrow_mut();
+    maps.extend(super::defaults::rust_default_keymaps());
+  }
 
   crate::trace::log("[lua] exec inline init.lua");
   lua.load(code).set_name("inline init.lua").exec().map_err(|e| {
@@ -157,7 +150,8 @@ pub fn load_config_from_code(
     io_err(format!("inline init.lua execution failed: {e}"))
   })?;
 
-  let cfg = config_acc.borrow().clone();
+  let mut cfg = config_acc.borrow().clone();
+  super::defaults::apply_config_defaults(&mut cfg);
   let maps = keymaps_acc.borrow().clone();
   let key_opt = previewer_key_acc.borrow_mut().take();
   let action_keys = std::mem::take(&mut *lua_action_keys_acc.borrow_mut());
