@@ -93,7 +93,19 @@ pub fn read_dir_sorted(
     let ord = match sort_key
     {
       SortKey::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-      SortKey::Size => a.size.cmp(&b.size),
+      SortKey::Size =>
+      {
+        // When sorting by size, keep directories ordered by name instead of
+        // their (often meaningless) filesystem size.
+        if a.is_dir && b.is_dir
+        {
+          a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        }
+        else
+        {
+          a.size.cmp(&b.size)
+        }
+      },
       SortKey::MTime =>
       {
         let at = a.mtime.unwrap_or(std::time::SystemTime::UNIX_EPOCH);
@@ -107,7 +119,22 @@ pub fn read_dir_sorted(
         at.cmp(&bt)
       }
     };
-    if sort_reverse { ord.reverse() } else { ord }
+    if sort_reverse
+    {
+      // For size sort, keep directories ordered by name even when reversed.
+      if matches!(sort_key, SortKey::Size) && a.is_dir && b.is_dir
+      {
+        ord
+      }
+      else
+      {
+        ord.reverse()
+      }
+    }
+    else
+    {
+      ord
+    }
   });
   Ok(entries)
 }
