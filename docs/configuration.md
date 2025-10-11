@@ -97,7 +97,7 @@ Only provide the fields you want to override; omitted values inherit from the de
 When building commands (either in actions or previewers), you can substitute:
 
 - Placeholders: `{path}`, `{directory}`, `{name}`, `{extension}`, `{width}`, `{height}`, `{preview_x}`, `{preview_y}`.
-- Environment variables: `LSV_PATH`, `LSV_DIR`, `LSV_NAME` (set automatically before each command).
+- Build action and preview commands from `config`/`ctx` in Lua. There is no placeholder expansion for commands; use `lsv.quote(...)` for safe arguments.
 
 Use a quoting helper to avoid shell injection. Example:
 

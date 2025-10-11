@@ -1355,7 +1355,9 @@ end)
     fs::write(dir.join("hello.txt"), b"hi").unwrap();
     let code = r#"
 lsv.map_action('r', 'Run', function(lsv, config)
-  lsv.os_run('printf "$LSV_NAME"')
+  -- Compose the command from ctx; no placeholder expansion
+  local name = (config.context and config.context.current_file_name) or ''
+  lsv.os_run('echo ' .. lsv.quote(name))
 end)
 "#;
     let mut app = make_app_with_actions(code, "r");

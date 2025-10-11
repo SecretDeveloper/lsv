@@ -119,16 +119,16 @@ Action helper functions available on `lsv` inside actions:
 - `lsv.select_last_item()`: select the last item in the current list.
 - `lsv.quit()`: request the app to exit.
 - `lsv.display_output(text, title?)`: show text in a bottom Output panel.
-- `lsv.os_run(cmd)`: run a shell command and show its captured output in the Output panel. Env includes `LSV_PATH`, `LSV_DIR`, `LSV_NAME`.
+- `lsv.os_run(cmd)`: run a shell command and show its captured output in the Output panel. Compose `cmd` using values from `config`/`ctx` and `lsv.quote(...)` for safe arguments.
 
 Context data passed to actions via `config.context`:
 
 - `cwd`: current working directory.
 - `selected_index`: current selection index (or a sentinel if none).
 - `current_len`: number of items in the current list.
-- `path`: absolute path of the selected entry (falls back to `cwd`).
-- `parent_dir`: parent directory of the selected entry (falls back to `cwd`).
-- `name`: file name (basename) of the selected entry, when available.
+- `current_file`: absolute path of the selected entry (falls back to `cwd`).
+- `current_file_dir`: parent directory of the selected entry (falls back to `cwd`).
+- `current_file_name`: file name (basename) of the selected entry, when available.
 
 ### Minimal Example: Bind an external tool
 
@@ -325,13 +325,12 @@ Configure row sections under `ui.row`:
 - Dates: `display:absolute` uses `ui.date_format` (default `%Y-%m-%d %H:%M`); `display:friendly` uses relative strings (e.g., `3d ago`).
 - Sizes: `display:absolute` shows raw bytes with `B`; `display:friendly` uses human units (KB/MB/...).
 
-### Command Environment & Helpers
+### Command Integration Tips
 
-- For commands launched via actions and the previewer, lsv sets these environment variables:
-  - `LSV_PATH` (selected file), `LSV_DIR` (directory), `LSV_NAME` (basename)
-- Use your Lua `ctx` values to compose commands (see examples above). If you need to inject values via environment expansion, you can also include `$LSV_PATH`, `$LSV_DIR`, `$LSV_NAME` (or `${LSV_*}`) in your string; lsv will expand those before invoking the shell.
-
-Header and row template placeholders (e.g., `{cwd}`, `{current_file_size}`) are specific to UI templates, not shell commands.
+- Build command strings from `config`/`ctx` in Lua. Example:
+  - `lsv.os_run(string.format("git -C %s status", lsv.quote(config.context.cwd)))`
+- Use `lsv.quote(s)` for OS‑aware quoting when concatenating arguments.
+- UI templates (header/row) still support placeholders like `{cwd}` or `{current_file_name}` — those are unrelated to shell commands.
 
 ### Preview Notes
 

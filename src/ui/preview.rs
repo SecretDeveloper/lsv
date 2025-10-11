@@ -199,12 +199,7 @@ fn run_previewer(
                 "[preview] lua cmd='{}' cwd='{}' file='{}'",
                 cmd, dir_str, path_str
               ));
-              let name_str = path
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-              return run_previewer_command(
-                &cmd, &dir_str, &path_str, &name_str, limit,
+              return run_previewer_command( &cmd, &dir_str, &path_str,limit,
               );
             }
             Err(e) =>
@@ -246,7 +241,6 @@ fn run_previewer_command(
   cmd: &str,
   dir_str: &str,
   path_str: &str,
-  name_str: &str,
   limit: usize,
 ) -> Option<Vec<String>>
 {
@@ -274,9 +268,7 @@ fn run_previewer_command(
 
   match command
     .current_dir(dir_str)
-    .env("LSV_PATH", path_str)
-    .env("LSV_DIR", dir_str)
-    .env("LSV_NAME", name_str)
+    // No implicit LSV_* env; use placeholders or Lua ctx instead
     .env("FORCE_COLOR", "1")
     .env("CLICOLOR_FORCE", "1")
     .output()

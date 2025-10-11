@@ -120,6 +120,26 @@ fn build_lsv_helpers(
   build_clipboard_helpers(lua, &tbl, cfg_tbl)?;
   // Process helpers are inlined below
 
+  // Selection snapshot helper: return selected file paths as a Lua array
+  let selected_paths_snapshot: Vec<String> = app
+    .selected
+    .iter()
+    .cloned()
+    .map(|p| p.to_string_lossy().to_string())
+    .collect();
+  let get_selected_paths_fn = lua
+    .create_function(move |lua, ()| {
+      let t = lua.create_table()?;
+      for (i, s) in selected_paths_snapshot.iter().enumerate() {
+        t.set((i + 1) as i64, s.clone())?;
+      }
+      Ok(t)
+    })
+    .map_err(|e| io::Error::other(e.to_string()))?;
+  tbl
+    .set("get_selected_paths", get_selected_paths_fn)
+    .map_err(|e| io::Error::other(e.to_string()))?;
+
   // lsv.quote(s)
   let quote_fn = lua
     .create_function(|_, s: String| {
@@ -298,50 +318,24 @@ fn build_lsv_helpers(
   // os_run (captured)
   let cfg_ref5 = cfg_tbl.clone();
   let cwd_str = app.cwd.to_string_lossy().to_string();
-  let sel_path = app
-    .selected_entry()
-    .map(|e| e.path.clone())
-    .unwrap_or_else(|| app.cwd.clone());
-  let sel_dir = sel_path.parent().unwrap_or(&app.cwd).to_path_buf();
-  let path_str = sel_path.to_string_lossy().to_string();
-  let dir_str = sel_dir.to_string_lossy().to_string();
-  let name_str = sel_path
-    .file_name()
-    .map(|s| s.to_string_lossy().to_string())
-    .unwrap_or_default();
-
   let cwd_capture = cwd_str.clone();
-  let path_capture = path_str.clone();
-  let dir_capture = dir_str.clone();
-  let name_capture = name_str.clone();
 
   let os_run_fn = lua
     .create_function(move |_, cmd: String| {
-      let rendered =
-        render_cmd(&cmd, &path_capture, &dir_capture, &name_capture);
-      trace::log(format!(
-        "[os_run] cwd='{}' cmd='{}' rendered='{}' LSV_PATH='{}' LSV_DIR='{}' \
-         LSV_NAME='{}'",
-        cwd_capture, cmd, rendered, path_capture, dir_capture, name_capture
-      ));
+      trace::log(format!("[os_run] cwd='{}' cmd='{}'", cwd_capture, cmd));
       #[cfg(windows)]
       let mut command = {
         let mut c = std::process::Command::new("cmd");
-        c.arg("/C").arg(&rendered);
+        c.arg("/C").arg(&cmd);
         c
       };
       #[cfg(not(windows))]
       let mut command = {
         let mut c = std::process::Command::new("sh");
-        c.arg("-lc").arg(&rendered);
+        c.arg("-lc").arg(&cmd);
         c
       };
-      let out = command
-        .current_dir(&cwd_capture)
-        .env("LSV_PATH", &path_capture)
-        .env("LSV_DIR", &dir_capture)
-        .env("LSV_NAME", &name_capture)
-        .output();
+      let out = command.current_dir(&cwd_capture).output();
       match out
       {
         Ok(output) =>
@@ -392,17 +386,16 @@ fn build_lsv_helpers(
   let cwd_str_i = cwd_str.clone();
   let os_run_interactive_fn = lua
     .create_function(move |_, cmd: String| {
-      let rendered = render_cmd(&cmd, &path_str, &dir_str, &name_str);
       let title = format!("$ {}", cmd);
       let _ = cfg_ref_i.set("output_title", title);
       #[cfg(windows)]
       let program = "cmd";
       #[cfg(windows)]
-      let args: &[&str] = &["/C", &rendered];
+      let args: &[&str] = &["/C", &cmd];
       #[cfg(not(windows))]
       let program = "sh";
       #[cfg(not(windows))]
-      let args: &[&str] = &["-lc", &rendered];
+      let args: &[&str] = &["-lc", &cmd];
       // leave tui
       disable_raw_mode().ok();
       let _ = crossterm::execute!(stdout(), LeaveAlternateScreen);
@@ -432,15 +425,7 @@ fn build_lsv_helpers(
   Ok(tbl)
 }
 
-fn render_cmd(
-  cmd: &str,
-  path: &str,
-  dir: &str,
-  name: &str,
-) -> String
-{
-  cmd.replace("{path}", path).replace("{dir}", dir).replace("{name}", name)
-}
+// No command placeholder expansion here; build arguments from Lua config/ctx.
 
 fn build_preview_helpers(
   lua: &Lua,
