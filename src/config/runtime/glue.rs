@@ -124,7 +124,6 @@ fn build_lsv_helpers(
   let selected_paths_snapshot: Vec<String> = app
     .selected
     .iter()
-    .cloned()
     .map(|p| p.to_string_lossy().to_string())
     .collect();
   let get_selected_paths_fn = lua

@@ -5,7 +5,7 @@
 # You may check the current default at
 #   https://github.com/Canop/bacon/blob/main/defaults/default-bacon.toml
 
-default_job = "ci-all"
+default_job = "clippy-ci"  # run strict clippy by default (matches CI)
 env.CARGO_TERM_COLOR = "always"
 
 [jobs.check]
@@ -26,14 +26,7 @@ need_stdout = false
 command = ["cargo", "+nightly", "fmt", "--all", "--", "--check"]
 need_stdout = false
 
-# Run clippy on the default target
-[jobs.clippy]
-command = ["cargo", "clippy"]
-need_stdout = true
-
-[jobs.clippy-all]
-command = ["cargo", "clippy", "--all-targets"]
-need_stdout = true
+# (looser clippy jobs removed; use clippy-ci only)
 
 [jobs.clippy-ci]
 command = [
@@ -74,8 +67,9 @@ background = true
 # should go in your personal global prefs.toml file instead.
 [keybindings]
 # alt-m = "job:my-job"
-c = "job:clippy-all" # comment this to have 'c' run clippy on only the default target
-w = "job:check-win" # comment this to have 'c' run clippy on only the default target
+# Strict clippy (matches CI) on 'c'
+c = "job:clippy-ci"
+w = "job:check-win"
 
 [jobs.check-win]
 command = ["cargo", "check", "--target", "x86_64-pc-windows-gnu"]
