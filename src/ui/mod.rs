@@ -242,20 +242,13 @@ fn draw_header(
   }
 
   // Prefer user-configured templates; fall back to a sensible default
-  let left_tpl = app
-    .config
-    .ui
-    .header_left
-    .as_ref()
-    .cloned()
-    .or_else(|| Some(crate::config::defaults::DEFAULT_HEADER_LEFT.to_string()));
-  let right_tpl = app
-    .config
-    .ui
-    .header_right
-    .as_ref()
-    .cloned()
-    .or_else(|| Some(crate::config::defaults::DEFAULT_HEADER_RIGHT.to_string()));
+  let left_tpl =
+    app.config.ui.header_left.as_ref().cloned().or_else(|| {
+      Some(crate::config::defaults::DEFAULT_HEADER_LEFT.to_string())
+    });
+  let right_tpl = app.config.ui.header_right.as_ref().cloned().or_else(|| {
+    Some(crate::config::defaults::DEFAULT_HEADER_RIGHT.to_string())
+  });
 
   let left_side = template::format_header_side(app, left_tpl.as_ref());
   let right_side = template::format_header_side(app, right_tpl.as_ref());

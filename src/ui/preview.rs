@@ -199,8 +199,7 @@ fn run_previewer(
                 "[preview] lua cmd='{}' cwd='{}' file='{}'",
                 cmd, dir_str, path_str
               ));
-              return run_previewer_command( &cmd, &dir_str, &path_str,limit,
-              );
+              return run_previewer_command(&cmd, &dir_str, &path_str, limit);
             }
             Err(e) =>
             {

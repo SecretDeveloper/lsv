@@ -5,1741 +5,646 @@
 //! an instance of `App`, but tests can create their own to simulate navigation
 //! or exercise Lua actions.
 
-use std::{
-  cmp::min,
-  env,
-  fs,
-  io,
-  path::{
-    Path,
-    PathBuf,
-  },
-  time::SystemTime,
-};
-
-use mlua::RegistryKey;
 use ratatui::widgets::ListState;
-
-use crate::{
-  actions::SortKey,
-  core::fs_ops,
+use std::{
+    env,
+    fs,
+    io,
+    path::PathBuf,
 };
 
-#[derive(Debug, Clone)]
-/// Runtime state for lsv, including directory listings, preview cache, overlay
-/// flags, and configuration.
-pub struct DirEntryInfo
-{
-  pub(crate) name:   String,
-  pub(crate) path:   PathBuf,
-  pub(crate) is_dir: bool,
-  pub(crate) size:   u64,
-  pub(crate) mtime:  Option<SystemTime>,
-  pub(crate) ctime:  Option<SystemTime>,
-}
+use crate::actions::SortKey;
 
-#[derive(Debug, Clone)]
-pub struct ThemePickerEntry
-{
-  pub name:  String,
-  pub path:  PathBuf,
-  pub theme: crate::config::UiTheme,
-}
+pub(crate) mod state;
+pub use state::{
+    App,
+    Clipboard,
+    ClipboardOp,
+    CommandPaneState,
+    ConfirmKind,
+    ConfirmState,
+    DirEntryInfo,
+    DisplayMode,
+    InfoMode,
+    KeyState,
+    LuaRuntime,
+    Overlay,
+    PreviewState,
+    PromptKind,
+    PromptState,
+    RunningPreview,
+    ThemePickerEntry,
+    ThemePickerState,
+};
 
-#[derive(Debug, Clone)]
-pub struct ThemePickerState
-{
-  pub entries:             Vec<ThemePickerEntry>,
-  pub selected:            usize,
-  pub original_theme:      Option<crate::config::UiTheme>,
-  pub original_theme_path: Option<PathBuf>,
-}
+pub(crate) mod commands;
+pub(crate) mod keys;
+pub(crate) mod marks;
+pub(crate) mod nav;
+pub(crate) mod overlays_api;
+pub(crate) mod preview_ctrl;
+pub(crate) mod selection;
 
-#[derive(Debug, Clone)]
-pub enum Overlay
-{
-  None,
-  WhichKey
-  {
-    prefix: String,
-  },
-  Messages,
-  Output
-  {
-    title: String,
-    lines: Vec<String>,
-  },
-  ThemePicker(Box<ThemePickerState>),
-  Prompt(Box<PromptState>),
-  Confirm(Box<ConfirmState>),
-  CommandPane(Box<CommandPaneState>),
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct PreviewState
-{
-  pub static_lines: Vec<String>,
-  pub cache_key:    Option<(std::path::PathBuf, u16, u16)>,
-  pub cache_lines:  Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct KeyState
-{
-  pub maps:     Vec<crate::config::KeyMapping>,
-  pub lookup:   std::collections::HashMap<String, String>,
-  pub prefixes: std::collections::HashSet<String>,
-  pub pending:  String,
-  pub last_at:  Option<std::time::Instant>,
-}
-
-use crate::keymap::tokenize_sequence;
-
-pub struct LuaRuntime
-{
-  pub engine:    crate::config::LuaEngine,
-  pub previewer: Option<RegistryKey>,
-  pub actions:   Vec<RegistryKey>,
-}
-
-#[derive(Debug, Clone)]
-pub enum PromptKind
-{
-  AddEntry,
-  RenameEntry
-  {
-    from: std::path::PathBuf,
-  },
-  RenameMany
-  {
-    items: Vec<std::path::PathBuf>,
-    pre:   String,
-    suf:   String,
-  },
-}
-
-#[derive(Debug, Clone)]
-pub struct PromptState
-{
-  pub title:  String,
-  pub input:  String,
-  pub cursor: usize,
-  pub kind:   PromptKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClipboardOp
-{
-  Copy,
-  Move,
-}
-
-#[derive(Debug, Clone)]
-pub struct Clipboard
-{
-  pub op:    ClipboardOp,
-  pub items: Vec<std::path::PathBuf>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ConfirmKind
-{
-  DeleteSelected(Vec<std::path::PathBuf>),
-}
-
-#[derive(Debug, Clone)]
-pub struct ConfirmState
-{
-  pub title:       String,
-  pub question:    String,
-  pub default_yes: bool,
-  pub kind:        ConfirmKind,
-}
-
-#[derive(Debug, Clone)]
-pub struct CommandPaneState
-{
-  pub prompt:           String,
-  pub input:            String,
-  pub cursor:           usize,
-  pub show_suggestions: bool,
-}
-
-/// Mutable application state driving the three-pane UI.
-pub struct App
-{
-  pub(crate) cwd:               PathBuf,
-  pub(crate) current_entries:   Vec<DirEntryInfo>,
-  pub(crate) parent_entries:    Vec<DirEntryInfo>,
-  pub(crate) list_state:        ListState,
-  pub(crate) preview:           PreviewState,
-  // Messages
-  pub(crate) recent_messages:   Vec<String>,
-  // Overlay state (mutually exclusive)
-  pub(crate) overlay:           Overlay,
-  pub(crate) config:            crate::config::Config,
-  pub(crate) keys:              KeyState,
-  pub(crate) force_full_redraw: bool,
-  pub(crate) lua:               Option<LuaRuntime>,
-  pub(crate) selected:          std::collections::HashSet<std::path::PathBuf>,
-  pub(crate) clipboard:         Option<Clipboard>,
-  // In-memory runtime settings
-  pub(crate) sort_key:          SortKey,
-  pub(crate) sort_reverse:      bool,
-  pub(crate) info_mode:         InfoMode,
-  pub(crate) display_mode:      DisplayMode,
-  // Signal to exit after handling a key/action
-  pub(crate) should_quit:       bool,
-  // Search state
-  pub(crate) search_query:      Option<String>,
-  pub(crate) _search_locked:    bool,
-  // Marks
-  pub(crate) marks: std::collections::HashMap<char, std::path::PathBuf>,
-  pub(crate) pending_mark:      bool,
-  pub(crate) pending_goto:      bool,
-  // Key sequence handling
-  // moved into `keys`
-  // (which-key prefix moves under overlay)
-  // Running preview process (streamed output)
-  pub(crate) running_preview:   Option<RunningPreview>,
-}
-
-pub struct RunningPreview
-{
-  pub rx: std::sync::mpsc::Receiver<Option<String>>,
-}
+// Re-exported types live in state.rs
 
 impl App
 {
-  /// Construct a fresh [`App`] using the current working directory as the
-  /// starting point.
-  pub fn new() -> io::Result<Self>
-  {
-    let cwd = env::current_dir()?;
-    // Temporary initial read with default sort (Name asc)
-    let current_entries = {
-      // Build a temporary App-like context for sorting
-      let mut tmp = Vec::new();
-      for de in (fs::read_dir(&cwd)?).flatten()
-      {
-        let path = de.path();
-        let name = de.file_name().to_string_lossy().to_string();
-        if let Ok(ft) = de.file_type()
-        {
-          let meta = fs::metadata(&path).ok();
-          let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-          let mtime = meta.as_ref().and_then(|m| m.modified().ok());
-          let ctime = meta.as_ref().and_then(|m| m.created().ok());
-          tmp.push(DirEntryInfo {
-            name,
-            path,
-            is_dir: ft.is_dir(),
-            size,
-            mtime,
-            ctime,
-          });
-        }
-      }
-      tmp.sort_by(|a, b| match (a.is_dir, b.is_dir)
-      {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-      });
-      tmp
-    };
-    let parent_entries = if let Some(p) = cwd.parent()
+    /// Construct a fresh [`App`] using the current working directory as the
+    /// starting point.
+    pub fn new() -> io::Result<Self>
     {
-      // Same initial read for parent
-      let mut tmp = Vec::new();
-      for de in (fs::read_dir(p)?).flatten()
-      {
-        let path = de.path();
-        let name = de.file_name().to_string_lossy().to_string();
-        if let Ok(ft) = de.file_type()
-        {
-          let meta = fs::metadata(&path).ok();
-          let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-          let mtime = meta.as_ref().and_then(|m| m.modified().ok());
-          let ctime = meta.as_ref().and_then(|m| m.created().ok());
-          tmp.push(DirEntryInfo {
-            name,
-            path,
-            is_dir: ft.is_dir(),
-            size,
-            mtime,
-            ctime,
-          });
-        }
-      }
-      tmp.sort_by(|a, b| match (a.is_dir, b.is_dir)
-      {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-      });
-      tmp
-    }
-    else
-    {
-      Vec::new()
-    };
-
-    let mut list_state = ListState::default();
-    if !current_entries.is_empty()
-    {
-      list_state.select(Some(0));
-    }
-    let mut app = Self {
-      cwd,
-      current_entries,
-      parent_entries,
-      list_state,
-      preview: PreviewState::default(),
-      recent_messages: Vec::new(),
-      overlay: Overlay::None,
-      config: crate::config::Config::default(),
-      keys: KeyState::default(),
-      force_full_redraw: false,
-      lua: None,
-      selected: std::collections::HashSet::new(),
-      clipboard: None,
-      sort_key: SortKey::Name,
-      sort_reverse: false,
-      info_mode: InfoMode::None,
-      display_mode: DisplayMode::Absolute,
-      should_quit: false,
-      search_query: None,
-      _search_locked: false,
-      marks: std::collections::HashMap::new(),
-      pending_mark: false,
-      pending_goto: false,
-      running_preview: None,
-    };
-    // Load marks from config root
-    if let Some(root) = app.theme_root_dir()
-    {
-      let path = root.join("marks");
-      app.marks = crate::core::marks::load_marks(&path);
-    }
-    // Discover configuration paths (entry not executed yet)
-    if let Ok(paths) = crate::config::discover_config_paths()
-    {
-      match crate::config::load_config(&paths)
-      {
-        Ok((cfg, maps, engine_opt)) =>
-        {
-          app.config = cfg;
-          app.keys.maps = maps;
-          app.rebuild_keymap_lookup();
-          if let Some((eng, key, action_keys)) = engine_opt
-          {
-            app.lua = Some(LuaRuntime {
-              engine:    eng,
-              previewer: Some(key),
-              actions:   action_keys,
-            });
-          }
-          else
-          {
-            app.lua = None;
-          }
-          // Re-apply lists to honor config (e.g., show_hidden)
-          // Also apply optional initial sort/show from config.ui
-          if let Some(ref srt) = app.config.ui.sort
-            && let Some(k) = crate::enums::sort_key_from_str(srt)
-          {
-            app.sort_key = k;
-          }
-          if let Some(b) = app.config.ui.sort_reverse
-          {
-            app.sort_reverse = b;
-          }
-          if let Some(ref sh) = app.config.ui.show
-          {
-            if sh.eq_ignore_ascii_case("none")
+        let cwd = env::current_dir()?;
+        // Temporary initial read with default sort (Name asc)
+        let current_entries = {
+            // Build a temporary App-like context for sorting
+            let mut tmp = Vec::new();
+            for de in (fs::read_dir(&cwd)?).flatten()
             {
-              app.info_mode = crate::app::InfoMode::None;
-            }
-            else if let Some(m) = crate::enums::info_mode_from_str(sh)
-            {
-              app.info_mode = m;
-            }
-          }
-          app.refresh_lists();
-          // Apply display_mode from config if present
-          if let Some(dm) = app.config.ui.display_mode.as_deref()
-            && let Some(mode) = crate::enums::display_mode_from_str(dm)
-          {
-            app.display_mode = mode;
-          }
-        }
-        Err(e) =>
-        {
-          eprintln!("lsv: config load error: {}", e);
-        }
-      }
-    }
-    app.refresh_preview();
-    Ok(app)
-  }
-
-  pub(crate) fn open_search(&mut self)
-  {
-    self.overlay = Overlay::CommandPane(Box::new(CommandPaneState {
-      prompt:           "/".to_string(),
-      input:            String::new(),
-      cursor:           0,
-      show_suggestions: false,
-    }));
-    self.force_full_redraw = true;
-  }
-
-  pub(crate) fn open_command(&mut self)
-  {
-    self.overlay = Overlay::CommandPane(Box::new(CommandPaneState {
-      prompt:           ":".to_string(),
-      input:            String::new(),
-      cursor:           0,
-      show_suggestions: false,
-    }));
-    self.force_full_redraw = true;
-  }
-
-  fn find_match_from(
-    &self,
-    start: usize,
-    pat: &str,
-    backwards: bool,
-  ) -> Option<usize>
-  {
-    if self.current_entries.is_empty() || pat.is_empty()
-    {
-      return None;
-    }
-    let pat_l = pat.to_lowercase();
-    let len = self.current_entries.len();
-    if backwards
-    {
-      let mut idx = start;
-      for _ in 0..len
-      {
-        if let Some(e) = self.current_entries.get(idx)
-          && e.name.to_lowercase().contains(&pat_l)
-        {
-          return Some(idx);
-        }
-        if idx == 0
-        {
-          idx = len - 1;
-        }
-        else
-        {
-          idx -= 1;
-        }
-      }
-    }
-    else
-    {
-      let mut idx = start;
-      for _ in 0..len
-      {
-        if let Some(e) = self.current_entries.get(idx)
-          && e.name.to_lowercase().contains(&pat_l)
-        {
-          return Some(idx);
-        }
-        idx = (idx + 1) % len;
-      }
-    }
-    None
-  }
-
-  fn save_marks(&self)
-  {
-    if let Some(root) = self.theme_root_dir()
-    {
-      let path = root.join("marks");
-      let _ = crate::core::marks::save_marks(&path, &self.marks);
-    }
-  }
-
-  pub(crate) fn add_mark(
-    &mut self,
-    ch: char,
-  )
-  {
-    let dir = self.cwd.clone();
-    self.marks.insert(ch, dir.clone());
-    self.save_marks();
-    self.add_message(&format!("Mark '{}' set: {}", ch, dir.display()));
-  }
-
-  pub(crate) fn goto_mark(
-    &mut self,
-    ch: char,
-  )
-  {
-    if let Some(path) = self.marks.get(&ch).cloned()
-    {
-      if path.is_dir()
-      {
-        self.set_cwd(&path);
-        self.add_message(&format!("Jumped to '{}'", path.display()));
-      }
-      else
-      {
-        self.add_message(&format!(
-          "Mark '{}' not a directory: {}",
-          ch,
-          path.display()
-        ));
-      }
-    }
-    else
-    {
-      self.add_message(&format!("No mark '{}'", ch));
-    }
-  }
-
-  pub(crate) fn list_marks_text(&self) -> String
-  {
-    let mut keys: Vec<char> = self.marks.keys().copied().collect();
-    keys.sort();
-    let mut out = String::new();
-    for k in keys
-    {
-      if let Some(p) = self.marks.get(&k)
-      {
-        out.push_str(&format!("{}  {}\n", k, p.display()));
-      }
-    }
-    if out.is_empty()
-    {
-      out.push_str("<no marks>\n");
-    }
-    out
-  }
-
-  pub(crate) fn execute_command_line(
-    &mut self,
-    line: &str,
-  )
-  {
-    let cmd = line.trim();
-    let low = cmd.to_ascii_lowercase();
-    // Split into tokens
-    let mut parts = low.split_whitespace();
-    let name = parts.next().unwrap_or("");
-    match name
-    {
-      "" =>
-      {}
-      "marks" =>
-      {
-        let text = self.list_marks_text();
-        self.display_output("Marks", &text);
-      }
-      "delmark" =>
-      {
-        let mut removed = 0usize;
-        for tok in parts
-        {
-          if let Some(ch) = tok.chars().next()
-            && self.marks.remove(&ch).is_some()
-          {
-            removed += 1;
-          }
-        }
-        if removed > 0
-        {
-          self.save_marks();
-        }
-        self.add_message(&format!("Deleted {} mark(s)", removed));
-      }
-      "find" => self.open_search(),
-      "next" => self.search_next(),
-      "prev" => self.search_prev(),
-      "messages" =>
-      {
-        self.overlay = match self.overlay
-        {
-          Overlay::Messages => Overlay::None,
-          _ => Overlay::Messages,
-        };
-        self.force_full_redraw = true;
-      }
-      "output" =>
-      {
-        self.overlay = match self.overlay
-        {
-          Overlay::Output { .. } => Overlay::None,
-          _ =>
-          {
-            Overlay::Output { title: String::from("Output"), lines: Vec::new() }
-          }
-        };
-        self.force_full_redraw = true;
-      }
-      "theme" => self.open_theme_picker(),
-      "add" => self.open_add_entry_prompt(),
-      "rename" => self.open_rename_entry_prompt(),
-      "delete" => self.request_delete_selected(),
-      "select_toggle" => self.toggle_select_current(),
-      "select_clear" => self.clear_all_selected(),
-      "show_hidden_toggle" =>
-      {
-        self.config.ui.show_hidden = !self.config.ui.show_hidden;
-        self.refresh_lists();
-        self.refresh_preview();
-        self.force_full_redraw = true;
-      }
-      "sort" =>
-      {
-        if let Some(arg) = parts.next()
-          && let Some(k) = crate::enums::sort_key_from_str(arg)
-        {
-          let current_name = self.selected_entry().map(|e| e.name.clone());
-          self.sort_key = k;
-          self.refresh_lists();
-          if let Some(name) = current_name
-          {
-            crate::core::selection::reselect_by_name(self, &name);
-          }
-          self.refresh_preview();
-        }
-      }
-      "sort_reverse_toggle" =>
-      {
-        let current_name = self.selected_entry().map(|e| e.name.clone());
-        self.sort_reverse = !self.sort_reverse;
-        self.refresh_lists();
-        if let Some(name) = current_name
-        {
-          crate::core::selection::reselect_by_name(self, &name);
-        }
-        self.refresh_preview();
-      }
-      "display" =>
-      {
-        if let Some(arg) = parts.next()
-          && let Some(mode) = crate::enums::display_mode_from_str(arg)
-        {
-          self.display_mode = mode;
-          if matches!(self.info_mode, InfoMode::None)
-          {
-            self.info_mode = InfoMode::Modified;
-          }
-          self.force_full_redraw = true;
-        }
-      }
-      "cd" =>
-      {
-        // Join rest of parts as a path
-        let rest = cmd.chars().skip(2).collect::<String>();
-        let path = rest.trim();
-        if !path.is_empty()
-        {
-          let p = std::path::Path::new(path);
-          if p.is_dir()
-          {
-            self.set_cwd(p);
-          }
-          else
-          {
-            self.add_message(&format!("cd: not a directory: {}", path));
-          }
-        }
-      }
-      "mark" =>
-      {
-        if let Some(arg) = parts.next()
-          && let Some(ch) = arg.chars().next()
-        {
-          self.add_mark(ch);
-        }
-      }
-      "goto" =>
-      {
-        if let Some(arg) = parts.next()
-          && let Some(ch) = arg.chars().next()
-        {
-          self.goto_mark(ch);
-        }
-      }
-      other =>
-      {
-        self.add_message(&format!("Unknown command: :{}", other));
-      }
-    }
-  }
-  pub(crate) fn search_next(&mut self)
-  {
-    if let Some(ref q) = self.search_query
-    {
-      let start = self.list_state.selected().unwrap_or(0);
-      // start from next index to avoid re-matching current
-      let next = if self.current_entries.is_empty()
-      {
-        None
-      }
-      else
-      {
-        self.find_match_from((start + 1) % self.current_entries.len(), q, false)
-      };
-      if let Some(i) = next
-      {
-        self.list_state.select(Some(i));
-        self.refresh_preview();
-        // regular draw is enough
-      }
-    }
-  }
-
-  pub(crate) fn search_prev(&mut self)
-  {
-    if let Some(ref q) = self.search_query
-    {
-      let start = self.list_state.selected().unwrap_or(0);
-      let len = self.current_entries.len();
-      let prev_start = if len == 0 { 0 } else { (start + len - 1) % len };
-      let prev = self.find_match_from(prev_start, q, true);
-      if let Some(i) = prev
-      {
-        self.list_state.select(Some(i));
-        self.refresh_preview();
-        // regular draw is enough
-      }
-    }
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn update_search_live(
-    &mut self,
-    q: &str,
-  )
-  {
-    if q.is_empty()
-    {
-      return;
-    }
-    let start = self.list_state.selected().unwrap_or(0);
-    let len = self.current_entries.len();
-    if len == 0
-    {
-      return;
-    }
-    // Try from current to include current when first typing
-    if let Some(i) = self.find_match_from(start, q, false)
-    {
-      self.list_state.select(Some(i));
-      self.refresh_preview();
-      // regular draw is enough
-    }
-  }
-
-  /// Test helper: inject a prepared Lua engine and registered action keys.
-  ///
-  /// This lets integration tests execute Lua callbacks without loading files
-  /// from disk.
-  pub fn inject_lua_engine_for_tests(
-    &mut self,
-    engine: crate::config::LuaEngine,
-    action_keys: Vec<mlua::RegistryKey>,
-  )
-  {
-    self.lua =
-      Some(LuaRuntime { engine, previewer: None, actions: action_keys });
-  }
-
-  pub(crate) fn selected_entry(&self) -> Option<&DirEntryInfo>
-  {
-    self.list_state.selected().and_then(|i| self.current_entries.get(i))
-  }
-
-  pub fn get_current_entry_name(
-    &self,
-    idx: usize,
-  ) -> Option<String>
-  {
-    self.current_entries.get(idx).map(|e| e.name.clone())
-  }
-
-  pub fn select_index(
-    &mut self,
-    idx: usize,
-  )
-  {
-    self.list_state.select(Some(idx));
-    self.refresh_preview();
-  }
-
-  pub(crate) fn refresh_lists(&mut self)
-  {
-    self.current_entries = self.read_dir_sorted(&self.cwd).unwrap_or_default();
-    if self.current_entries.len() > self.config.ui.max_list_items
-    {
-      self.current_entries.truncate(self.config.ui.max_list_items);
-    }
-    self.parent_entries = if let Some(p) = self.cwd.parent()
-    {
-      self.read_dir_sorted(p).unwrap_or_default()
-    }
-    else
-    {
-      Vec::new()
-    };
-    if self.parent_entries.len() > self.config.ui.max_list_items
-    {
-      self.parent_entries.truncate(self.config.ui.max_list_items);
-    }
-    // Clamp selection
-    let max_idx = self.current_entries.len().saturating_sub(1);
-    if let Some(sel) = self.list_state.selected()
-    {
-      self.list_state.select(
-        if self.current_entries.is_empty()
-        {
-          None
-        }
-        else
-        {
-          Some(min(sel, max_idx))
-        },
-      );
-    }
-    else if !self.current_entries.is_empty()
-    {
-      self.list_state.select(Some(0));
-    }
-    // Invalidate dynamic preview cache on list refresh
-    self.preview.cache_key = None;
-    self.preview.cache_lines = None;
-  }
-
-  pub(crate) fn refresh_preview(&mut self)
-  {
-    if self.running_preview.is_some()
-    {
-      // Live process is writing into preview
-      return;
-    }
-    // Avoid borrowing self while mutating by cloning the needed fields first
-    let (is_dir, path) = match self.selected_entry()
-    {
-      Some(e) => (e.is_dir, e.path.clone()),
-      None =>
-      {
-        self.preview.static_lines.clear();
-        // Invalidate dynamic preview cache when nothing selected
-        self.preview.cache_key = None;
-        self.preview.cache_lines = None;
-        return;
-      }
-    };
-
-    const PREVIEW_LINES_LIMIT: usize = 200;
-    let preview_limit = PREVIEW_LINES_LIMIT;
-    if is_dir
-    {
-      match self.read_dir_sorted(&path)
-      {
-        Ok(list) =>
-        {
-          let mut lines = Vec::new();
-          for e in list.into_iter().take(preview_limit)
-          {
-            let marker = if e.is_dir { "/" } else { "" };
-            let formatted = format!("{}{}", e.name, marker);
-            lines.push(crate::util::sanitize_line(&formatted));
-          }
-          self.preview.static_lines = lines;
-        }
-        Err(err) =>
-        {
-          self.preview.static_lines =
-            vec![format!("<error reading directory: {}>", err)];
-        }
-      }
-    }
-    else
-    {
-      // Detect binary early to avoid rendering junk or huge wrapped lines
-      if crate::util::is_binary(&path)
-      {
-        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-        self.preview.static_lines = vec![
-          String::from("<binary file>"),
-          format!("size: {} bytes", size),
-          String::from("tip: configure a previewer for this type"),
-        ];
-      }
-      else
-      {
-        // Cap bytes and lines to avoid runaway previews for huge files
-        const HEAD_BYTES_LIMIT: usize = 128 * 1024; // 128 KiB cap
-        self.preview.static_lines = crate::util::read_file_head_safe(
-          &path,
-          HEAD_BYTES_LIMIT,
-          preview_limit,
-        )
-        .map(|v| {
-          v.into_iter().map(|s| crate::util::sanitize_line(&s)).collect()
-        })
-        .unwrap_or_else(|e| vec![format!("<error reading file: {}>", e)]);
-      }
-      // Invalidate dynamic preview cache when selection changes
-      self.preview.cache_key = None;
-      self.preview.cache_lines = None;
-    }
-  }
-
-  pub(crate) fn read_dir_sorted(
-    &self,
-    path: &Path,
-  ) -> io::Result<Vec<DirEntryInfo>>
-  {
-    let need_meta = !matches!(self.info_mode, InfoMode::None)
-      || !matches!(self.sort_key, SortKey::Name);
-    crate::core::listing::read_dir_sorted(
-      path,
-      self.config.ui.show_hidden,
-      self.sort_key,
-      self.sort_reverse,
-      need_meta,
-      self.config.ui.max_list_items,
-    )
-  }
-
-  pub fn start_preview_process(
-    &mut self,
-    cmd: &str,
-  )
-  {
-    use std::{
-      process::{
-        Command,
-        Stdio,
-      },
-      sync::mpsc,
-    };
-    // Reset preview buffer and caches
-    self.preview.static_lines.clear();
-    self.preview.cache_key = None;
-    self.preview.cache_lines = None;
-    // Channel to stream lines
-    let (tx, rx) = mpsc::channel::<Option<String>>();
-    // Build platform shell
-    #[cfg(windows)]
-    let mut command = {
-      let mut c = Command::new("cmd");
-      c.arg("/C").arg(cmd);
-      c
-    };
-    #[cfg(not(windows))]
-    let mut command = {
-      let mut c = Command::new("sh");
-      c.arg("-lc").arg(cmd);
-      c
-    };
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    match command.spawn()
-    {
-      Ok(mut child) =>
-      {
-        let mut stdout = child.stdout.take();
-        let stderr = child.stderr.take();
-        std::thread::spawn(move || {
-          // Helper to read from a pipe and send lines
-          let read_out = |s: &mut Option<std::process::ChildStdout>| {
-            if let Some(out) = s
-            {
-              let mut buf = [0u8; 8192];
-              let mut acc = Vec::<u8>::new();
-              loop
-              {
-                match std::io::Read::read(out, &mut buf)
+                let path = de.path();
+                let name = de.file_name().to_string_lossy().to_string();
+                if let Ok(ft) = de.file_type()
                 {
-                  Ok(0) => break,
-                  Ok(n) =>
-                  {
-                    acc.extend_from_slice(&buf[..n]);
-                    while let Some(pos) = acc.iter().position(|&b| b == b'\n')
+                    let meta = fs::metadata(&path).ok();
+                    let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                    let mtime = meta.as_ref().and_then(|m| m.modified().ok());
+                    let ctime = meta.as_ref().and_then(|m| m.created().ok());
+                    tmp.push(DirEntryInfo {
+                        name,
+                        path,
+                        is_dir: ft.is_dir(),
+                        size,
+                        mtime,
+                        ctime,
+                    });
+                }
+            }
+            tmp.sort_by(|a, b| match (a.is_dir, b.is_dir)
+                {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                });
+            tmp
+        };
+        let parent_entries = if let Some(p) = cwd.parent()
+        {
+            // Same initial read for parent
+            let mut tmp = Vec::new();
+            for de in (fs::read_dir(p)?).flatten()
+            {
+                let path = de.path();
+                let name = de.file_name().to_string_lossy().to_string();
+                if let Ok(ft) = de.file_type()
+                {
+                    let meta = fs::metadata(&path).ok();
+                    let size = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+                    let mtime = meta.as_ref().and_then(|m| m.modified().ok());
+                    let ctime = meta.as_ref().and_then(|m| m.created().ok());
+                    tmp.push(DirEntryInfo {
+                        name,
+                        path,
+                        is_dir: ft.is_dir(),
+                        size,
+                        mtime,
+                        ctime,
+                    });
+                }
+            }
+            tmp.sort_by(|a, b| match (a.is_dir, b.is_dir)
+                {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                });
+            tmp
+        }
+        else
+        {
+            Vec::new()
+        };
+
+        let mut list_state = ListState::default();
+        if !current_entries.is_empty()
+        {
+            list_state.select(Some(0));
+        }
+        let mut app = Self {
+            cwd,
+            current_entries,
+            parent_entries,
+            list_state,
+            preview: PreviewState::default(),
+            recent_messages: Vec::new(),
+            overlay: Overlay::None,
+            config: crate::config::Config::default(),
+            keys: KeyState::default(),
+            force_full_redraw: false,
+            lua: None,
+            selected: std::collections::HashSet::new(),
+            clipboard: None,
+            sort_key: SortKey::Name,
+            sort_reverse: false,
+            info_mode: InfoMode::None,
+            display_mode: DisplayMode::Absolute,
+            should_quit: false,
+            search_query: None,
+            _search_locked: false,
+            marks: std::collections::HashMap::new(),
+            pending_mark: false,
+            pending_goto: false,
+            running_preview: None,
+        };
+        // Load marks from config root
+        if let Some(root) = app.theme_root_dir()
+        {
+            let path = root.join("marks");
+            app.marks = crate::core::marks::load_marks(&path);
+        }
+        // Discover configuration paths (entry not executed yet)
+        if let Ok(paths) = crate::config::discover_config_paths()
+        {
+            match crate::config::load_config(&paths)
+            {
+                Ok((cfg, maps, engine_opt)) =>
+                {
+                    app.config = cfg;
+                    app.keys.maps = maps;
+                    app.rebuild_keymap_lookup();
+                    if let Some((eng, key, action_keys)) = engine_opt
                     {
-                      let chunk = acc.drain(..=pos).collect::<Vec<u8>>();
-                      let line = String::from_utf8_lossy(&chunk)
-                        .trim_end_matches('\n')
-                        .to_string();
-                      let _ = tx.send(Some(line));
+                        app.lua = Some(LuaRuntime {
+                            engine:    eng,
+                            previewer: Some(key),
+                            actions:   action_keys,
+                        });
                     }
-                  }
-                  Err(_) => break,
+                    else
+                    {
+                        app.lua = None;
+                    }
+                    // Re-apply lists to honor config (e.g., show_hidden)
+                    // Also apply optional initial sort/show from config.ui
+                    if let Some(ref srt) = app.config.ui.sort
+                    && let Some(k) = crate::enums::sort_key_from_str(srt)
+                    {
+                        app.sort_key = k;
+                    }
+                    if let Some(b) = app.config.ui.sort_reverse
+                    {
+                        app.sort_reverse = b;
+                    }
+                    if let Some(ref sh) = app.config.ui.show
+                    {
+                        if sh.eq_ignore_ascii_case("none")
+                        {
+                            app.info_mode = crate::app::InfoMode::None;
+                        }
+                        else if let Some(m) = crate::enums::info_mode_from_str(sh)
+                        {
+                            app.info_mode = m;
+                        }
+                    }
+                    app.refresh_lists();
+                    // Apply display_mode from config if present
+                    if let Some(dm) = app.config.ui.display_mode.as_deref()
+                    && let Some(mode) = crate::enums::display_mode_from_str(dm)
+                    {
+                        app.display_mode = mode;
+                    }
                 }
-              }
-              if !acc.is_empty()
-              {
-                let line = String::from_utf8_lossy(&acc).to_string();
-                let _ = tx.send(Some(line));
-              }
-            }
-          };
-          read_out(&mut stdout);
-          // Read stderr separately (duplicate code for type simplicity)
-          if let Some(mut err) = stderr
-          {
-            let mut buf = [0u8; 8192];
-            let mut acc = Vec::<u8>::new();
-            loop
-            {
-              match std::io::Read::read(&mut err, &mut buf)
-              {
-                Ok(0) => break,
-                Ok(n) =>
+                Err(e) =>
                 {
-                  acc.extend_from_slice(&buf[..n]);
-                  while let Some(pos) = acc.iter().position(|&b| b == b'\n')
-                  {
-                    let chunk = acc.drain(..=pos).collect::<Vec<u8>>();
-                    let line = String::from_utf8_lossy(&chunk)
-                      .trim_end_matches('\n')
-                      .to_string();
-                    let _ = tx.send(Some(line));
-                  }
+                    eprintln!("lsv: config load error: {}", e);
                 }
-                Err(_) => break,
-              }
             }
-            if !acc.is_empty()
+        }
+        app.refresh_preview();
+        Ok(app)
+    }
+
+    fn find_match_from(
+        &self,
+        start: usize,
+        pat: &str,
+        backwards: bool,
+    ) -> Option<usize>
+    {
+        if self.current_entries.is_empty() || pat.is_empty()
+        {
+            return None;
+        }
+        let pat_l = pat.to_lowercase();
+        let len = self.current_entries.len();
+        if backwards
+        {
+            let mut idx = start;
+            for _ in 0..len
             {
-              let line = String::from_utf8_lossy(&acc).to_string();
-              let _ = tx.send(Some(line));
+                if let Some(e) = self.current_entries.get(idx)
+                && e.name.to_lowercase().contains(&pat_l)
+                {
+                    return Some(idx);
+                }
+                if idx == 0
+                {
+                    idx = len - 1;
+                }
+                else
+                {
+                    idx -= 1;
+                }
             }
-          }
-          let _ = tx.send(None);
-        });
-        self.running_preview = Some(RunningPreview { rx });
+        }
+        else
+        {
+            let mut idx = start;
+            for _ in 0..len
+            {
+                if let Some(e) = self.current_entries.get(idx)
+                && e.name.to_lowercase().contains(&pat_l)
+                {
+                    return Some(idx);
+                }
+                idx = (idx + 1) % len;
+            }
+        }
+        None
+    }
+
+
+    #[allow(dead_code)]
+    pub(crate) fn update_search_live(
+        &mut self,
+        q: &str,
+    )
+    {
+        if q.is_empty()
+        {
+            return;
+        }
+        let start = self.list_state.selected().unwrap_or(0);
+        let len = self.current_entries.len();
+        if len == 0
+        {
+            return;
+        }
+        // Try from current to include current when first typing
+        if let Some(i) = self.find_match_from(start, q, false)
+        {
+            self.list_state.select(Some(i));
+            self.refresh_preview();
+            // regular draw is enough
+        }
+    }
+
+    /// Test helper: inject a prepared Lua engine and registered action keys.
+    ///
+    /// This lets integration tests execute Lua callbacks without loading files
+    /// from disk.
+    pub fn inject_lua_engine_for_tests(
+        &mut self,
+        engine: crate::config::LuaEngine,
+        action_keys: Vec<mlua::RegistryKey>,
+    )
+    {
+        self.lua =
+            Some(LuaRuntime { engine, previewer: None, actions: action_keys });
+    }
+
+    pub fn show_hidden(&self) -> bool
+    {
+        self.config.ui.show_hidden
+    }
+    pub fn get_date_format(&self) -> Option<String>
+    {
+        self.config.ui.date_format.clone()
+    }
+
+    pub fn set_force_full_redraw(
+        &mut self,
+        v: bool,
+    )
+    {
+        self.force_full_redraw = v;
+    }
+    pub fn get_force_full_redraw(&self) -> bool
+    {
+        self.force_full_redraw
+    }
+    pub fn get_show_messages(&self) -> bool
+    {
+        matches!(self.overlay, Overlay::Messages)
+    }
+    pub fn get_show_output(&self) -> bool
+    {
+        matches!(self.overlay, Overlay::Output { .. })
+    }
+    pub fn get_show_whichkey(&self) -> bool
+    {
+        matches!(self.overlay, Overlay::WhichKey { .. })
+    }
+    pub fn get_output_title(&self) -> &str
+    {
+        if let Overlay::Output { ref title, .. } = self.overlay
+        {
+            title.as_str()
+        }
+        else
+        {
+            ""
+        }
+    }
+    pub fn get_output_text(&self) -> String
+    {
+        if let Overlay::Output { ref lines, .. } = self.overlay
+        {
+            lines.join("\n")
+        }
+        else
+        {
+            String::new()
+        }
+    }
+
+    pub fn get_list_selected_index(&self) -> Option<usize>
+    {
+        self.list_state.selected()
+    }
+    pub fn get_quit(&self) -> bool
+    {
+        self.should_quit
+    }
+    pub fn get_sort_reverse(&self) -> bool
+    {
+        self.sort_reverse
+    }
+    pub fn set_sort_reverse(
+        &mut self,
+        v: bool,
+    )
+    {
+        self.sort_reverse = v;
+    }
+    pub fn get_display_mode(&self) -> DisplayMode
+    {
+        self.display_mode
+    }
+    pub fn get_info_mode(&self) -> InfoMode
+    {
+        self.info_mode
+    }
+
+    pub fn get_entry(
+        &self,
+        idx: usize,
+    ) -> Option<DirEntryInfo>
+    {
+        self.current_entries.get(idx).cloned()
+    }
+
+    pub fn get_sort_key(&self) -> crate::actions::SortKey
+    {
+        self.sort_key
+    }
+    pub fn set_config(
+        &mut self,
+        cfg: crate::config::Config,
+    )
+    {
+        self.config = cfg;
+    }
+    pub fn get_config(&mut self) -> crate::config::Config
+    {
+        self.config.clone()
+    }
+    pub fn get_cwd_path(&self) -> std::path::PathBuf
+    {
+        self.cwd.clone()
+    }
+
+    pub fn preview_line_count(&self) -> usize
+    {
+        self.preview.static_lines.len()
+    }
+
+    pub fn recent_messages_len(&self) -> usize
+    {
+        self.recent_messages.len()
+    }
+
+    pub fn add_message(
+        &mut self,
+        msg: &str,
+    )
+    {
+        let m = msg.trim().to_string();
+        if m.is_empty()
+        {
+            return;
+        }
+        self.recent_messages.push(m);
+        if self.recent_messages.len() > 100
+        {
+            let _ = self.recent_messages.drain(0..self.recent_messages.len() - 100);
+        }
         self.force_full_redraw = true;
-      }
-      Err(e) =>
-      {
-        self.preview.static_lines = vec![format!("<error: {}>", e)];
-      }
     }
-  }
 
-  pub(crate) fn rebuild_keymap_lookup(&mut self)
-  {
-    self.keys.lookup.clear();
-    self.keys.prefixes.clear();
-    for m in &self.keys.maps
+    pub fn clear_recent_messages(&mut self)
     {
-      self.keys.lookup.insert(m.sequence.clone(), m.action.clone());
-      // collect token-based prefixes for sequence matching
-      let tokens = tokenize_sequence(&m.sequence);
-      let mut acc = String::new();
-      for (idx, t) in tokens.iter().enumerate()
-      {
-        acc.push_str(t);
-        if idx + 1 < tokens.len()
+        if !self.recent_messages.is_empty()
         {
-          self.keys.prefixes.insert(acc.clone());
-        }
-      }
-    }
-  }
-
-  pub fn set_keymaps(
-    &mut self,
-    maps: Vec<crate::config::KeyMapping>,
-  )
-  {
-    self.keys.maps = maps;
-    self.rebuild_keymap_lookup();
-  }
-
-  pub fn get_keymap_action(
-    &self,
-    seq: &str,
-  ) -> Option<String>
-  {
-    self.keys.lookup.get(seq).cloned()
-  }
-
-  pub fn has_prefix(
-    &self,
-    seq: &str,
-  ) -> bool
-  {
-    self.keys.prefixes.contains(seq)
-  }
-
-  pub fn show_hidden(&self) -> bool
-  {
-    self.config.ui.show_hidden
-  }
-  pub fn get_date_format(&self) -> Option<String>
-  {
-    self.config.ui.date_format.clone()
-  }
-  // preview_lines removed: internal cap used instead
-  pub fn set_force_full_redraw(
-    &mut self,
-    v: bool,
-  )
-  {
-    self.force_full_redraw = v;
-  }
-  pub fn get_force_full_redraw(&self) -> bool
-  {
-    self.force_full_redraw
-  }
-  pub fn get_show_messages(&self) -> bool
-  {
-    matches!(self.overlay, Overlay::Messages)
-  }
-  pub fn get_show_output(&self) -> bool
-  {
-    matches!(self.overlay, Overlay::Output { .. })
-  }
-  pub fn get_show_whichkey(&self) -> bool
-  {
-    matches!(self.overlay, Overlay::WhichKey { .. })
-  }
-  pub fn get_output_title(&self) -> &str
-  {
-    if let Overlay::Output { ref title, .. } = self.overlay
-    {
-      title.as_str()
-    }
-    else
-    {
-      ""
-    }
-  }
-  pub fn get_output_text(&self) -> String
-  {
-    if let Overlay::Output { ref lines, .. } = self.overlay
-    {
-      lines.join("\n")
-    }
-    else
-    {
-      String::new()
-    }
-  }
-  pub fn current_has_entries(&self) -> bool
-  {
-    !self.current_entries.is_empty()
-  }
-  pub fn get_list_selected_index(&self) -> Option<usize>
-  {
-    self.list_state.selected()
-  }
-  pub fn get_quit(&self) -> bool
-  {
-    self.should_quit
-  }
-  pub fn get_sort_reverse(&self) -> bool
-  {
-    self.sort_reverse
-  }
-  pub fn set_sort_reverse(
-    &mut self,
-    v: bool,
-  )
-  {
-    self.sort_reverse = v;
-  }
-  pub fn get_display_mode(&self) -> DisplayMode
-  {
-    self.display_mode
-  }
-  pub fn get_info_mode(&self) -> InfoMode
-  {
-    self.info_mode
-  }
-
-  pub fn get_entry(
-    &self,
-    idx: usize,
-  ) -> Option<DirEntryInfo>
-  {
-    self.current_entries.get(idx).cloned()
-  }
-
-  pub fn set_cwd(
-    &mut self,
-    path: &std::path::Path,
-  )
-  {
-    self.cwd = path.to_path_buf();
-    self.refresh_lists();
-    if !self.current_entries.is_empty()
-    {
-      self.list_state.select(Some(0));
-      self.refresh_preview();
-    }
-  }
-
-  pub fn get_whichkey_prefix(&self) -> String
-  {
-    if let Overlay::WhichKey { ref prefix } = self.overlay
-    {
-      return prefix.clone();
-    }
-    String::new()
-  }
-  pub fn get_sort_key(&self) -> crate::actions::SortKey
-  {
-    self.sort_key
-  }
-  pub fn set_config(
-    &mut self,
-    cfg: crate::config::Config,
-  )
-  {
-    self.config = cfg;
-  }
-  pub fn get_config(&mut self) -> crate::config::Config
-  {
-    self.config.clone()
-  }
-  pub fn get_cwd_path(&self) -> std::path::PathBuf
-  {
-    self.cwd.clone()
-  }
-
-  pub fn preview_line_count(&self) -> usize
-  {
-    self.preview.static_lines.len()
-  }
-
-  pub(crate) fn toggle_select_current(&mut self)
-  {
-    if let Some(e) = self.selected_entry().cloned()
-    {
-      if self.selected.contains(&e.path)
-      {
-        self.selected.remove(&e.path);
-      }
-      else
-      {
-        self.selected.insert(e.path);
-      }
-    }
-  }
-
-  pub(crate) fn clear_all_selected(&mut self)
-  {
-    if !self.selected.is_empty()
-    {
-      self.selected.clear();
-    }
-  }
-
-  pub(crate) fn copy_selection(&mut self)
-  {
-    let items: Vec<std::path::PathBuf> =
-      self.selected.iter().cloned().collect();
-    if items.is_empty()
-    {
-      self.add_message("Copy: no items selected");
-      return;
-    }
-    self.clipboard = Some(Clipboard { op: ClipboardOp::Copy, items });
-    self.add_message("Copied selection to clipboard");
-    self.force_full_redraw = true;
-  }
-
-  pub(crate) fn move_selection(&mut self)
-  {
-    let items: Vec<std::path::PathBuf> =
-      self.selected.iter().cloned().collect();
-    if items.is_empty()
-    {
-      self.add_message("Move: no items selected");
-      return;
-    }
-    self.clipboard = Some(Clipboard { op: ClipboardOp::Move, items });
-    self.add_message("Move selection armed");
-    self.force_full_redraw = true;
-  }
-
-  pub(crate) fn clear_clipboard(&mut self)
-  {
-    self.clipboard = None;
-    self.add_message("Clipboard cleared");
-    self.force_full_redraw = true;
-  }
-
-  pub(crate) fn paste_clipboard(&mut self)
-  {
-    let Some(cb) = self.clipboard.clone()
-    else
-    {
-      self.add_message("Paste: clipboard empty");
-      return;
-    };
-    let dest_dir = self.cwd.clone();
-    let mut ok = 0usize;
-    let mut skipped = 0usize;
-    let mut errs = 0usize;
-    for src in cb.items.iter()
-    {
-      if matches!(cb.op, ClipboardOp::Move) && dest_dir.starts_with(src)
-      {
-        self
-          .add_message(&format!("Skip (move into subdir): {}", src.display()));
-        skipped += 1;
-        continue;
-      }
-      let Some(name) = src.file_name()
-      else
-      {
-        skipped += 1;
-        continue;
-      };
-      let dest_path = dest_dir.join(name);
-      if dest_path.exists()
-      {
-        self.add_message(&format!("Skip (exists): {}", dest_path.display()));
-        skipped += 1;
-        continue;
-      }
-      let res = match cb.op
-      {
-        ClipboardOp::Copy => fs_ops::copy_path_recursive(src, &dest_path),
-        ClipboardOp::Move => fs_ops::move_path_with_fallback(src, &dest_path),
-      };
-      match res
-      {
-        Ok(()) => ok += 1,
-        Err(e) =>
-        {
-          errs += 1;
-          self.add_message(&format!(
-            "Error: {} -> {}: {}",
-            src.display(),
-            dest_path.display(),
-            e
-          ));
-        }
-      }
-    }
-    if matches!(cb.op, ClipboardOp::Move)
-    {
-      for p in cb.items.iter()
-      {
-        self.selected.remove(p);
-      }
-    }
-    self.clipboard = None;
-    self.refresh_lists();
-    self.refresh_preview();
-    self.add_message(&format!(
-      "Paste: ok={} skipped={} errors={}",
-      ok, skipped, errs
-    ));
-  }
-
-  pub fn recent_messages_len(&self) -> usize
-  {
-    self.recent_messages.len()
-  }
-
-  pub fn add_message(
-    &mut self,
-    msg: &str,
-  )
-  {
-    let m = msg.trim().to_string();
-    if m.is_empty()
-    {
-      return;
-    }
-    self.recent_messages.push(m);
-    if self.recent_messages.len() > 100
-    {
-      let _ = self.recent_messages.drain(0..self.recent_messages.len() - 100);
-    }
-    self.force_full_redraw = true;
-  }
-
-  pub fn clear_recent_messages(&mut self)
-  {
-    if !self.recent_messages.is_empty()
-    {
-      self.recent_messages.clear();
-      self.force_full_redraw = true;
-    }
-  }
-
-  pub fn set_theme_by_name(
-    &mut self,
-    name: &str,
-  ) -> bool
-  {
-    let root = match self.theme_root_dir()
-    {
-      Some(p) => p,
-      None =>
-      {
-        self.add_message("Theme: unable to determine config directory");
-        return false;
-      }
-    };
-    // Prefer <root>/lua/themes then <root>/themes
-    let themes_dir = {
-      let module_dir = root.join("lua").join("themes");
-      if std::fs::metadata(&module_dir).map(|m| m.is_dir()).unwrap_or(false)
-      {
-        module_dir
-      }
-      else
-      {
-        root.join("themes")
-      }
-    };
-    let rd = match std::fs::read_dir(&themes_dir)
-    {
-      Ok(v) => v,
-      Err(_) => return false,
-    };
-    let target_lower = name.to_lowercase();
-    for ent in rd.flatten()
-    {
-      let path = ent.path();
-      if !path.is_file()
-      {
-        continue;
-      }
-      if let Some(ext) = path.extension().and_then(|s| s.to_str())
-      {
-        if !ext.eq_ignore_ascii_case("lua")
-        {
-          continue;
-        }
-      }
-      else
-      {
-        continue;
-      }
-      let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-      if stem.to_lowercase() == target_lower
-      {
-        match crate::config::load_theme_from_file(&path)
-        {
-          Ok(theme) =>
-          {
-            self.config.ui.theme = Some(theme);
-            self.config.ui.theme_path = Some(path.clone());
+            self.recent_messages.clear();
             self.force_full_redraw = true;
-            return true;
-          }
-          Err(e) =>
-          {
-            self.add_message(&format!(
-              "Theme: failed to load {} ({})",
-              path.display(),
-              e
-            ));
-            return false;
-          }
         }
-      }
     }
-    false
-  }
 
-  pub(crate) fn theme_root_dir(&self) -> Option<PathBuf>
-  {
-    crate::config::discover_config_paths().ok().map(|p| p.root)
-  }
-
-  pub(crate) fn open_theme_picker(&mut self)
-  {
-    let root = match self.theme_root_dir()
+    pub fn set_theme_by_name(
+        &mut self,
+        name: &str,
+    ) -> bool
     {
-      Some(p) => p,
-      None =>
-      {
-        self.add_message("Theme picker: unable to determine config directory");
-        return;
-      }
-    };
-    // Prefer <root>/lua/themes (module-style) and fall back to <root>/themes
-    let themes_dir = {
-      let module_dir = root.join("lua").join("themes");
-      if std::fs::metadata(&module_dir).map(|m| m.is_dir()).unwrap_or(false)
-      {
-        module_dir
-      }
-      else
-      {
-        root.join("themes")
-      }
-    };
-    let read_dir = match fs::read_dir(&themes_dir)
-    {
-      Ok(rd) => rd,
-      Err(_) =>
-      {
-        self.add_message(&format!(
-          "Theme picker: no themes directory at {}",
-          themes_dir.display()
-        ));
-        return;
-      }
-    };
-
-    let mut entries: Vec<ThemePickerEntry> = Vec::new();
-    for entry in read_dir
-    {
-      match entry
-      {
-        Ok(dir_entry) =>
+        let root = match self.theme_root_dir()
         {
-          let path = dir_entry.path();
-          if !path.is_file()
-          {
-            continue;
-          };
-
-          if let Some(ext) = path.extension().and_then(|s| s.to_str())
-          {
-            if !ext.eq_ignore_ascii_case("lua")
+            Some(p) => p,
+            None =>
             {
-              continue;
+                self.add_message("Theme: unable to determine config directory");
+                return false;
             }
-          }
-          else
-          {
-            continue;
-          }
-
-          match crate::config::load_theme_from_file(&path)
-          {
-            Ok(theme) =>
+        };
+        // Prefer <root>/lua/themes then <root>/themes
+        let themes_dir = {
+            let module_dir = root.join("lua").join("themes");
+            if std::fs::metadata(&module_dir).map(|m| m.is_dir()).unwrap_or(false)
             {
-              let name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| path.display().to_string());
-              entries.push(ThemePickerEntry { name, path, theme });
+                module_dir
             }
-            Err(e) =>
+            else
             {
-              self.add_message(&format!(
-                "Theme picker: failed to load {} ({})",
-                path.display(),
-                e
-              ));
+                root.join("themes")
             }
-          }
-        }
-        Err(e) =>
+        };
+        let rd = match std::fs::read_dir(&themes_dir)
         {
-          self.add_message(&format!(
-            "Theme picker: error reading themes directory ({})",
-            e
-          ));
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let target_lower = name.to_lowercase();
+        for ent in rd.flatten()
+        {
+            let path = ent.path();
+            if !path.is_file()
+            {
+                continue;
+            }
+            if let Some(ext) = path.extension().and_then(|s| s.to_str())
+            {
+                if !ext.eq_ignore_ascii_case("lua")
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                continue;
+            }
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            if stem.to_lowercase() == target_lower
+            {
+                match crate::config::load_theme_from_file(&path)
+                {
+                    Ok(theme) =>
+                    {
+                        self.config.ui.theme = Some(theme);
+                        self.config.ui.theme_path = Some(path.clone());
+                        self.force_full_redraw = true;
+                        return true;
+                    }
+                    Err(e) =>
+                    {
+                        self.add_message(&format!(
+                            "Theme: failed to load {} ({})",
+                            path.display(),
+                            e
+                        ));
+                        return false;
+                    }
+                }
+            }
         }
-      }
+        false
     }
 
-    if entries.is_empty()
+    pub(crate) fn theme_root_dir(&self) -> Option<PathBuf>
     {
-      self.add_message(&format!(
-        "Theme picker: no .lua themes found in {}",
-        themes_dir.display()
-      ));
-      return;
+        crate::config::discover_config_paths().ok().map(|p| p.root)
     }
 
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-
-    let current_path = self.config.ui.theme_path.clone();
-    let mut selected = 0usize;
-    if let Some(cur) = current_path.as_ref()
-      && let Some(idx) = entries.iter().position(|e| e.path == *cur)
+    pub(crate) fn theme_picker_move(
+        &mut self,
+        delta: isize,
+    )
     {
-      selected = idx;
+        crate::core::overlays::theme_picker_move(self, delta)
     }
 
-    let state = ThemePickerState {
-      entries,
-      selected,
-      original_theme: self.config.ui.theme.clone(),
-      original_theme_path: current_path,
-    };
-
-    self.keys.pending.clear();
-    self.keys.last_at = None;
-    self.overlay = Overlay::ThemePicker(Box::new(state));
-    self.force_full_redraw = true;
-  }
-
-  pub(crate) fn open_add_entry_prompt(&mut self)
-  {
-    crate::core::overlays::open_add_entry_prompt(self)
-  }
-
-  pub(crate) fn open_rename_entry_prompt(&mut self)
-  {
-    crate::core::overlays::open_rename_entry_prompt(self)
-  }
-
-  pub(crate) fn request_delete_selected(&mut self)
-  {
-    crate::core::overlays::request_delete_selected(self)
-  }
-
-  pub(crate) fn perform_delete_path(
-    &mut self,
-    path: &std::path::Path,
-  )
-  {
-    crate::trace::log(format!("[delete] perform path='{}'", path.display()));
-    let res = fs_ops::remove_path_all(path);
-    match res
+    pub(crate) fn confirm_theme_picker(&mut self)
     {
-      Ok(_) =>
-      {
-        crate::trace::log("[delete] success");
-        self.add_message("Deleted");
-        // Remove from selection if present
-        self.selected.remove(path);
-      }
-      Err(e) =>
-      {
-        crate::trace::log(format!("[delete] error: {}", e));
-        self.add_message(&format!("Delete error: {}", e));
-      }
+        crate::core::overlays::confirm_theme_picker(self)
     }
-    self.refresh_lists();
-    self.refresh_preview();
-  }
 
-  pub(crate) fn theme_picker_move(
-    &mut self,
-    delta: isize,
-  )
-  {
-    crate::core::overlays::theme_picker_move(self, delta)
-  }
-
-  pub(crate) fn confirm_theme_picker(&mut self)
-  {
-    crate::core::overlays::confirm_theme_picker(self)
-  }
-
-  pub(crate) fn cancel_theme_picker(&mut self)
-  {
-    if let Overlay::ThemePicker(state) =
-      std::mem::replace(&mut self.overlay, Overlay::None)
+    pub(crate) fn cancel_theme_picker(&mut self)
     {
-      let st = *state;
-      self.config.ui.theme = st.original_theme;
-      self.config.ui.theme_path = st.original_theme_path;
-      self.force_full_redraw = true;
+        if let Overlay::ThemePicker(state) =
+        std::mem::replace(&mut self.overlay, Overlay::None)
+        {
+            let st = *state;
+            self.config.ui.theme = st.original_theme;
+            self.config.ui.theme_path = st.original_theme_path;
+            self.force_full_redraw = true;
+        }
     }
-  }
 
-  pub(crate) fn is_theme_picker_active(&self) -> bool
-  {
-    matches!(self.overlay, Overlay::ThemePicker(_))
-  }
+    pub(crate) fn is_theme_picker_active(&self) -> bool
+    {
+        matches!(self.overlay, Overlay::ThemePicker(_))
+    }
 
-  pub fn display_output(
-    &mut self,
-    title: &str,
-    text: &str,
-  )
-  {
-    let lines: Vec<String> =
-      text.replace('\r', "").lines().map(|s| s.to_string()).collect();
-    self.overlay = Overlay::Output { title: title.to_string(), lines };
-    self.force_full_redraw = true;
-  }
+    pub fn display_output(
+        &mut self,
+        title: &str,
+        text: &str,
+    )
+    {
+        let lines: Vec<String> =
+        text.replace('\r', "").lines().map(|s| s.to_string()).collect();
+        self.overlay = Overlay::Output { title: title.to_string(), lines };
+        self.force_full_redraw = true;
+    }
 }
 
 pub(crate) fn common_affixes(names: &[String]) -> (String, String)
 {
-  if names.is_empty()
-  {
-    return (String::new(), String::new());
-  }
-
-  fn common_prefix(
-    a: &str,
-    b: &str,
-  ) -> String
-  {
-    let mut out = String::new();
-    for (ca, cb) in a.chars().zip(b.chars())
+    if names.is_empty()
     {
-      if ca == cb
-      {
-        out.push(ca);
-      }
-      else
-      {
-        break;
-      }
+        return (String::new(), String::new());
     }
-    out
-  }
-  fn common_suffix(
-    a: &str,
-    b: &str,
-  ) -> String
-  {
-    let mut rev: Vec<char> = Vec::new();
-    for (ca, cb) in a.chars().rev().zip(b.chars().rev())
-    {
-      if ca == cb
-      {
-        rev.push(ca);
-      }
-      else
-      {
-        break;
-      }
-    }
-    rev.into_iter().rev().collect()
-  }
 
-  let mut pre = names[0].clone();
-  for n in names.iter().skip(1)
-  {
-    pre = common_prefix(&pre, n);
-    if pre.is_empty()
+    fn common_prefix(
+        a: &str,
+        b: &str,
+    ) -> String
     {
-      break;
+        let mut out = String::new();
+        for (ca, cb) in a.chars().zip(b.chars())
+        {
+            if ca == cb
+            {
+                out.push(ca);
+            }
+            else
+            {
+                break;
+            }
+        }
+        out
     }
-  }
-  let mut suf = names[0].clone();
-  for n in names.iter().skip(1)
-  {
-    suf = common_suffix(&suf, n);
-    if suf.is_empty()
-    { /* keep going to ensure empty is final */ }
-  }
-  (pre, suf)
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InfoMode
-{
-  None,
-  Size,
-  Created,
-  Modified,
-}
+    fn common_suffix(
+        a: &str,
+        b: &str,
+    ) -> String
+    {
+        let mut rev: Vec<char> = Vec::new();
+        for (ca, cb) in a.chars().rev().zip(b.chars().rev())
+        {
+            if ca == cb
+            {
+                rev.push(ca);
+            }
+            else
+            {
+                break;
+            }
+        }
+        rev.into_iter().rev().collect()
+    }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DisplayMode
-{
-  Absolute,
-  Friendly,
+    let mut pre = names[0].clone();
+    for n in names.iter().skip(1)
+    {
+        pre = common_prefix(&pre, n);
+        if pre.is_empty()
+        {
+            break;
+        }
+    }
+    let mut suf = names[0].clone();
+    for n in names.iter().skip(1)
+    {
+        suf = common_suffix(&suf, n);
+        if suf.is_empty()
+        { /* keep going to ensure empty is final */ }
+    }
+    (pre, suf)
 }

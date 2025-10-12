@@ -17,7 +17,6 @@ use super::{
     execute_internal_action,
     parse_internal_action,
   },
-  // moved under config::runtime::glue
 };
 use crate::{
   config::runtime::glue::call_lua_action,

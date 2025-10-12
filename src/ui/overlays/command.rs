@@ -90,24 +90,19 @@ pub fn draw_command_pane(
         width:  area.width,
         height: 1,
       };
-      let mut line = String::new();
+      // Build suggestions sorted alphabetically (case-insensitive)
       let prefix = input.trim();
-      let cmds = crate::commands::all();
-      for c in cmds.iter()
-      {
-        if prefix.is_empty() || c.starts_with(prefix)
-        {
-          if !line.is_empty()
-          {
-            line.push_str("  ");
-          }
-          line.push_str(c);
-        }
-      }
-      if line.is_empty()
-      {
-        line.push_str("<no matches>");
-      }
+      let mut matches: Vec<&str> = crate::commands::all()
+        .iter()
+        .copied()
+        .filter(|c| prefix.is_empty() || c.starts_with(prefix))
+        .collect();
+      matches.sort_by_key(|a| a.to_lowercase());
+      let line = if matches.is_empty() {
+        String::from("<no matches>")
+      } else {
+        matches.join("  ")
+      };
       let mut style = Style::default().fg(Color::DarkGray);
       if let Some(th) = app.config.ui.theme.as_ref()
         && let Some(fg) =

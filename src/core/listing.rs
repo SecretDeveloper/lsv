@@ -105,7 +105,7 @@ pub fn read_dir_sorted(
         {
           a.size.cmp(&b.size)
         }
-      },
+      }
       SortKey::MTime =>
       {
         let at = a.mtime.unwrap_or(std::time::SystemTime::UNIX_EPOCH);

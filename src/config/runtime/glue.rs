@@ -121,15 +121,13 @@ fn build_lsv_helpers(
   // Process helpers are inlined below
 
   // Selection snapshot helper: return selected file paths as a Lua array
-  let selected_paths_snapshot: Vec<String> = app
-    .selected
-    .iter()
-    .map(|p| p.to_string_lossy().to_string())
-    .collect();
+  let selected_paths_snapshot: Vec<String> =
+    app.selected.iter().map(|p| p.to_string_lossy().to_string()).collect();
   let get_selected_paths_fn = lua
     .create_function(move |lua, ()| {
       let t = lua.create_table()?;
-      for (i, s) in selected_paths_snapshot.iter().enumerate() {
+      for (i, s) in selected_paths_snapshot.iter().enumerate()
+      {
         t.set((i + 1) as i64, s.clone())?;
       }
       Ok(t)
