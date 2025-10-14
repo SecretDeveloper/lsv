@@ -4,245 +4,250 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortKey
 {
-  Name,
-  Size,
-  MTime,
-  CTime,
+    Name,
+    Size,
+    MTime,
+    CTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum InternalAction
 {
-  Quit,
-  Sort(SortKey),
-  ToggleSortReverse,
-  SetInfo(crate::app::InfoMode),
-  SetDisplayMode(crate::app::DisplayMode),
-  GoTop,
-  GoBottom,
-  RunCommand(String),
-  ClipboardCopy,
-  ClipboardMove,
-  ClipboardPaste,
-  ClipboardClear,
-  CloseOverlays,
+    Quit,
+    Sort(SortKey),
+    ToggleSortReverse,
+    SetInfo(crate::app::InfoMode),
+    SetDisplayMode(crate::app::DisplayMode),
+    GoTop,
+    GoBottom,
+    RunCommand(String),
+    ClipboardCopy,
+    ClipboardMove,
+    ClipboardPaste,
+    ClipboardClear,
+    CloseOverlays,
 }
 
 pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction>
 {
-  let low = s.trim().to_ascii_lowercase();
-  if low == "quit" || low == "q"
-  {
-    return Some(InternalAction::Quit);
-  }
-  if low == "sort:reverse:toggle" || low == "sort:rev:toggle"
-  {
-    return Some(InternalAction::ToggleSortReverse);
-  }
-  if low.starts_with("sort:")
-  {
-    let parts: Vec<&str> = low.split(':').collect();
-    if parts.len() >= 2
+    let low = s.trim().to_ascii_lowercase();
+    if low == "quit" || low == "q"
     {
-      return crate::enums::sort_key_from_str(parts[1])
-        .map(InternalAction::Sort);
+        return Some(InternalAction::Quit);
     }
-  }
-  // Primary: show:* controls info display
-  if low.starts_with("show:")
-  {
-    let parts: Vec<&str> = low.split(':').collect();
-    if parts.len() >= 2
+    if low == "sort:reverse:toggle" || low == "sort:rev:toggle"
     {
-      if parts[1] == "friendly"
-      {
-        return Some(InternalAction::SetDisplayMode(
-          crate::app::DisplayMode::Friendly,
-        ));
-      }
-      return crate::enums::info_mode_from_str(parts[1])
-        .map(InternalAction::SetInfo);
+        return Some(InternalAction::ToggleSortReverse);
     }
-  }
-  if low.starts_with("display:")
-  {
-    let parts: Vec<&str> = low.split(':').collect();
-    if parts.len() >= 2
+    if low.starts_with("sort:")
     {
-      return crate::enums::display_mode_from_str(parts[1])
-        .map(InternalAction::SetDisplayMode);
+        let parts: Vec<&str> = low.split(':').collect();
+        if parts.len() >= 2
+        {
+            return crate::enums::sort_key_from_str(parts[1])
+                .map(InternalAction::Sort);
+        }
     }
-  }
-  if low == "nav:top" || low == "top" || low == "gg"
-  {
-    return Some(InternalAction::GoTop);
-  }
-  if low == "nav:bottom" || low == "bottom" || low == "g$"
-  {
-    return Some(InternalAction::GoBottom);
-  }
-  if let Some(cmd) = low.strip_prefix("cmd:")
-  {
-    return Some(InternalAction::RunCommand(cmd.to_string()));
-  }
-  if low == "clipboard:copy"
-  {
-    return Some(InternalAction::ClipboardCopy);
-  }
-  if low == "clipboard:move"
-  {
-    return Some(InternalAction::ClipboardMove);
-  }
-  if low == "clipboard:paste"
-  {
-    return Some(InternalAction::ClipboardPaste);
-  }
-  if low == "clipboard:clear"
-  {
-    return Some(InternalAction::ClipboardClear);
-  }
-  if low == "overlay:close"
-  {
-    return Some(InternalAction::CloseOverlays);
-  }
-  None
+    // Primary: show:* controls info display
+    if low.starts_with("show:")
+    {
+        let parts: Vec<&str> = low.split(':').collect();
+        if parts.len() >= 2
+        {
+            if parts[1] == "friendly"
+            {
+                return Some(InternalAction::SetDisplayMode(
+                    crate::app::DisplayMode::Friendly,
+                ));
+            }
+            return crate::enums::info_mode_from_str(parts[1])
+                .map(InternalAction::SetInfo);
+        }
+    }
+    if low.starts_with("display:")
+    {
+        let parts: Vec<&str> = low.split(':').collect();
+        if parts.len() >= 2
+        {
+            return crate::enums::display_mode_from_str(parts[1])
+                .map(InternalAction::SetDisplayMode);
+        }
+    }
+    if low == "nav:top" || low == "top" || low == "gg"
+    {
+        return Some(InternalAction::GoTop);
+    }
+    if low == "nav:bottom" || low == "bottom" || low == "g$"
+    {
+        return Some(InternalAction::GoBottom);
+    }
+    if let Some(cmd) = low.strip_prefix("cmd:")
+    {
+        return Some(InternalAction::RunCommand(cmd.to_string()));
+    }
+    if low == "clipboard:copy"
+    {
+        return Some(InternalAction::ClipboardCopy);
+    }
+    if low == "clipboard:move"
+    {
+        return Some(InternalAction::ClipboardMove);
+    }
+    if low == "clipboard:paste"
+    {
+        return Some(InternalAction::ClipboardPaste);
+    }
+    if low == "clipboard:clear"
+    {
+        return Some(InternalAction::ClipboardClear);
+    }
+    if low == "overlay:close"
+    {
+        return Some(InternalAction::CloseOverlays);
+    }
+    None
 }
 
 pub(crate) fn execute_internal_action(
-  app: &mut crate::app::App,
-  action: InternalAction,
+    app: &mut crate::app::App,
+    action: InternalAction,
 )
 {
-  match action
-  {
-    InternalAction::Quit =>
+    match action
     {
-      app.should_quit = true;
+        InternalAction::Quit =>
+        {
+            app.should_quit = true;
+        }
+        InternalAction::Sort(key) =>
+        {
+            // Reselect current item by name after resort
+            let current_name = app.selected_entry().map(|e| e.name.clone());
+            app.sort_key = key;
+            app.refresh_lists();
+            if let Some(name) = current_name
+            {
+                crate::core::selection::reselect_by_name(app, &name);
+            }
+            app.refresh_preview();
+        }
+        InternalAction::ToggleSortReverse =>
+        {
+            let current_name = app.selected_entry().map(|e| e.name.clone());
+            app.sort_reverse = !app.sort_reverse;
+            app.refresh_lists();
+            if let Some(name) = current_name
+            {
+                crate::core::selection::reselect_by_name(app, &name);
+            }
+            app.refresh_preview();
+        }
+        InternalAction::SetInfo(mode) =>
+        {
+            app.info_mode = mode;
+            app.force_full_redraw = true;
+        }
+        InternalAction::SetDisplayMode(style) =>
+        {
+            app.display_mode = style;
+            // If no info is selected yet, default to Modified so date becomes
+            // visible
+            if matches!(app.info_mode, crate::app::InfoMode::None)
+            {
+                app.info_mode = crate::app::InfoMode::Modified;
+            }
+            app.force_full_redraw = true;
+        }
+        InternalAction::GoTop =>
+        {
+            if !app.current_entries.is_empty()
+            {
+                app.list_state.select(Some(0));
+                app.refresh_preview();
+            }
+        }
+        InternalAction::GoBottom =>
+        {
+            if !app.current_entries.is_empty()
+            {
+                let last = app.current_entries.len().saturating_sub(1);
+                app.list_state.select(Some(last));
+                app.refresh_preview();
+            }
+        }
+        InternalAction::RunCommand(cmd) =>
+        {
+            app.execute_command_line(&cmd);
+        }
+        InternalAction::ClipboardCopy =>
+        {
+            app.copy_selection();
+        }
+        InternalAction::ClipboardMove =>
+        {
+            app.move_selection();
+        }
+        InternalAction::ClipboardPaste =>
+        {
+            app.paste_clipboard();
+        }
+        InternalAction::ClipboardClear =>
+        {
+            app.clear_all_selected();
+        }
+        InternalAction::CloseOverlays =>
+        {
+            app.overlay = crate::app::Overlay::None;
+            app.force_full_redraw = true;
+        }
     }
-    InternalAction::Sort(key) =>
-    {
-      // Reselect current item by name after resort
-      let current_name = app.selected_entry().map(|e| e.name.clone());
-      app.sort_key = key;
-      app.refresh_lists();
-      if let Some(name) = current_name
-      {
-        crate::core::selection::reselect_by_name(app, &name);
-      }
-      app.refresh_preview();
-    }
-    InternalAction::ToggleSortReverse =>
-    {
-      let current_name = app.selected_entry().map(|e| e.name.clone());
-      app.sort_reverse = !app.sort_reverse;
-      app.refresh_lists();
-      if let Some(name) = current_name
-      {
-        crate::core::selection::reselect_by_name(app, &name);
-      }
-      app.refresh_preview();
-    }
-    InternalAction::SetInfo(mode) =>
-    {
-      app.info_mode = mode;
-      app.force_full_redraw = true;
-    }
-    InternalAction::SetDisplayMode(style) =>
-    {
-      app.display_mode = style;
-      // If no info is selected yet, default to Modified so date becomes visible
-      if matches!(app.info_mode, crate::app::InfoMode::None)
-      {
-        app.info_mode = crate::app::InfoMode::Modified;
-      }
-      app.force_full_redraw = true;
-    }
-    InternalAction::GoTop =>
-    {
-      if !app.current_entries.is_empty()
-      {
-        app.list_state.select(Some(0));
-        app.refresh_preview();
-      }
-    }
-    InternalAction::GoBottom =>
-    {
-      if !app.current_entries.is_empty()
-      {
-        let last = app.current_entries.len().saturating_sub(1);
-        app.list_state.select(Some(last));
-        app.refresh_preview();
-      }
-    }
-    InternalAction::RunCommand(cmd) =>
-    {
-      app.execute_command_line(&cmd);
-    }
-    InternalAction::ClipboardCopy =>
-    {
-      app.copy_selection();
-    }
-    InternalAction::ClipboardMove =>
-    {
-      app.move_selection();
-    }
-    InternalAction::ClipboardPaste =>
-    {
-      app.paste_clipboard();
-    }
-    InternalAction::ClipboardClear =>
-    {
-      app.clear_all_selected();
-    }
-    InternalAction::CloseOverlays =>
-    {
-      app.overlay = crate::app::Overlay::None;
-      app.force_full_redraw = true;
-    }
-  }
 }
 
 /// Produce lightweight effects for simple internal actions (quit/navigation)
 /// without mutating the app directly. Returns None for actions that require
 /// configuration or list mutations (sorting, display toggles).
 pub(crate) fn internal_effects(
-  app: &crate::app::App,
-  action: &InternalAction,
+    app: &crate::app::App,
+    action: &InternalAction,
 ) -> Option<super::effects::ActionEffects>
 {
-  use super::effects::ActionEffects;
-  match action
-  {
-    InternalAction::Quit =>
+    use super::effects::ActionEffects;
+    match action
     {
-      let fx = ActionEffects { quit: true, ..Default::default() };
-      Some(fx)
+        InternalAction::Quit =>
+        {
+            let fx = ActionEffects { quit: true, ..Default::default() };
+            Some(fx)
+        }
+        InternalAction::GoTop =>
+        {
+            if !app.current_entries.is_empty()
+            {
+                let fx =
+                    ActionEffects { selection: Some(0), ..Default::default() };
+                Some(fx)
+            }
+            else
+            {
+                Some(ActionEffects::default())
+            }
+        }
+        InternalAction::GoBottom =>
+        {
+            if !app.current_entries.is_empty()
+            {
+                let last = app.current_entries.len().saturating_sub(1);
+                let fx = ActionEffects {
+                    selection: Some(last),
+                    ..Default::default()
+                };
+                Some(fx)
+            }
+            else
+            {
+                Some(ActionEffects::default())
+            }
+        }
+        _ => None,
     }
-    InternalAction::GoTop =>
-    {
-      if !app.current_entries.is_empty()
-      {
-        let fx = ActionEffects { selection: Some(0), ..Default::default() };
-        Some(fx)
-      }
-      else
-      {
-        Some(ActionEffects::default())
-      }
-    }
-    InternalAction::GoBottom =>
-    {
-      if !app.current_entries.is_empty()
-      {
-        let last = app.current_entries.len().saturating_sub(1);
-        let fx = ActionEffects { selection: Some(last), ..Default::default() };
-        Some(fx)
-      }
-      else
-      {
-        Some(ActionEffects::default())
-      }
-    }
-    _ => None,
-  }
 }

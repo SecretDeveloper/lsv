@@ -6,9 +6,9 @@
 //! APIs to fabricate configurations dynamically.
 
 use mlua::{
-  Lua,
-  LuaOptions,
-  StdLib,
+    Lua,
+    LuaOptions,
+    StdLib,
 };
 use std::path::Path;
 
@@ -16,16 +16,16 @@ mod types;
 pub use types::*;
 mod paths;
 pub use paths::{
-  ConfigPaths,
-  discover_config_paths,
+    ConfigPaths,
+    discover_config_paths,
 };
 mod lsv_api;
 pub(crate) use lsv_api::install_lsv_api;
 mod theme;
 pub(crate) use theme::{
-  load_theme_table_from_path,
-  merge_theme_table,
-  resolve_theme_path,
+    load_theme_table_from_path,
+    merge_theme_table,
+    resolve_theme_path,
 };
 mod require;
 pub(crate) use require::install_require;
@@ -46,17 +46,17 @@ pub mod defaults;
 /// The theme is returned as a [`UiTheme`] without mutating any global state.
 pub fn load_theme_from_file(path: &Path) -> std::io::Result<UiTheme>
 {
-  let lua = Lua::new_with(
-    StdLib::STRING | StdLib::TABLE | StdLib::MATH,
-    LuaOptions::default(),
-  )
-  .map_err(|e| std::io::Error::other(format!("lua init failed: {e}")))?;
-  let tbl = load_theme_table_from_path(&lua, path).map_err(|e| {
-    std::io::Error::other(format!("load theme '{}': {e}", path.display()))
-  })?;
-  let mut theme = UiTheme::default();
-  merge_theme_table(&tbl, &mut theme);
-  Ok(theme)
+    let lua = Lua::new_with(
+        StdLib::STRING | StdLib::TABLE | StdLib::MATH,
+        LuaOptions::default(),
+    )
+    .map_err(|e| std::io::Error::other(format!("lua init failed: {e}")))?;
+    let tbl = load_theme_table_from_path(&lua, path).map_err(|e| {
+        std::io::Error::other(format!("load theme '{}': {e}", path.display()))
+    })?;
+    let mut theme = UiTheme::default();
+    merge_theme_table(&tbl, &mut theme);
+    Ok(theme)
 }
 
 // LuaEngine moved to config/lua_engine.rs

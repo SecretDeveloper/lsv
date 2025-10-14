@@ -4,7 +4,7 @@ max_width = 80
 
 # Tabs or spaces?
 hard_tabs = false
-tab_spaces = 2
+tab_spaces = 4
 
 unstable_features = true
 

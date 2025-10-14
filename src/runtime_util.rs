@@ -7,14 +7,14 @@ use std::io;
 /// Process a single crossterm event and return `Ok(true)` if the app should
 /// exit.
 pub fn process_event(
-  app: &mut App,
-  ev: Event,
+    app: &mut App,
+    ev: Event,
 ) -> io::Result<bool>
 {
-  match ev
-  {
-    Event::Key(key) => crate::input::handle_key(app, key),
-    Event::Resize(_, _) => Ok(false),
-    _ => Ok(false),
-  }
+    match ev
+    {
+        Event::Key(key) => crate::input::handle_key(app, key),
+        Event::Resize(_, _) => Ok(false),
+        _ => Ok(false),
+    }
 }

@@ -79,11 +79,11 @@ impl App
                 }
             }
             tmp.sort_by(|a, b| match (a.is_dir, b.is_dir)
-                {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                });
+            {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            });
             tmp
         };
         let parent_entries = if let Some(p) = cwd.parent()
@@ -111,11 +111,11 @@ impl App
                 }
             }
             tmp.sort_by(|a, b| match (a.is_dir, b.is_dir)
-                {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                });
+            {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            });
             tmp
         }
         else
@@ -185,7 +185,7 @@ impl App
                     // Re-apply lists to honor config (e.g., show_hidden)
                     // Also apply optional initial sort/show from config.ui
                     if let Some(ref srt) = app.config.ui.sort
-                    && let Some(k) = crate::enums::sort_key_from_str(srt)
+                        && let Some(k) = crate::enums::sort_key_from_str(srt)
                     {
                         app.sort_key = k;
                     }
@@ -199,7 +199,8 @@ impl App
                         {
                             app.info_mode = crate::app::InfoMode::None;
                         }
-                        else if let Some(m) = crate::enums::info_mode_from_str(sh)
+                        else if let Some(m) =
+                            crate::enums::info_mode_from_str(sh)
                         {
                             app.info_mode = m;
                         }
@@ -207,7 +208,8 @@ impl App
                     app.refresh_lists();
                     // Apply display_mode from config if present
                     if let Some(dm) = app.config.ui.display_mode.as_deref()
-                    && let Some(mode) = crate::enums::display_mode_from_str(dm)
+                        && let Some(mode) =
+                            crate::enums::display_mode_from_str(dm)
                     {
                         app.display_mode = mode;
                     }
@@ -241,7 +243,7 @@ impl App
             for _ in 0..len
             {
                 if let Some(e) = self.current_entries.get(idx)
-                && e.name.to_lowercase().contains(&pat_l)
+                    && e.name.to_lowercase().contains(&pat_l)
                 {
                     return Some(idx);
                 }
@@ -261,7 +263,7 @@ impl App
             for _ in 0..len
             {
                 if let Some(e) = self.current_entries.get(idx)
-                && e.name.to_lowercase().contains(&pat_l)
+                    && e.name.to_lowercase().contains(&pat_l)
                 {
                     return Some(idx);
                 }
@@ -270,7 +272,6 @@ impl App
         }
         None
     }
-
 
     #[allow(dead_code)]
     pub(crate) fn update_search_live(
@@ -445,7 +446,8 @@ impl App
         self.recent_messages.push(m);
         if self.recent_messages.len() > 100
         {
-            let _ = self.recent_messages.drain(0..self.recent_messages.len() - 100);
+            let _ =
+                self.recent_messages.drain(0..self.recent_messages.len() - 100);
         }
         self.force_full_redraw = true;
     }
@@ -476,7 +478,9 @@ impl App
         // Prefer <root>/lua/themes then <root>/themes
         let themes_dir = {
             let module_dir = root.join("lua").join("themes");
-            if std::fs::metadata(&module_dir).map(|m| m.is_dir()).unwrap_or(false)
+            if std::fs::metadata(&module_dir)
+                .map(|m| m.is_dir())
+                .unwrap_or(false)
             {
                 module_dir
             }
@@ -557,7 +561,7 @@ impl App
     pub(crate) fn cancel_theme_picker(&mut self)
     {
         if let Overlay::ThemePicker(state) =
-        std::mem::replace(&mut self.overlay, Overlay::None)
+            std::mem::replace(&mut self.overlay, Overlay::None)
         {
             let st = *state;
             self.config.ui.theme = st.original_theme;
@@ -578,7 +582,7 @@ impl App
     )
     {
         let lines: Vec<String> =
-        text.replace('\r', "").lines().map(|s| s.to_string()).collect();
+            text.replace('\r', "").lines().map(|s| s.to_string()).collect();
         self.overlay = Overlay::Output { title: title.to_string(), lines };
         self.force_full_redraw = true;
     }
