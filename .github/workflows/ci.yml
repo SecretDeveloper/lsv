@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -39,7 +39,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: cargo clippy
-        run: cargo +nightly clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: cargo test
-        run: cargo +nightly test --all-features --workspace
+        run: cargo test --all-features --workspace
