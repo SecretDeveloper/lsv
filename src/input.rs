@@ -3,76 +3,72 @@
 use crate::app::App;
 use std::io;
 
-use crossterm::event::{
-    KeyCode,
-    KeyEvent,
-    KeyEventKind,
-    KeyModifiers,
-};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 /// Accept a terminal key event and mutate the [`App`] accordingly.
 ///
 /// Returns `Ok(true)` when the caller should exit. Multi-key sequences are
 /// resolved via the keymap; unrecognised keys fall back to built-in
 /// navigation behaviour.
-pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
-{
+pub fn handle_key(
+    app: &mut App,
+    key: KeyEvent,
+) -> io::Result<bool> {
     // Ignore key release/repeat events to avoid double-processing (esp. on
     // Windows)
-    if key.kind != KeyEventKind::Press
-    {
+    if key.kind != KeyEventKind::Press {
         return Ok(false);
     }
 
-    if app.is_theme_picker_active()
-    {
-        match key.code
-        {
-            KeyCode::Esc => { app.cancel_theme_picker(); app.clear_all_selected(); }
-            KeyCode::Enter => { app.confirm_theme_picker(); }
-            KeyCode::Up | KeyCode::Char('k') => { app.theme_picker_move(-1); }
-            KeyCode::Down | KeyCode::Char('j') => { app.theme_picker_move(1); }
-            KeyCode::PageUp => { app.theme_picker_move(-5); }
-            KeyCode::PageDown => { app.theme_picker_move(5); }
+    if app.is_theme_picker_active() {
+        match key.code {
+            KeyCode::Esc => {
+                app.cancel_theme_picker();
+                app.clear_all_selected();
+            }
+            KeyCode::Enter => {
+                app.confirm_theme_picker();
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                app.theme_picker_move(-1);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                app.theme_picker_move(1);
+            }
+            KeyCode::PageUp => {
+                app.theme_picker_move(-5);
+            }
+            KeyCode::PageDown => {
+                app.theme_picker_move(5);
+            }
             _ => {}
         }
         return Ok(false);
     }
 
     // Prompt overlay input handling
-    if let crate::app::Overlay::Prompt(ref mut st_box) = app.overlay
-    {
+    if let crate::app::Overlay::Prompt(ref mut st_box) = app.overlay {
         use crossterm::event::KeyEventKind;
-        if key.kind != KeyEventKind::Press
-        {
+        if key.kind != KeyEventKind::Press {
             return Ok(false);
         }
         let st = st_box.as_mut();
-        match key.code
-        {
-            KeyCode::Esc =>
-            {
+        match key.code {
+            KeyCode::Esc => {
                 app.overlay = crate::app::Overlay::None;
                 app.force_full_redraw = true;
                 app.clear_all_selected();
             }
-            KeyCode::Enter =>
-            {
+            KeyCode::Enter => {
                 // Submit
-                match st.kind
-                {
-                    crate::app::PromptKind::AddEntry =>
-                    {
+                match st.kind {
+                    crate::app::PromptKind::AddEntry => {
                         let name = st.input.trim();
-                        if !name.is_empty()
-                        {
+                        if !name.is_empty() {
                             let path = app.cwd.join(name);
-                            if name.ends_with('/') || name.ends_with('\u{2f}')
-                            {
+                            if name.ends_with('/') || name.ends_with('\u{2f}') {
                                 let _ = std::fs::create_dir_all(&path);
-                            }
-                            else
-                            {
+                            } else {
                                 let _ = std::fs::OpenOptions::new()
                                     .create_new(true)
                                     .write(true)
@@ -81,27 +77,21 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                             app.refresh_lists();
                         }
                     }
-                    crate::app::PromptKind::MarkAdd =>
-                    {
+                    crate::app::PromptKind::MarkAdd => {
                         let name = st.input.trim();
-                        if let Some(ch) = name.chars().next()
-                        {
+                        if let Some(ch) = name.chars().next() {
                             app.add_mark(ch);
                         }
                     }
-                    crate::app::PromptKind::RenameEntry { ref from } =>
-                    {
+                    crate::app::PromptKind::RenameEntry { ref from } => {
                         let new_name = st.input.trim();
-                        if !new_name.is_empty()
-                        {
+                        if !new_name.is_empty() {
                             let dest = app.cwd.join(new_name);
-                            if std::fs::rename(from, &dest).is_ok()
-                            {
+                            if std::fs::rename(from, &dest).is_ok() {
                                 // Keep item selected after rename (update
                                 // selection to new
                                 // path)
-                                if app.selected.remove(from)
-                                {
+                                if app.selected.remove(from) {
                                     app.selected.insert(dest.clone());
                                 }
                             }
@@ -112,8 +102,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                         ref items,
                         ref pre,
                         ref suf,
-                    } =>
-                    {
+                    } => {
                         let tpl = st.input.trim().to_string();
                         // Require exactly one {}
                         if let Some(pos) = tpl.find("{}")
@@ -123,8 +112,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                                 tpl[..pos].to_string(),
                                 tpl[pos + 2..].to_string(),
                             );
-                            for p in items.iter()
-                            {
+                            for p in items.iter() {
                                 if let Some(name_os) = p.file_name()
                                     && let Some(name) = name_os.to_str()
                                 {
@@ -148,9 +136,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                                 }
                             }
                             app.refresh_lists();
-                        }
-                        else
-                        {
+                        } else {
                             app.add_message(
                                 "Rename: template must contain exactly one {} \
                                  placeholder",
@@ -161,43 +147,34 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                 app.overlay = crate::app::Overlay::None;
                 app.force_full_redraw = true;
             }
-            KeyCode::Backspace =>
-            {
-                if st.cursor > 0 && st.cursor <= st.input.len()
-                {
+            KeyCode::Backspace => {
+                if st.cursor > 0 && st.cursor <= st.input.len() {
                     st.input.remove(st.cursor - 1);
                     st.cursor -= 1;
                     app.force_full_redraw = true;
                 }
             }
-            KeyCode::Left =>
-            {
-                if st.cursor > 0
-                {
+            KeyCode::Left => {
+                if st.cursor > 0 {
                     st.cursor -= 1;
                     app.force_full_redraw = true;
                 }
             }
-            KeyCode::Right =>
-            {
-                if st.cursor < st.input.len()
-                {
+            KeyCode::Right => {
+                if st.cursor < st.input.len() {
                     st.cursor += 1;
                     app.force_full_redraw = true;
                 }
             }
-            KeyCode::Home =>
-            {
+            KeyCode::Home => {
                 st.cursor = 0;
                 app.force_full_redraw = true;
             }
-            KeyCode::End =>
-            {
+            KeyCode::End => {
                 st.cursor = st.input.len();
                 app.force_full_redraw = true;
             }
-            KeyCode::Char(ch) =>
-            {
+            KeyCode::Char(ch) => {
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && !key.modifiers.contains(KeyModifiers::ALT)
                     && !key.modifiers.contains(KeyModifiers::SUPER)
@@ -207,51 +184,38 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                     app.force_full_redraw = true;
                 }
             }
-            _ =>
-            {}
+            _ => {}
         }
         return Ok(false);
     }
 
     // Command pane (search input)
-    if let crate::app::Overlay::CommandPane(ref mut st_box) = app.overlay
-    {
+    if let crate::app::Overlay::CommandPane(ref mut st_box) = app.overlay {
         let st = st_box.as_mut();
         let mut live_update: Option<String> = None;
-        match key.code
-        {
-            KeyCode::Esc =>
-            {
+        match key.code {
+            KeyCode::Esc => {
                 app.overlay = crate::app::Overlay::None;
                 app.clear_all_selected();
             }
-            KeyCode::Tab =>
-            {
-                if st.prompt == ":"
-                {
+            KeyCode::Tab => {
+                if st.prompt == ":" {
                     // Attempt completion against known commands.
                     let prefix = st.input.trim();
                     let mut matches: Vec<String> = Vec::new();
-                    if !prefix.is_empty()
-                    {
-                        for c in crate::commands::all().iter()
-                        {
-                            if c.starts_with(prefix)
-                            {
+                    if !prefix.is_empty() {
+                        for c in crate::commands::all().iter() {
+                            if c.starts_with(prefix) {
                                 matches.push((*c).to_string());
                             }
                         }
                     }
-                    if matches.len() == 1
-                    {
+                    if matches.len() == 1 {
                         st.input = matches[0].clone();
                         st.cursor = st.input.len();
-                    }
-                    else if matches.len() > 1
-                    {
+                    } else if matches.len() > 1 {
                         let (pre, _suf) = crate::app::common_affixes(&matches);
-                        if pre.len() > prefix.len()
-                        {
+                        if pre.len() > prefix.len() {
                             st.input = pre;
                             st.cursor = st.input.len();
                         }
@@ -261,202 +225,157 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                     app.force_full_redraw = true;
                 }
             }
-            KeyCode::Enter =>
-            {
-                if st.prompt == "/"
-                {
+            KeyCode::Enter => {
+                if st.prompt == "/" {
                     let pat = st.input.trim().to_string();
-                    if !pat.is_empty()
-                    {
+                    if !pat.is_empty() {
                         app.search_query = Some(pat);
                     }
                     app.overlay = crate::app::Overlay::None;
-                }
-                else if st.prompt == ":"
-                {
+                } else if st.prompt == ":" {
                     let line = st.input.clone();
                     // Close the command pane before executing to allow
                     // execute_command_line to set a new overlay (e.g., Output)
                     // without being overwritten.
                     app.overlay = crate::app::Overlay::None;
                     app.execute_command_line(&line);
-                }
-                else
-                {
+                } else {
                     app.overlay = crate::app::Overlay::None;
                 }
             }
-            KeyCode::Backspace =>
-            {
-                if st.cursor > 0 && st.cursor <= st.input.len()
-                {
+            KeyCode::Backspace => {
+                if st.cursor > 0 && st.cursor <= st.input.len() {
                     st.input.remove(st.cursor - 1);
                     st.cursor -= 1;
-                    if st.prompt == "/"
-                    {
+                    if st.prompt == "/" {
                         live_update = Some(st.input.clone());
                     }
                     // incremental update handled via search_live
                 }
             }
-            KeyCode::Left =>
-            {
-                if st.cursor > 0
-                {
+            KeyCode::Left => {
+                if st.cursor > 0 {
                     st.cursor -= 1;
                     // incremental update handled via search_live
                 }
             }
-            KeyCode::Right =>
-            {
-                if st.cursor < st.input.len()
-                {
+            KeyCode::Right => {
+                if st.cursor < st.input.len() {
                     st.cursor += 1;
                     app.force_full_redraw = true;
                 }
             }
             // (duplicate Tab arm removed; handled earlier)
-            KeyCode::Home =>
-            {
+            KeyCode::Home => {
                 st.cursor = 0;
                 app.force_full_redraw = true;
             }
-            KeyCode::End =>
-            {
+            KeyCode::End => {
                 st.cursor = st.input.len();
                 app.force_full_redraw = true;
             }
-            KeyCode::Char(ch) =>
-            {
+            KeyCode::Char(ch) => {
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && !key.modifiers.contains(KeyModifiers::ALT)
                     && !key.modifiers.contains(KeyModifiers::SUPER)
                 {
                     st.input.insert(st.cursor, ch);
                     st.cursor += ch.len_utf8();
-                    if st.prompt == "/"
-                    {
+                    if st.prompt == "/" {
                         live_update = Some(st.input.clone());
-                    }
-                    else
-                    {
+                    } else {
                         app.force_full_redraw = true;
                     }
                 }
             }
-            _ =>
-            {}
+            _ => {}
         }
-        if let Some(s) = live_update
-        {
+        if let Some(s) = live_update {
             app.update_search_live(&s);
         }
         return Ok(false);
     }
 
     // Open command pane with ':'
-    if let KeyCode::Char(':') = key.code
-    {
+    if let KeyCode::Char(':') = key.code {
         app.open_command();
         return Ok(false);
     }
 
     // Pending mark/goto capture
-    if app.pending_mark
-    {
-        match key.code
-        {
-            KeyCode::Char(ch) =>
-            {
+    if app.pending_mark {
+        match key.code {
+            KeyCode::Char(ch) => {
                 app.pending_mark = false;
                 app.add_mark(ch);
             }
-            KeyCode::Esc =>
-            {
+            KeyCode::Esc => {
                 app.pending_mark = false;
                 app.clear_all_selected();
             }
-            _ =>
-            {}
+            _ => {}
         }
         return Ok(false);
     }
-    if app.pending_goto
-    {
-        match key.code
-        {
-            KeyCode::Char(ch) =>
-            {
+    if app.pending_goto {
+        match key.code {
+            KeyCode::Char(ch) => {
                 app.pending_goto = false;
                 app.goto_mark(ch);
             }
-            KeyCode::Esc =>
-            {
+            KeyCode::Esc => {
                 app.pending_goto = false;
                 app.clear_all_selected();
             }
-            _ =>
-            {}
+            _ => {}
         }
         return Ok(false);
     }
 
     // Confirm overlay input handling (y/n)
-    if let crate::app::Overlay::Confirm(ref mut st_box) = app.overlay
-    {
+    if let crate::app::Overlay::Confirm(ref mut st_box) = app.overlay {
         use crossterm::event::KeyEventKind;
-        if key.kind != KeyEventKind::Press
-        {
+        if key.kind != KeyEventKind::Press {
             return Ok(false);
         }
         let st = st_box.as_ref();
-        enum Act
-        {
+        enum Act {
             None,
             DeleteAll,
         }
         let mut act = Act::None;
-        match key.code
-        {
-            KeyCode::Esc =>
-            {
+        match key.code {
+            KeyCode::Esc => {
                 crate::trace::log("[confirm] ESC -> cancel");
                 act = Act::None;
             }
-            KeyCode::Enter =>
-            {
+            KeyCode::Enter => {
                 // ENTER only confirms if default_yes
-                if st.default_yes
-                {
+                if st.default_yes {
                     act = Act::DeleteAll;
                 }
             }
-            KeyCode::Char('y') | KeyCode::Char('Y') =>
-            {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
                 act = Act::DeleteAll;
             }
-            KeyCode::Char('n') | KeyCode::Char('N') =>
-            {
+            KeyCode::Char('n') | KeyCode::Char('N') => {
                 crate::trace::log("[confirm] key='n' -> cancel");
                 act = Act::None;
             }
-            _ =>
-            {}
+            _ => {}
         }
         let clear_sel = matches!(key.code, KeyCode::Esc);
         // Drop borrow before mutating app
         let kind = st.kind.clone();
         app.overlay = crate::app::Overlay::None;
         app.force_full_redraw = true;
-        if clear_sel
-        {
+        if clear_sel {
             app.clear_all_selected();
         }
         if let (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) =
             (act, &kind)
         {
-            for p in list.iter()
-            {
+            for p in list.iter() {
                 app.perform_delete_path(p);
             }
         }
@@ -465,10 +384,8 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
 
     // First, try dynamic key mappings with simple sequence support
     // Quick toggle of which-key help
-    if let KeyCode::Char('?') = key.code
-    {
-        app.overlay = match app.overlay
-        {
+    if let KeyCode::Char('?') = key.code {
+        app.overlay = match app.overlay {
             crate::app::Overlay::WhichKey { .. } => crate::app::Overlay::None,
             _ => crate::app::Overlay::WhichKey {
                 prefix: app.keys.pending.clone(),
@@ -477,8 +394,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
         return Ok(false);
     }
 
-    if let KeyCode::Char(ch) = key.code
-    {
+    if let KeyCode::Char(ch) = key.code {
         // Allow modifier combinations; build token string for sequence matching
         {
             let now = std::time::Instant::now();
@@ -489,8 +405,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                 let timeout = std::time::Duration::from_millis(
                     app.config.keys.sequence_timeout_ms,
                 );
-                if now.duration_since(last) > timeout
-                {
+                if now.duration_since(last) > timeout {
                     app.keys.pending.clear();
                 }
             }
@@ -501,53 +416,42 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
             app.keys.pending.push_str(&tok);
             let seq = app.keys.pending.clone();
 
-            if let Some(action) = app.keys.lookup.get(seq.as_str()).cloned()
-            {
+            if let Some(action) = app.keys.lookup.get(seq.as_str()).cloned() {
                 // exact match
                 app.keys.pending.clear();
-                if matches!(app.overlay, crate::app::Overlay::WhichKey { .. })
-                {
+                if matches!(app.overlay, crate::app::Overlay::WhichKey { .. }) {
                     app.overlay = crate::app::Overlay::None;
                 }
                 if crate::actions::dispatch_action(app, &action)
                     .unwrap_or(false)
                 {
-                    if app.should_quit
-                    {
+                    if app.should_quit {
                         return Ok(true);
                     }
                     return Ok(false);
                 }
-            }
-            else if app.keys.prefixes.contains(&seq)
-            {
+            } else if app.keys.prefixes.contains(&seq) {
                 // keep gathering keys
                 app.overlay = crate::app::Overlay::WhichKey { prefix: seq };
                 return Ok(false);
-            }
-            else
-            {
+            } else {
                 // no sequence match; clear pending and exit this path
                 // (case-sensitive)
                 app.keys.pending.clear();
-                if matches!(app.overlay, crate::app::Overlay::WhichKey { .. })
-                {
+                if matches!(app.overlay, crate::app::Overlay::WhichKey { .. }) {
                     app.overlay = crate::app::Overlay::None;
                 }
             }
         }
     }
-    match (key.code, key.modifiers)
-    {
-        (KeyCode::Esc, _mods) =>
-        {
+    match (key.code, key.modifiers) {
+        (KeyCode::Esc, _mods) => {
             // If a mapping exists for <Esc>, dispatch it first
             let esc_seq = String::from("<Esc>");
             if let Some(action) = app.keys.lookup.get(esc_seq.as_str()).cloned()
             {
                 let _ = crate::actions::dispatch_action(app, &action);
-                if app.should_quit
-                {
+                if app.should_quit {
                     return Ok(true);
                 }
             }
@@ -557,8 +461,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
             app.clear_all_selected();
             return Ok(false);
         }
-        (KeyCode::Up, _) =>
-        {
+        (KeyCode::Up, _) => {
             if let Some(sel) = app.list_state.selected()
                 && sel > 0
             {
@@ -566,44 +469,33 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                 app.refresh_preview();
             }
         }
-        (KeyCode::Down, _) =>
-        {
-            if let Some(sel) = app.list_state.selected()
-            {
-                if sel + 1 < app.current_entries.len()
-                {
+        (KeyCode::Down, _) => {
+            if let Some(sel) = app.list_state.selected() {
+                if sel + 1 < app.current_entries.len() {
                     app.list_state.select(Some(sel + 1));
                     app.refresh_preview();
                 }
-            }
-            else if !app.current_entries.is_empty()
-            {
+            } else if !app.current_entries.is_empty() {
                 app.list_state.select(Some(0));
                 app.refresh_preview();
             }
         }
-        (KeyCode::Enter, _) | (KeyCode::Right, _) =>
-        {
+        (KeyCode::Enter, _) | (KeyCode::Right, _) => {
             if let Some(entry) = app.selected_entry()
                 && entry.is_dir
             {
                 app.cwd = entry.path.clone();
                 app.refresh_lists();
-                if app.current_entries.is_empty()
-                {
+                if app.current_entries.is_empty() {
                     app.list_state.select(None);
-                }
-                else
-                {
+                } else {
                     app.list_state.select(Some(0));
                 }
                 app.refresh_preview();
             }
         }
-        (KeyCode::Backspace, _) | (KeyCode::Left, _) =>
-        {
-            if let Some(parent) = app.cwd.parent()
-            {
+        (KeyCode::Backspace, _) | (KeyCode::Left, _) => {
+            if let Some(parent) = app.cwd.parent() {
                 // Remember the directory name we are leaving so we can reselect
                 // it
                 let just_left = app
@@ -621,8 +513,7 @@ pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
                 app.refresh_preview();
             }
         }
-        _ =>
-        {}
+        _ => {}
     }
     Ok(false)
 }
