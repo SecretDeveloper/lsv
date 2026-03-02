@@ -89,11 +89,13 @@ Fix formatting with `cargo fmt --all`. Address clippy warnings and test failures
 
 ## Navigation (defaults)
 
-- Up/Down or k/j: move selection in the Current pane
-- Right or Enter: enter selected directory
-- Left or Backspace: go to parent directory (reselect the dir you just left)
-- q or Esc: quit
- - ?: toggle which‑key overlay (shows grouped keybindings)
+- `h/j/k/l`: parent/down/up/enter (vim-style)
+- Arrow keys / Enter / Backspace: also work as navigation fallbacks
+- `m`: set a mark (prompt)
+- `'`: jump to a mark (then type the letter)
+- `q`: quit
+- `<Esc>`: close overlays and clear selection
+- `?`: toggle which‑key overlay (shows grouped keybindings)
 
 ## Configuration Overview
 

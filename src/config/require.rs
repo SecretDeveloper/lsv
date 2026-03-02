@@ -25,7 +25,7 @@ pub(crate) fn install_require(
             .map_err(|e| LuaError::external(format!("{e}")))?;
         if !canon.starts_with(&canon_root)
         {
-            return Err(LuaError::external("module outside config root"));
+            return Err(LuaError::external(format!("module {} outside config root {}", canon.to_string_lossy(), canon_root.to_string_lossy())));
         }
         let code = std::fs::read_to_string(&canon)
             .map_err(|e| LuaError::external(format!("{e}")))?;

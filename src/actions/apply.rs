@@ -197,8 +197,7 @@ pub fn apply_effects(
     {
         crate::actions::effects::MarksCommand::AddWait =>
         {
-            app.pending_mark = true;
-            app.add_message("Mark: type a letter to save this directory");
+            crate::core::overlays::open_mark_add_prompt(app);
         }
         crate::actions::effects::MarksCommand::GotoWait =>
         {

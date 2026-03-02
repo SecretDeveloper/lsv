@@ -1,37 +1,52 @@
 # Default Keybindings
 
-The table below mirrors the bindings installed by `src/lua/defaults.lua`. User configs can override or extend these via `lsv.map_action`.
+The table below mirrors the default bindings installed by `src/config/defaults.rs`.
+User configs can override or extend these via `lsv.map_action`.
 
 | Keys | Description | Action |
 |------|-------------|--------|
-| `q` | Quit lsv | internal quit |
-| `gg` | Select first item | select_item(0) |
-| `G` | Select last item | select_last_item() |
-| `sn` | Sort by name | set `config.ui.sort` = `"name"` |
-| `ss` | Sort by size | set `config.ui.sort` = `"size"` |
-| `sm` | Sort by modified time | set `config.ui.sort` = `"mtime"` |
-| `sc` | Sort by created time | set `config.ui.sort` = `"created"` |
-| `sr` | Toggle reverse sort | toggle `config.ui.sort_reverse` |
-| `zh` | Toggle show hidden files | toggle `config.ui.show_hidden` |
-| `zn` | Info column: none | set `config.ui.show` = `"none"` |
-| `zs` | Info column: size | set `config.ui.show` = `"size"` |
-| `zc` | Info column: created | set `config.ui.show` = `"created"` |
-| `zf` | Friendly display (relative sizes/dates) | set `config.ui.display_mode` = `"friendly"` |
-| `za` | Absolute display | set `config.ui.display_mode` = `"absolute"` |
-| `zm` | Toggle messages panel | `messages = "toggle"` |
-| `zo` | Toggle output panel | `output = "toggle"` |
-| `ut` | UI theme picker | `lsv.open_theme_picker()` |
-| `?` | Show which-key overlay | built-in handler |
-| `Up / k` | Move up one item | handled in Rust input loop |
-| `Down / j` | Move down one item | handled in Rust input loop |
-| `Left / Backspace / h` | Go to parent directory | handled in Rust input loop |
-| `Right / Enter / l` | Enter directory / open | handled in Rust input loop |
-| `a` | Add file/folder | prompt for name; touch or mkdir in `cwd` |
+| `q` | Quit lsv | `quit` |
+| `gg` | Go to top | `nav:top` |
+| `G` | Go to bottom | `nav:bottom` |
+| `h` | Go to parent directory | `nav:parent` |
+| `j` | Move down | `nav:down` |
+| `k` | Move up | `nav:up` |
+| `l` | Enter directory | `nav:enter` |
+| `m` | Set mark (prompt) | `marks:add_wait` |
+| `'` | Jump to mark (then type letter) | `marks:goto_wait` |
+| `sn` | Sort by name | `sort:name` |
+| `ss` | Sort by size | `sort:size` |
+| `sm` | Sort by modified time | `sort:mtime` |
+| `sc` | Sort by created time | `sort:created` |
+| `sr` | Toggle reverse sort | `sort:reverse:toggle` |
+| `zh` | Toggle show hidden files | `cmd:show_hidden_toggle` |
+| `zn` | Info column: none | `show:none` |
+| `zs` | Info column: size | `show:size` |
+| `zc` | Info column: created | `show:created` |
+| `zf` | Friendly display (relative sizes/dates) | `display:friendly` |
+| `za` | Absolute display | `display:absolute` |
+| `zm` | Toggle messages panel | `cmd:messages` |
+| `zo` | Toggle output panel | `cmd:output` |
+| `Ut` | UI theme picker | `cmd:theme` |
+| `/` | Find in current directory | `cmd:find` |
+| `n` | Find next | `cmd:next` |
+| `b` | Find previous | `cmd:prev` |
+| `a` | Add file/folder | `cmd:add` |
+| `r` | Rename selected | `cmd:rename` |
+| `D` | Delete selected | `cmd:delete` |
+| `Space` | Toggle selection | `cmd:select_toggle` |
+| `u` | Clear selection | `cmd:select_clear` |
+| `c` | Copy selected | `clipboard:copy` |
+| `x` | Move selected | `clipboard:move` |
+| `v` | Paste clipboard | `clipboard:paste` |
+| `<Esc>` | Close overlays (also clears selection) | `overlay:close` |
+| `:` | Command palette | built-in handler |
+| `?` | Which-key overlay | built-in handler |
 
 ## Notes
 
-- Actions defined in defaults use the Lua helper functions (`lsv.select_item`, `lsv.os_run`, etc.). Use the [Configuration Reference](configuration.md) to see the full API.
-- Some keys (arrows, `h/j/k/l`) are processed directly in Rust; remapping them requires changes in `src/input.rs`.
+- Default bindings are action strings; user config can override by mapping keys to Lua via `lsv.map_action`.
+- Arrow keys / Enter / Backspace are still handled as built-in fallbacks in `src/input.rs`.
 - The shipped defaults avoid destructive operations. To add create/delete features or custom scripts, map new keys in your own `init.lua`.
 - On Windows, ensure the terminal supports the `?` which-key overlay (Windows Terminal recommended).
 

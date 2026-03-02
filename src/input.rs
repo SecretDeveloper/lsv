@@ -15,10 +15,7 @@ use crossterm::event::{
 /// Returns `Ok(true)` when the caller should exit. Multi-key sequences are
 /// resolved via the keymap; unrecognised keys fall back to built-in
 /// navigation behaviour.
-pub fn handle_key(
-    app: &mut App,
-    key: KeyEvent,
-) -> io::Result<bool>
+pub fn handle_key( app: &mut App, key: KeyEvent,) -> io::Result<bool>
 {
     // Ignore key release/repeat events to avoid double-processing (esp. on
     // Windows)
@@ -31,32 +28,13 @@ pub fn handle_key(
     {
         match key.code
         {
-            KeyCode::Esc =>
-            {
-                app.cancel_theme_picker();
-            }
-            KeyCode::Enter =>
-            {
-                app.confirm_theme_picker();
-            }
-            KeyCode::Up | KeyCode::Char('k') =>
-            {
-                app.theme_picker_move(-1);
-            }
-            KeyCode::Down | KeyCode::Char('j') =>
-            {
-                app.theme_picker_move(1);
-            }
-            KeyCode::PageUp =>
-            {
-                app.theme_picker_move(-5);
-            }
-            KeyCode::PageDown =>
-            {
-                app.theme_picker_move(5);
-            }
-            _ =>
-            {}
+            KeyCode::Esc => { app.cancel_theme_picker(); app.clear_all_selected(); }
+            KeyCode::Enter => { app.confirm_theme_picker(); }
+            KeyCode::Up | KeyCode::Char('k') => { app.theme_picker_move(-1); }
+            KeyCode::Down | KeyCode::Char('j') => { app.theme_picker_move(1); }
+            KeyCode::PageUp => { app.theme_picker_move(-5); }
+            KeyCode::PageDown => { app.theme_picker_move(5); }
+            _ => {}
         }
         return Ok(false);
     }
@@ -76,6 +54,7 @@ pub fn handle_key(
             {
                 app.overlay = crate::app::Overlay::None;
                 app.force_full_redraw = true;
+                app.clear_all_selected();
             }
             KeyCode::Enter =>
             {
@@ -100,6 +79,14 @@ pub fn handle_key(
                                     .open(&path);
                             }
                             app.refresh_lists();
+                        }
+                    }
+                    crate::app::PromptKind::MarkAdd =>
+                    {
+                        let name = st.input.trim();
+                        if let Some(ch) = name.chars().next()
+                        {
+                            app.add_mark(ch);
                         }
                     }
                     crate::app::PromptKind::RenameEntry { ref from } =>
@@ -236,6 +223,7 @@ pub fn handle_key(
             KeyCode::Esc =>
             {
                 app.overlay = crate::app::Overlay::None;
+                app.clear_all_selected();
             }
             KeyCode::Tab =>
             {
@@ -386,6 +374,7 @@ pub fn handle_key(
             KeyCode::Esc =>
             {
                 app.pending_mark = false;
+                app.clear_all_selected();
             }
             _ =>
             {}
@@ -404,6 +393,7 @@ pub fn handle_key(
             KeyCode::Esc =>
             {
                 app.pending_goto = false;
+                app.clear_all_selected();
             }
             _ =>
             {}
@@ -453,10 +443,15 @@ pub fn handle_key(
             _ =>
             {}
         }
+        let clear_sel = matches!(key.code, KeyCode::Esc);
         // Drop borrow before mutating app
         let kind = st.kind.clone();
         app.overlay = crate::app::Overlay::None;
         app.force_full_redraw = true;
+        if clear_sel
+        {
+            app.clear_all_selected();
+        }
         if let (Act::DeleteAll, crate::app::ConfirmKind::DeleteSelected(list)) =
             (act, &kind)
         {
@@ -544,17 +539,6 @@ pub fn handle_key(
     }
     match (key.code, key.modifiers)
     {
-        (KeyCode::Char('m'), KeyModifiers::NONE) =>
-        {
-            app.pending_mark = true;
-            app.add_message("Mark: type a letter to save this directory");
-        }
-        (KeyCode::Char('`'), KeyModifiers::NONE) =>
-        {
-            app.pending_goto = true;
-            app.add_message("Goto: type a letter to jump to its mark");
-        }
-        (KeyCode::Char('q'), _) => return Ok(true),
         (KeyCode::Esc, _mods) =>
         {
             // If a mapping exists for <Esc>, dispatch it first
@@ -570,9 +554,10 @@ pub fn handle_key(
             // cancel pending sequences and which-key
             app.keys.pending.clear();
             app.overlay = crate::app::Overlay::None;
+            app.clear_all_selected();
             return Ok(false);
         }
-        (KeyCode::Up, _) | (KeyCode::Char('k'), _) =>
+        (KeyCode::Up, _) =>
         {
             if let Some(sel) = app.list_state.selected()
                 && sel > 0
@@ -615,9 +600,7 @@ pub fn handle_key(
                 app.refresh_preview();
             }
         }
-        (KeyCode::Backspace, _)
-        | (KeyCode::Left, _)
-        | (KeyCode::Char('h'), KeyModifiers::NONE) =>
+        (KeyCode::Backspace, _) | (KeyCode::Left, _) =>
         {
             if let Some(parent) = app.cwd.parent()
             {

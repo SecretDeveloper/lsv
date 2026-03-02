@@ -17,10 +17,10 @@ pub mod core;
 pub mod enums;
 pub mod input;
 pub mod keymap;
-pub mod runtime_util;
 pub mod trace;
 pub mod ui;
 pub mod util;
+pub mod runtime;
 pub use app::App;
 
 /// Dispatch a command string (single action or `;`-separated sequence)

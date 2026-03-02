@@ -21,6 +21,23 @@ use ratatui::{
 
 use crate::app::App;
 
+
+/// Process a single crossterm event and return `Ok(true)` if the app should
+/// exit.
+#[allow(dead_code)]
+pub fn process_event(
+    app: &mut App,
+    ev: Event,
+) -> io::Result<bool>
+{
+    match ev
+    {
+        Event::Key(key) => crate::input::handle_key(app, key),
+        Event::Resize(_, _) => Ok(false),
+        _ => Ok(false),
+    }
+}
+
 pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
 {
     enable_raw_mode()?;
@@ -90,46 +107,29 @@ pub fn run_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>>
                         match crate::input::handle_key(app, key)
                         {
                             Ok(true) => break, // graceful exit
-                            Ok(false) =>
-                            {}
+                            Ok(false) => {}
                             Err(e) =>
                             {
-                                let bt =
-                                    std::backtrace::Backtrace::force_capture();
-                                crate::trace::log(format!(
-                                    "[runtime] input error: {}",
-                                    e
-                                ));
-                                crate::trace::log(format!(
-                                    "[runtime] backtrace:\n{}",
-                                    bt
-                                ));
+                                let bt = std::backtrace::Backtrace::force_capture();
+                                crate::trace::log(format!( "[runtime] input error: {}", e));
+                                crate::trace::log(format!( "[runtime] backtrace:\n{}", bt));
                                 result = Err(e.into());
                                 break;
                             }
                         }
                     }
-                    Ok(Event::Resize(_, _)) =>
-                    {}
-                    Ok(_) =>
-                    {}
+                    Ok(Event::Resize(_, _)) => {}
+                    Ok(_) => {}
                     Err(e) =>
                     {
                         let bt = std::backtrace::Backtrace::force_capture();
-                        crate::trace::log(format!(
-                            "[runtime] event read error: {}",
-                            e
-                        ));
-                        crate::trace::log(format!(
-                            "[runtime] backtrace:\n{}",
-                            bt
-                        ));
+                        crate::trace::log(format!( "[runtime] event read error: {}", e));
+                        crate::trace::log(format!( "[runtime] backtrace:\n{}", bt));
                         result = Err(e.into());
                         break;
                     }
                 },
-                Ok(false) =>
-                {}
+                Ok(false) => {}
                 Err(e) =>
                 {
                     let bt = std::backtrace::Backtrace::force_capture();

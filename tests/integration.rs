@@ -1279,7 +1279,7 @@ mod runtime_rs_tests
     fn process_event_quit_returns_true()
     {
         let mut app = lsv::app::App::new().expect("app new");
-        let quit = lsv::runtime_util::process_event(
+        let quit = lsv::runtime::process_event(
             &mut app,
             Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)),
         )
@@ -1292,7 +1292,7 @@ mod runtime_rs_tests
     {
         let mut app = lsv::app::App::new().expect("app new");
         let cont =
-            lsv::runtime_util::process_event(&mut app, Event::Resize(80, 24))
+            lsv::runtime::process_event(&mut app, Event::Resize(80, 24))
                 .unwrap();
         assert!(!cont);
     }

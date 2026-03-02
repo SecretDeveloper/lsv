@@ -70,6 +70,17 @@ pub fn open_add_entry_prompt(app: &mut App)
     app.force_full_redraw = true;
 }
 
+pub fn open_mark_add_prompt(app: &mut App)
+{
+    app.overlay = Overlay::Prompt(Box::new(PromptState {
+        title:  "Save mark (single letter):".to_string(),
+        input:  String::new(),
+        cursor: 0,
+        kind:   PromptKind::MarkAdd,
+    }));
+    app.force_full_redraw = true;
+}
+
 pub fn open_rename_entry_prompt(app: &mut App)
 {
     if !app.selected.is_empty()
