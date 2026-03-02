@@ -147,25 +147,24 @@ pub fn handle_key(
                 app.overlay = crate::app::Overlay::None;
                 app.force_full_redraw = true;
             }
-            KeyCode::Backspace => {
-                if st.cursor > 0 && st.cursor <= st.input.len() {
-                    st.input.remove(st.cursor - 1);
-                    st.cursor -= 1;
-                    app.force_full_redraw = true;
-                }
+            KeyCode::Backspace
+                if st.cursor > 0 && st.cursor <= st.input.len() =>
+            {
+                st.input.remove(st.cursor - 1);
+                st.cursor -= 1;
+                app.force_full_redraw = true;
             }
-            KeyCode::Left => {
-                if st.cursor > 0 {
-                    st.cursor -= 1;
-                    app.force_full_redraw = true;
-                }
+            KeyCode::Backspace => {}
+            KeyCode::Left if st.cursor > 0 => {
+                st.cursor -= 1;
+                app.force_full_redraw = true;
             }
-            KeyCode::Right => {
-                if st.cursor < st.input.len() {
-                    st.cursor += 1;
-                    app.force_full_redraw = true;
-                }
+            KeyCode::Left => {}
+            KeyCode::Right if st.cursor < st.input.len() => {
+                st.cursor += 1;
+                app.force_full_redraw = true;
             }
+            KeyCode::Right => {}
             KeyCode::Home => {
                 st.cursor = 0;
                 app.force_full_redraw = true;
@@ -174,15 +173,14 @@ pub fn handle_key(
                 st.cursor = st.input.len();
                 app.force_full_redraw = true;
             }
-            KeyCode::Char(ch) => {
+            KeyCode::Char(ch)
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && !key.modifiers.contains(KeyModifiers::ALT)
-                    && !key.modifiers.contains(KeyModifiers::SUPER)
-                {
-                    st.input.insert(st.cursor, ch);
-                    st.cursor += ch.len_utf8();
-                    app.force_full_redraw = true;
-                }
+                    && !key.modifiers.contains(KeyModifiers::SUPER) =>
+            {
+                st.input.insert(st.cursor, ch);
+                st.cursor += ch.len_utf8();
+                app.force_full_redraw = true;
             }
             _ => {}
         }
@@ -198,33 +196,32 @@ pub fn handle_key(
                 app.overlay = crate::app::Overlay::None;
                 app.clear_all_selected();
             }
-            KeyCode::Tab => {
-                if st.prompt == ":" {
-                    // Attempt completion against known commands.
-                    let prefix = st.input.trim();
-                    let mut matches: Vec<String> = Vec::new();
-                    if !prefix.is_empty() {
-                        for c in crate::commands::all().iter() {
-                            if c.starts_with(prefix) {
-                                matches.push((*c).to_string());
-                            }
+            KeyCode::Tab if st.prompt == ":" => {
+                // Attempt completion against known commands.
+                let prefix = st.input.trim();
+                let mut matches: Vec<String> = Vec::new();
+                if !prefix.is_empty() {
+                    for c in crate::commands::all().iter() {
+                        if c.starts_with(prefix) {
+                            matches.push((*c).to_string());
                         }
                     }
-                    if matches.len() == 1 {
-                        st.input = matches[0].clone();
-                        st.cursor = st.input.len();
-                    } else if matches.len() > 1 {
-                        let (pre, _suf) = crate::app::common_affixes(&matches);
-                        if pre.len() > prefix.len() {
-                            st.input = pre;
-                            st.cursor = st.input.len();
-                        }
-                    }
-                    // Always show suggestions after Tab
-                    st.show_suggestions = true;
-                    app.force_full_redraw = true;
                 }
+                if matches.len() == 1 {
+                    st.input = matches[0].clone();
+                    st.cursor = st.input.len();
+                } else if matches.len() > 1 {
+                    let (pre, _suf) = crate::app::common_affixes(&matches);
+                    if pre.len() > prefix.len() {
+                        st.input = pre;
+                        st.cursor = st.input.len();
+                    }
+                }
+                // Always show suggestions after Tab
+                st.show_suggestions = true;
+                app.force_full_redraw = true;
             }
+            KeyCode::Tab => {}
             KeyCode::Enter => {
                 if st.prompt == "/" {
                     let pat = st.input.trim().to_string();
@@ -243,28 +240,27 @@ pub fn handle_key(
                     app.overlay = crate::app::Overlay::None;
                 }
             }
-            KeyCode::Backspace => {
-                if st.cursor > 0 && st.cursor <= st.input.len() {
-                    st.input.remove(st.cursor - 1);
-                    st.cursor -= 1;
-                    if st.prompt == "/" {
-                        live_update = Some(st.input.clone());
-                    }
-                    // incremental update handled via search_live
+            KeyCode::Backspace
+                if st.cursor > 0 && st.cursor <= st.input.len() =>
+            {
+                st.input.remove(st.cursor - 1);
+                st.cursor -= 1;
+                if st.prompt == "/" {
+                    live_update = Some(st.input.clone());
                 }
+                // incremental update handled via search_live
             }
-            KeyCode::Left => {
-                if st.cursor > 0 {
-                    st.cursor -= 1;
-                    // incremental update handled via search_live
-                }
+            KeyCode::Backspace => {}
+            KeyCode::Left if st.cursor > 0 => {
+                st.cursor -= 1;
+                // incremental update handled via search_live
             }
-            KeyCode::Right => {
-                if st.cursor < st.input.len() {
-                    st.cursor += 1;
-                    app.force_full_redraw = true;
-                }
+            KeyCode::Left => {}
+            KeyCode::Right if st.cursor < st.input.len() => {
+                st.cursor += 1;
+                app.force_full_redraw = true;
             }
+            KeyCode::Right => {}
             // (duplicate Tab arm removed; handled earlier)
             KeyCode::Home => {
                 st.cursor = 0;
@@ -274,18 +270,17 @@ pub fn handle_key(
                 st.cursor = st.input.len();
                 app.force_full_redraw = true;
             }
-            KeyCode::Char(ch) => {
+            KeyCode::Char(ch)
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && !key.modifiers.contains(KeyModifiers::ALT)
-                    && !key.modifiers.contains(KeyModifiers::SUPER)
-                {
-                    st.input.insert(st.cursor, ch);
-                    st.cursor += ch.len_utf8();
-                    if st.prompt == "/" {
-                        live_update = Some(st.input.clone());
-                    } else {
-                        app.force_full_redraw = true;
-                    }
+                    && !key.modifiers.contains(KeyModifiers::SUPER) =>
+            {
+                st.input.insert(st.cursor, ch);
+                st.cursor += ch.len_utf8();
+                if st.prompt == "/" {
+                    live_update = Some(st.input.clone());
+                } else {
+                    app.force_full_redraw = true;
                 }
             }
             _ => {}
@@ -349,12 +344,10 @@ pub fn handle_key(
                 crate::trace::log("[confirm] ESC -> cancel");
                 act = Act::None;
             }
-            KeyCode::Enter => {
-                // ENTER only confirms if default_yes
-                if st.default_yes {
-                    act = Act::DeleteAll;
-                }
+            KeyCode::Enter if st.default_yes => {
+                act = Act::DeleteAll;
             }
+            KeyCode::Enter => {}
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 act = Act::DeleteAll;
             }
