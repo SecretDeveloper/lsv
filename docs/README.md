@@ -10,8 +10,8 @@ Welcome to the documentation hub for **lsv**, the three-pane terminal file viewe
 
 - [Getting Started](getting_started.md) — quick installation and first configuration.
 - [Configuration Reference](configuration.md) — every tunable, the Lua API, and examples.
+- [Detailed Configuration](configuration_detailed.md) — exhaustive field/function reference and runtime behavior notes.
 - [Default Keybindings](keybindings.md) — tables of shipped shortcuts.
-- [Lua Integration](lua_integration.md) — deep dive into the Rust/Lua bridge.
 - [Command Palette](command_palette.md) — use the ":" prompt, suggestions, and Tab-completion.
 - [Troubleshooting](troubleshooting.md) — diagnose preview failures, platform quirks, tracing tips.
 

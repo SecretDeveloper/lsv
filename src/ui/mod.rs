@@ -140,8 +140,8 @@ fn draw_header(
         let now = Local::now();
         let date_s = now.format("%Y-%m-%d").to_string();
         let time_s = now.format("%H:%M").to_string();
-        let username = whoami::username();
-        let hostname = whoami::fallible::hostname().unwrap_or_default();
+        let username = whoami::username().unwrap_or_default();
+        let hostname = whoami::hostname().unwrap_or_default();
         let cwd_s = app.cwd.display().to_string();
         let sel_opt = app.selected_entry();
         let current_file = sel_opt

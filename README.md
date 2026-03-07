@@ -31,7 +31,7 @@ The app is keyboard‑driven, configurable via Lua, and supports rich, ANSI‑co
 
 - From crates.io: `cargo install lsv`
 
-See the [documentation overview](docs/README.md) for setup guides, configuration reference, keybindings, and troubleshooting tips.
+See the [documentation overview](docs/README.md) for setup guides, configuration reference, keybindings, and troubleshooting tips. For a full API/config field guide, see [Detailed Configuration](docs/configuration_detailed.md).
 
 ### Bootstrap Configuration
 
@@ -113,9 +113,12 @@ Top‑level Lua API:
 
 - `lsv.config({ ... })`: core settings (icons, keys, ui, etc.).
 - `lsv.set_previewer(function(ctx) ... end)`: return a shell command to render preview.
-- `lsv.map_action(key, description, function(lsv, config) ... end)`: bind keys to Lua functions.
+- `lsv.map_action(key_or_list, description, function(lsv, config) ... end)`: bind one or more key sequences to a Lua function.
+- `lsv.mapkey(sequence, action, description?)`: bind a key sequence to a built-in string action.
 - `lsv.quote(s)`: OS‑aware shell quoting for building safe command arguments.
 - `lsv.get_os_name()`: returns a platform string (e.g., `windows`, `macos`, `linux`).
+- `lsv.getenv(name, default?)`: read an environment variable.
+- `lsv.trace(text)`: write to the trace log (`LSV_TRACE=1`).
 
 Action helper functions available on `lsv` inside actions:
 
@@ -124,6 +127,14 @@ Action helper functions available on `lsv` inside actions:
 - `lsv.quit()`: request the app to exit.
 - `lsv.display_output(text, title?)`: show text in a bottom Output panel.
 - `lsv.os_run(cmd)`: run a shell command and show its captured output in the Output panel. Compose `cmd` using values from `config`/`ctx` and `lsv.quote(...)` for safe arguments.
+- `lsv.os_run_interactive(cmd)`: suspend the TUI, run a command interactively, then restore the TUI.
+- `lsv.get_selected_paths()`: return selected paths as a Lua array snapshot.
+- `lsv.delete_selected()`: open delete confirmation for current selection.
+- `lsv.copy_selection()`, `lsv.move_selection()`, `lsv.paste_clipboard()`, `lsv.clear_clipboard()`: clipboard workflow helpers.
+- `lsv.force_redraw()`: request a full rerender.
+- `lsv.clear_messages()`, `lsv.show_message(text)`, `lsv.show_error(text)`: message panel helpers.
+- `lsv.set_theme_by_name(name)`: switch to a loaded theme by name.
+- `lsv.getenv(name, default?)`, `lsv.trace(text)`: environment and logging helpers are available in actions too.
 
 Context data passed to actions via `config.context`:
 
@@ -133,6 +144,8 @@ Context data passed to actions via `config.context`:
 - `current_file`: absolute path of the selected entry (falls back to `cwd`).
 - `current_file_dir`: parent directory of the selected entry (falls back to `cwd`).
 - `current_file_name`: file name (basename) of the selected entry, when available.
+- `current_file_extension`: extension without leading dot.
+- `current_file_ctime`, `current_file_mtime`: formatted timestamps (when available).
 
 ### Minimal Example: Bind an external tool
 
@@ -199,14 +212,6 @@ lsv.set_previewer(function(ctx)
 	then
 		-- image preview using viu (needs installation)
 		return string.format("viu --width %d --height %d %s", ctx.preview_width, ctx.preview_height, shquote(ctx.current_file))
-
-    -- If you are using WezTerm and Viu, use the following line instead
-    -- viu in WezTerm uses the kitty graphics protocol which are not
-    -- supported by lsv, so no image is displayed.  The following line forces
-    -- viu to use blocks-mode, which will preview an image but at a lower
-    -- resolution.  Alternatives to viu might work better but i have not
-    -- tested them.
-    -- return string.format("VIU_NO_KITTY=1 viu --blocks --static --width %d --height %d %s", ctx.preview_width, ctx.preview_height, shquote(ctx.current_file))
 	end
 	-- For non-binary, colorize with bat (first 120 lines, no wrapping)
 	if not ctx.is_binary then
@@ -258,16 +263,16 @@ end
 
 lsv.set_previewer(function(ctx)
 	if ctx.current_file_extension == "md" or ctx.current_file_extension == "markdown" then
-		return string.format("glow --style=dark --line-numbers=true --width %d %s", ctx.preview_width - 2, shquote(ctx.current_file))
+		return string.format("glow --style=dark --line-numbers=true --width %d %s", ctx.preview_width, shquote(ctx.current_file))
 	elseif
 		ctx.current_file_extension == "jpg" or ctx.current_file_extension == "jpeg" or
 		ctx.current_file_extension == "png" or ctx.current_file_extension == "gif" or
 		ctx.current_file_extension == "bmp" or ctx.current_file_extension == "tiff" then
-		return string.format("VIU_NO_KITTY=1 viu --static --width %d --height %d %s", ctx.preview_width - 2, ctx.preview_height - 4, shquote(ctx.current_file))
+		return string.format("viu --width %d --height %d %s", ctx.preview_width, ctx.preview_height, shquote(ctx.current_file))
 	elseif not ctx.is_binary then
 		return string.format("bat --color=always --style=numbers --paging=never --wrap=never --line-range=:%d %s", ctx.preview_height, shquote(ctx.current_file))
 	else
-		local bytes = math.max(256, (ctx.preview_height - 4) * 16)
+		local bytes = math.max(256, ctx.preview_height * 16)
 		return string.format("hexyl -n %d %s", bytes, shquote(ctx.current_file))
 	end
 end)
@@ -291,7 +296,7 @@ end)
 
 ### Keybindings: Actions
 
-- Bind with `lsv.map_action(key, description, function(lsv, config) ... end)`.
+- Bind with `lsv.map_action(key_or_list, description, function(lsv, config) ... end)`.
 - Prefer mutating `config` (e.g., `config.ui.sort = "size"`) and using helpers like `lsv.select_item(...)`.
 
 Default action bindings
@@ -347,6 +352,9 @@ Configure row sections under `ui.row`:
 ### Preview Notes
 
 - lsv captures the command’s output and renders ANSI colors (SGR). If your tool disables color when piped, add `--color=always` (bat) or set styles (glow). lsv sets `FORCE_COLOR=1` and `CLICOLOR_FORCE=1` for preview commands.
+- The preview pane is text-rendered from captured command output.
+- If your terminal+tool combination does not render images in preview (e.g., some WezTerm + `viu` setups), you can opt into a workaround in your `init.lua`:
+  - `VIU_NO_KITTY=1 viu --blocks --static --width %d --height %d ...`
 - Output is trimmed to fit the preview pane height; older `ui.preview_lines` has been removed.
 
 ## Tracing (debugging)
