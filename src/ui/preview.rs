@@ -34,12 +34,14 @@ pub fn draw_preview_panel(
 )
 {
     f.render_widget(Clear, area);
+    let block = preview_block(app);
+    let preview_area = block.inner(area);
     let mut dynamic_lines: Option<Vec<String>> = None;
     if let Some(sel) = app.selected_entry()
     {
         if !sel.is_dir
         {
-            let key = (sel.path.clone(), area.width, area.height);
+            let key = (sel.path.clone(), preview_area.width, preview_area.height);
             if app.preview.cache_key.as_ref() == Some(&key)
             {
                 dynamic_lines = app.preview.cache_lines.clone();
@@ -47,7 +49,7 @@ pub fn draw_preview_panel(
             else
             {
                 dynamic_lines =
-                    run_previewer(app, &sel.path, area, PREVIEW_LINES_LIMIT);
+                    run_previewer(app, &sel.path, preview_area, PREVIEW_LINES_LIMIT);
                 app.preview.cache_key = Some(key);
                 app.preview.cache_lines = dynamic_lines.clone();
             }
@@ -58,23 +60,6 @@ pub fn draw_preview_panel(
             app.preview.cache_lines = None;
         }
     }
-    let mut block = Block::default().borders(Borders::ALL);
-    if let Some(th) = app.config.ui.theme.as_ref()
-    {
-        if let Some(bg) =
-            th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
-        {
-            block = block.style(Style::default().bg(bg));
-        }
-        if let Some(bfg) = th
-            .border_fg
-            .as_ref()
-            .and_then(|s| crate::ui::colors::parse_color(s))
-        {
-            block = block.border_style(Style::default().fg(bfg));
-        }
-    }
-
     let text: Vec<Line> = if let Some(sel) = app.selected_entry()
     {
         if sel.is_dir
@@ -154,6 +139,27 @@ pub fn draw_preview_panel(
         para = para.style(st);
     }
     f.render_widget(para, area);
+}
+
+fn preview_block(app: &crate::App) -> Block<'static>
+{
+    let mut block = Block::default().borders(Borders::ALL);
+    if let Some(th) = app.config.ui.theme.as_ref()
+    {
+        if let Some(bg) =
+            th.pane_bg.as_ref().and_then(|s| crate::ui::colors::parse_color(s))
+        {
+            block = block.style(Style::default().bg(bg));
+        }
+        if let Some(bfg) = th
+            .border_fg
+            .as_ref()
+            .and_then(|s| crate::ui::colors::parse_color(s))
+        {
+            block = block.border_style(Style::default().fg(bfg));
+        }
+    }
+    block
 }
 
 fn run_previewer(

@@ -57,6 +57,20 @@ pub fn ansi_spans(s: &str) -> Vec<Span<'_>> {
                     }
                     seg_start = i;
                 }
+                // APC/PM/DCS control strings terminate with ST (ESC \).
+                // kitty graphics probes use APC and would otherwise leak text
+                // into preview output.
+                b'_' | b'^' | b'P' => {
+                    i += 2;
+                    while i + 1 < bytes.len() {
+                        if bytes[i] == 0x1B && bytes[i + 1] == b'\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    seg_start = i;
+                }
                 b'(' | b')' | b'*' | b'+' => {
                     i += 3;
                     seg_start = i;

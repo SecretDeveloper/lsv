@@ -77,6 +77,7 @@ bash scripts/install-git-hooks.sh
 This sets `core.hooksPath` to `.githooks` and ensures the hooks are executable.
 
 Pre-commit runs:
+
 - `cargo fmt --all -- --check` (fails commit if formatting is needed)
 - `cargo clippy --all-targets --all-features -- -D warnings` (fails on lints)
 - `cargo test --all-features --workspace` (fails on test failures)
@@ -84,6 +85,7 @@ Pre-commit runs:
 Optional pre-push hook is also provided (clippy) but redundant if pre-commit passes.
 
 Fix formatting with `cargo fmt --all`. Address clippy warnings and test failures locally. To bypass temporarily (not recommended):
+
 - `git commit --no-verify`
 - `git push --no-verify`
 
@@ -197,6 +199,14 @@ lsv.set_previewer(function(ctx)
 	then
 		-- image preview using viu (needs installation)
 		return string.format("viu --width %d --height %d %s", ctx.preview_width, ctx.preview_height, shquote(ctx.current_file))
+
+    -- If you are using WezTerm and Viu, use the following line instead
+    -- viu in WezTerm uses the kitty graphics protocol which are not
+    -- supported by lsv, so no image is displayed.  The following line forces
+    -- viu to use blocks-mode, which will preview an image but at a lower
+    -- resolution.  Alternatives to viu might work better but i have not
+    -- tested them.
+    -- return string.format("VIU_NO_KITTY=1 viu --blocks --static --width %d --height %d %s", ctx.preview_width, ctx.preview_height, shquote(ctx.current_file))
 	end
 	-- For non-binary, colorize with bat (first 120 lines, no wrapping)
 	if not ctx.is_binary then
@@ -308,7 +318,7 @@ end)
 - Composite sequences are supported (e.g., `ss`, `zc`). The overlay opens automatically when you type a registered prefix.
 - Timeout: by default there is no timeout for multi‑key sequences (0).
   - To enable a timeout, set `keys.sequence_timeout_ms` in your Lua config:
-    
+
     ```lua
     lsv.config({
       keys = { sequence_timeout_ms = 600 },  -- 600ms timeout for sequences
