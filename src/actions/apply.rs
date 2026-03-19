@@ -391,8 +391,9 @@ pub fn apply_config_overlay(
         let had_meta = !matches!(app.info_mode, crate::app::InfoMode::None)
             || !matches!(app.sort_key, crate::actions::SortKey::Name);
         app.info_mode = data.show_field;
-        let need_meta_now = !matches!(app.info_mode, crate::app::InfoMode::None)
-            || !matches!(app.sort_key, crate::actions::SortKey::Name);
+        let need_meta_now =
+            !matches!(app.info_mode, crate::app::InfoMode::None)
+                || !matches!(app.sort_key, crate::actions::SortKey::Name);
         if !had_meta && need_meta_now
         {
             relist = true;

@@ -445,8 +445,8 @@ mod tests
     use std::fs;
 
     use super::{
-        execute_internal_action,
         InternalAction,
+        execute_internal_action,
     };
 
     #[test]

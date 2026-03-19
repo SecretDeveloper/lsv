@@ -153,14 +153,21 @@ impl App
                     && let Some(mode) = crate::enums::display_mode_from_str(arg)
                 {
                     let had_meta = !matches!(self.info_mode, InfoMode::None)
-                        || !matches!(self.sort_key, crate::actions::SortKey::Name);
+                        || !matches!(
+                            self.sort_key,
+                            crate::actions::SortKey::Name
+                        );
                     self.display_mode = mode;
                     if matches!(self.info_mode, InfoMode::None)
                     {
                         self.info_mode = InfoMode::Modified;
                     }
-                    let need_meta_now = !matches!(self.info_mode, InfoMode::None)
-                        || !matches!(self.sort_key, crate::actions::SortKey::Name);
+                    let need_meta_now =
+                        !matches!(self.info_mode, InfoMode::None)
+                            || !matches!(
+                                self.sort_key,
+                                crate::actions::SortKey::Name
+                            );
                     if !had_meta && need_meta_now
                     {
                         let current_name =
@@ -168,7 +175,9 @@ impl App
                         self.refresh_lists();
                         if let Some(name) = current_name
                         {
-                            crate::core::selection::reselect_by_name(self, &name);
+                            crate::core::selection::reselect_by_name(
+                                self, &name,
+                            );
                         }
                         self.refresh_preview();
                     }
