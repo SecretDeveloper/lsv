@@ -1,34 +1,32 @@
 // Central list of ":" command palette entries and helpers.
 
 /// Return the full list of command palette entries.
-/// Strings include subcommands/arguments for discoverability (e.g. "sort
-/// name").
 pub fn all() -> &'static [&'static str]
 {
     &[
-        "marks",
-        "delmark",
-        "find",
-        "next",
-        "prev",
-        "messages",
-        "output",
-        "theme",
-        "add",
-        "rename",
-        "delete",
-        "select_toggle",
-        "select_clear",
-        "show_hidden_toggle",
-        "sort name",
-        "sort size",
-        "sort mtime",
-        "sort created",
-        "sort_reverse_toggle",
-        "display friendly",
-        "display absolute",
+        "add_item",
+        "add_mark",
         "cd",
-        "mark",
-        "goto",
+        "change_theme",
+        "clear_selected",
+        "delete_marks",
+        "delete_selected",
+        "goto_mark",
+        "rename_selected",
+        "reverse_sort",
+        "search_next",
+        "search_prev",
+        "search_text",
+        "show_marks",
+        "sort_created_date",
+        "sort_modified_date",
+        "sort_name",
+        "sort_size",
+        "toggle_current_selected",
+        "toggle_hidden_files",
+        "toggle_messages",
+        "toggle_output",
+        "view_friendly_units",
+        "view_precise_units",
     ]
 }

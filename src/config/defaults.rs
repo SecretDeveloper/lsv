@@ -110,66 +110,66 @@ pub fn rust_default_keymaps() -> Vec<KeyMapping> {
         // Show hidden toggle and overlays
         KeyMapping {
             sequence: "zh".into(),
-            action: "cmd:show_hidden_toggle".into(),
+            action: "cmd:toggle_hidden_files".into(),
             description: Some("Toggle Show Hidden".into()),
         },
         KeyMapping {
             sequence: "zm".into(),
-            action: "cmd:messages".into(),
+            action: "cmd:toggle_messages".into(),
             description: Some("Show Messages".into()),
         },
         KeyMapping {
             sequence: "zo".into(),
-            action: "cmd:output".into(),
+            action: "cmd:toggle_output".into(),
             description: Some("Show Output".into()),
         },
         // Find
         KeyMapping {
             sequence: "/".into(),
-            action: "cmd:find".into(),
+            action: "cmd:search_text".into(),
             description: Some("Find in current".into()),
         },
         KeyMapping {
             sequence: "n".into(),
-            action: "cmd:next".into(),
+            action: "cmd:search_next".into(),
             description: Some("Find next".into()),
         },
         KeyMapping {
             sequence: "b".into(),
-            action: "cmd:prev".into(),
+            action: "cmd:search_prev".into(),
             description: Some("Find previous".into()),
         },
         // Theme picker
         KeyMapping {
             sequence: "Ut".into(),
-            action: "cmd:theme".into(),
+            action: "cmd:change_theme".into(),
             description: Some("UI Theme picker".into()),
         },
         // File ops
         KeyMapping {
             sequence: "a".into(),
-            action: "cmd:add".into(),
+            action: "cmd:add_item".into(),
             description: Some("Add file/folder".into()),
         },
         KeyMapping {
             sequence: "r".into(),
-            action: "cmd:rename".into(),
+            action: "cmd:rename_selected".into(),
             description: Some("Rename selected".into()),
         },
         KeyMapping {
             sequence: "D".into(),
-            action: "cmd:delete".into(),
+            action: "cmd:delete_selected".into(),
             description: Some("Delete selected".into()),
         },
         // Selection
         KeyMapping {
             sequence: " ".into(),
-            action: "cmd:select_toggle".into(),
+            action: "cmd:toggle_current_selected".into(),
             description: Some("Toggle selected".into()),
         },
         KeyMapping {
             sequence: "u".into(),
-            action: "cmd:select_clear".into(),
+            action: "cmd:clear_selected".into(),
             description: Some("Clear selected".into()),
         },
         // Clipboard

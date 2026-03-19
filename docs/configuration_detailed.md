@@ -105,7 +105,7 @@ Modals:
 You can declare actions in `lsv.config({ actions = {...} })` as either:
 
 - Lua function actions (`fn = function(lsv, config) ... end`)
-- String actions (`action = "cmd:messages"`, etc.)
+- String actions (`action = "cmd:toggle_messages"`, etc.)
 
 Example:
 
@@ -122,7 +122,7 @@ lsv.config({
     {
       keymap = "zm",
       description = "Toggle messages",
-      action = "cmd:messages",
+      action = "cmd:toggle_messages",
     },
   }
 })

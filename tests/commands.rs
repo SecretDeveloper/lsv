@@ -4,17 +4,17 @@ fn commands_contains_expected_entries()
     let cmds = lsv::commands::all();
     // A handful of representative entries
     for expected in [
-        "marks",
-        "delmark",
-        "find",
-        "theme",
-        "select_toggle",
-        "show_hidden_toggle",
-        "sort name",
-        "display friendly",
+        "show_marks",
+        "delete_marks",
+        "search_text",
+        "change_theme",
+        "toggle_current_selected",
+        "toggle_hidden_files",
+        "sort_name",
+        "view_friendly_units",
         "cd",
-        "mark",
-        "goto",
+        "add_mark",
+        "goto_mark",
     ]
     {
         assert!(cmds.iter().any(|c| c == &expected), "missing: {}", expected);

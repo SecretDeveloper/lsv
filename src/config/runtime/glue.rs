@@ -381,8 +381,6 @@ fn build_lsv_helpers(
     let cwd_str_i = cwd_str.clone();
     let os_run_interactive_fn = lua
         .create_function(move |_, cmd: String| {
-            let title = format!("$ {}", cmd);
-            let _ = cfg_ref_i.set("output_title", title);
             #[cfg(windows)]
             let program = "cmd";
             #[cfg(windows)]
@@ -402,12 +400,29 @@ fn build_lsv_helpers(
             // re-enter tui
             enable_raw_mode().ok();
             let _ = crossterm::execute!(stdout(), EnterAlternateScreen);
-            let text = match status
+            match status
             {
-                Ok(s) => format!("exit status: {:?}", s.code()),
-                Err(e) => format!("<error: {}>", e),
-            };
-            let _ = cfg_ref_i.set("output_text", text);
+                Ok(s) if s.success() =>
+                {
+                    // Successful interactive commands should not spam the
+                    // Output overlay with "exit status: Some(0)".
+                    let _ = cfg_ref_i.set("message_text", format!("$ {}", cmd));
+                }
+                Ok(s) =>
+                {
+                    let _ = cfg_ref_i
+                        .set("output_title", format!("$ {}", cmd));
+                    let _ = cfg_ref_i
+                        .set("output_text", format!("exit status: {:?}", s.code()));
+                }
+                Err(e) =>
+                {
+                    let _ = cfg_ref_i
+                        .set("output_title", format!("$ {}", cmd));
+                    let _ = cfg_ref_i
+                        .set("output_text", format!("<error: {}>", e));
+                }
+            }
             Ok(true)
         })
         .map_err(|e| io::Error::other(e.to_string()))?;

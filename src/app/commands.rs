@@ -45,12 +45,12 @@ impl App
         {
             "" =>
             {}
-            "marks" =>
+            "show_marks" | "marks" =>
             {
                 let text = self.list_marks_text();
                 self.display_output("Marks", &text);
             }
-            "delmark" =>
+            "delete_marks" | "delmark" =>
             {
                 let mut removed = 0usize;
                 for tok in parts
@@ -67,10 +67,10 @@ impl App
                 }
                 self.add_message(&format!("Deleted {} mark(s)", removed));
             }
-            "find" => self.open_search(),
-            "next" => self.search_next(),
-            "prev" => self.search_prev(),
-            "messages" =>
+            "search_text" | "find" => self.open_search(),
+            "search_next" | "next" => self.search_next(),
+            "search_prev" | "prev" => self.search_prev(),
+            "toggle_messages" | "messages" =>
             {
                 self.overlay = match self.overlay
                 {
@@ -79,7 +79,7 @@ impl App
                 };
                 self.force_full_redraw = true;
             }
-            "output" =>
+            "toggle_output" | "output" =>
             {
                 self.overlay = match self.overlay
                 {
@@ -91,19 +91,26 @@ impl App
                 };
                 self.force_full_redraw = true;
             }
-            "theme" => self.open_theme_picker(),
-            "add" => self.open_add_entry_prompt(),
-            "rename" => self.open_rename_entry_prompt(),
-            "delete" => self.request_delete_selected(),
-            "select_toggle" => self.toggle_select_current(),
-            "select_clear" => self.clear_all_selected(),
-            "show_hidden_toggle" =>
+            "change_theme" | "theme" => self.open_theme_picker(),
+            "add_item" | "add" => self.open_add_entry_prompt(),
+            "rename_selected" | "rename" => self.open_rename_entry_prompt(),
+            "delete_selected" | "delete" => self.request_delete_selected(),
+            "toggle_current_selected" | "select_toggle" =>
+            {
+                self.toggle_select_current()
+            }
+            "clear_selected" | "select_clear" => self.clear_all_selected(),
+            "toggle_hidden_files" | "show_hidden_toggle" =>
             {
                 self.config.ui.show_hidden = !self.config.ui.show_hidden;
                 self.refresh_lists();
                 self.refresh_preview();
                 self.force_full_redraw = true;
             }
+            "sort_name" => self.execute_command_line("sort name"),
+            "sort_size" => self.execute_command_line("sort size"),
+            "sort_modified_date" => self.execute_command_line("sort mtime"),
+            "sort_created_date" => self.execute_command_line("sort created"),
             "sort" =>
             {
                 if let Some(arg) = parts.next()
@@ -120,7 +127,7 @@ impl App
                     self.refresh_preview();
                 }
             }
-            "sort_reverse_toggle" =>
+            "reverse_sort" | "sort_reverse_toggle" =>
             {
                 let current_name =
                     self.selected_entry().map(|e| e.name.clone());
@@ -131,6 +138,14 @@ impl App
                     crate::core::selection::reselect_by_name(self, &name);
                 }
                 self.refresh_preview();
+            }
+            "view_friendly_units" =>
+            {
+                self.execute_command_line("display friendly");
+            }
+            "view_precise_units" =>
+            {
+                self.execute_command_line("display absolute");
             }
             "display" =>
             {
@@ -165,7 +180,7 @@ impl App
                     }
                 }
             }
-            "mark" =>
+            "add_mark" | "mark" =>
             {
                 if let Some(arg) = parts.next()
                     && let Some(ch) = arg.chars().next()
@@ -173,7 +188,7 @@ impl App
                     self.add_mark(ch);
                 }
             }
-            "goto" =>
+            "goto_mark" | "goto" =>
             {
                 if let Some(arg) = parts.next()
                     && let Some(ch) = arg.chars().next()
