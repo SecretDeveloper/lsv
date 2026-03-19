@@ -143,6 +143,11 @@ pub(crate) fn execute_internal_action(
     action: InternalAction,
 )
 {
+    let needs_meta = |info: crate::app::InfoMode, sort: SortKey| {
+        !matches!(info, crate::app::InfoMode::None)
+            || !matches!(sort, SortKey::Name)
+    };
+
     match action
     {
         InternalAction::Quit =>
@@ -174,17 +179,41 @@ pub(crate) fn execute_internal_action(
         }
         InternalAction::SetInfo(mode) =>
         {
+            let had_meta = needs_meta(app.info_mode, app.sort_key);
             app.info_mode = mode;
+            let need_meta_now = needs_meta(app.info_mode, app.sort_key);
+            if !had_meta && need_meta_now
+            {
+                let current_name = app.selected_entry().map(|e| e.name.clone());
+                app.refresh_lists();
+                if let Some(name) = current_name
+                {
+                    crate::core::selection::reselect_by_name(app, &name);
+                }
+                app.refresh_preview();
+            }
             app.force_full_redraw = true;
         }
         InternalAction::SetDisplayMode(style) =>
         {
+            let had_meta = needs_meta(app.info_mode, app.sort_key);
             app.display_mode = style;
             // If no info is selected yet, default to Modified so date becomes
             // visible
             if matches!(app.info_mode, crate::app::InfoMode::None)
             {
                 app.info_mode = crate::app::InfoMode::Modified;
+            }
+            let need_meta_now = needs_meta(app.info_mode, app.sort_key);
+            if !had_meta && need_meta_now
+            {
+                let current_name = app.selected_entry().map(|e| e.name.clone());
+                app.refresh_lists();
+                if let Some(name) = current_name
+                {
+                    crate::core::selection::reselect_by_name(app, &name);
+                }
+                app.refresh_preview();
             }
             app.force_full_redraw = true;
         }
@@ -407,5 +436,49 @@ pub(crate) fn internal_effects(
             Some(fx)
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests
+{
+    use std::fs;
+
+    use super::{
+        execute_internal_action,
+        InternalAction,
+    };
+
+    #[test]
+    fn set_info_size_refreshes_metadata_when_initially_missing()
+    {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let dir = temp.path();
+        let file = dir.join("a.txt");
+        fs::write(&file, b"abcdef").expect("write");
+
+        let mut app = crate::app::App::new().expect("app");
+        app.set_cwd(dir);
+
+        let before = app
+            .current_entries
+            .iter()
+            .find(|e| e.name == "a.txt")
+            .expect("entry present")
+            .size;
+        assert_eq!(before, 0);
+
+        execute_internal_action(
+            &mut app,
+            InternalAction::SetInfo(crate::app::InfoMode::Size),
+        );
+
+        let after = app
+            .current_entries
+            .iter()
+            .find(|e| e.name == "a.txt")
+            .expect("entry present")
+            .size;
+        assert_eq!(after, 6);
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "lsv"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2024"
 description = "Three‑pane terminal file viewer (TUI) with preview and Lua configuration"
 license = "MIT"

@@ -411,10 +411,12 @@ fn build_lsv_helpers(
                 Ok(s) =>
                 {
                     let _ = cfg_ref_i.set("output_title", format!("$ {}", cmd));
-                    let _ = cfg_ref_i.set(
-                        "output_text",
-                        format!("exit status: {:?}", s.code()),
-                    );
+                    let status_text = match s.code()
+                    {
+                        Some(code) => format!("exit status: {}", code),
+                        None => "process terminated by signal".to_string(),
+                    };
+                    let _ = cfg_ref_i.set("output_text", status_text);
                 }
                 Err(e) =>
                 {
