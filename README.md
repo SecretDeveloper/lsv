@@ -66,6 +66,16 @@ The files are copied from the repository’s `examples/config` folder when avail
 - Run: `cargo run`
 - Optional trace logging: `LSV_TRACE=1 LSV_TRACE_FILE=/tmp/lsv-trace.log cargo run` (Windows PowerShell: `$env:LSV_TRACE=1; $env:LSV_TRACE_FILE=$env:TEMP+'\\lsv-trace.log'; cargo run`)
 
+### Make Targets
+
+For common tasks, use the repository `Makefile`:
+
+- `make build` (matches CI: `fmt --check`, `clippy -D warnings`, and tests)
+- `make test` (alias of `make build`)
+- `make format` (applies rustfmt to all Rust files)
+- `make release` (publishes to crates.io and creates a GitHub release/tag)
+- `make clean`
+
 ## Git Hooks (format on commit)
 
 To block commits that aren’t rustfmt‑clean, install the provided pre‑commit hook:

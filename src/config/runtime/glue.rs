@@ -410,17 +410,17 @@ fn build_lsv_helpers(
                 }
                 Ok(s) =>
                 {
-                    let _ = cfg_ref_i
-                        .set("output_title", format!("$ {}", cmd));
-                    let _ = cfg_ref_i
-                        .set("output_text", format!("exit status: {:?}", s.code()));
+                    let _ = cfg_ref_i.set("output_title", format!("$ {}", cmd));
+                    let _ = cfg_ref_i.set(
+                        "output_text",
+                        format!("exit status: {:?}", s.code()),
+                    );
                 }
                 Err(e) =>
                 {
-                    let _ = cfg_ref_i
-                        .set("output_title", format!("$ {}", cmd));
-                    let _ = cfg_ref_i
-                        .set("output_text", format!("<error: {}>", e));
+                    let _ = cfg_ref_i.set("output_title", format!("$ {}", cmd));
+                    let _ =
+                        cfg_ref_i.set("output_text", format!("<error: {}>", e));
                 }
             }
             Ok(true)

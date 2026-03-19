@@ -1,6 +1,7 @@
 // Keymap smoke test: ensure default bindings exist for marks + vim-style nav.
 #[test]
-fn default_key_bindings_for_marks_and_vim_nav_exist() {
+fn default_key_bindings_for_marks_and_vim_nav_exist()
+{
     let app = lsv::app::App::new().expect("app new");
 
     assert_eq!(app.get_keymap_action("'"), Some("marks:goto_wait".into()));

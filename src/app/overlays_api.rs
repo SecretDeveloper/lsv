@@ -2,13 +2,22 @@
 
 use std::fs;
 
-use crate::app::{App, Overlay, ThemePickerEntry, ThemePickerState};
+use crate::app::{
+    App,
+    Overlay,
+    ThemePickerEntry,
+    ThemePickerState,
+};
 
-impl App {
-    pub(crate) fn open_theme_picker(&mut self) {
-        let root = match self.theme_root_dir() {
+impl App
+{
+    pub(crate) fn open_theme_picker(&mut self)
+    {
+        let root = match self.theme_root_dir()
+        {
             Some(p) => p,
-            None => {
+            None =>
+            {
                 self.add_message(
                     "Theme picker: unable to determine config directory",
                 );
@@ -22,13 +31,17 @@ impl App {
                 .unwrap_or(false)
             {
                 module_dir
-            } else {
+            }
+            else
+            {
                 root.join("themes")
             }
         };
-        let read_dir = match fs::read_dir(&themes_dir) {
+        let read_dir = match fs::read_dir(&themes_dir)
+        {
             Ok(rd) => rd,
-            Err(_) => {
+            Err(_) =>
+            {
                 self.add_message(&format!(
                     "Theme picker: no themes directory at {}",
                     themes_dir.display()
@@ -38,23 +51,32 @@ impl App {
         };
 
         let mut entries: Vec<ThemePickerEntry> = Vec::new();
-        for entry in read_dir {
-            match entry {
-                Ok(dir_entry) => {
+        for entry in read_dir
+        {
+            match entry
+            {
+                Ok(dir_entry) =>
+                {
                     let path = dir_entry.path();
-                    if !path.is_file() {
+                    if !path.is_file()
+                    {
                         continue;
                     };
                     if let Some(ext) = path.extension().and_then(|s| s.to_str())
                     {
-                        if !ext.eq_ignore_ascii_case("lua") {
+                        if !ext.eq_ignore_ascii_case("lua")
+                        {
                             continue;
                         }
-                    } else {
+                    }
+                    else
+                    {
                         continue;
                     }
-                    match crate::config::load_theme_from_file(&path) {
-                        Ok(theme) => {
+                    match crate::config::load_theme_from_file(&path)
+                    {
+                        Ok(theme) =>
+                        {
                             let name = path
                                 .file_stem()
                                 .and_then(|s| s.to_str())
@@ -66,7 +88,8 @@ impl App {
                                 theme,
                             });
                         }
-                        Err(e) => {
+                        Err(e) =>
+                        {
                             self.add_message(&format!(
                                 "Theme picker: failed to load {} ({})",
                                 path.display(),
@@ -75,7 +98,8 @@ impl App {
                         }
                     }
                 }
-                Err(e) => {
+                Err(e) =>
+                {
                     self.add_message(&format!(
                         "Theme picker: error reading themes directory ({})",
                         e
@@ -84,7 +108,8 @@ impl App {
             }
         }
 
-        if entries.is_empty() {
+        if entries.is_empty()
+        {
             self.add_message(&format!(
                 "Theme picker: no .lua themes found in {}",
                 themes_dir.display()
@@ -112,34 +137,41 @@ impl App {
         self.force_full_redraw = true;
     }
 
-    pub(crate) fn open_add_entry_prompt(&mut self) {
+    pub(crate) fn open_add_entry_prompt(&mut self)
+    {
         crate::core::overlays::open_add_entry_prompt(self)
     }
 
-    pub(crate) fn open_rename_entry_prompt(&mut self) {
+    pub(crate) fn open_rename_entry_prompt(&mut self)
+    {
         crate::core::overlays::open_rename_entry_prompt(self)
     }
 
-    pub(crate) fn request_delete_selected(&mut self) {
+    pub(crate) fn request_delete_selected(&mut self)
+    {
         crate::core::overlays::request_delete_selected(self)
     }
 
     pub(crate) fn perform_delete_path(
         &mut self,
         path: &std::path::Path,
-    ) {
+    )
+    {
         crate::trace::log(format!(
             "[delete] perform path='{}'",
             path.display()
         ));
         let res = crate::core::fs_ops::remove_path_all(path);
-        match res {
-            Ok(_) => {
+        match res
+        {
+            Ok(_) =>
+            {
                 crate::trace::log("[delete] success");
                 self.add_message("Deleted");
                 self.selected.remove(path);
             }
-            Err(e) => {
+            Err(e) =>
+            {
                 crate::trace::log(format!("[delete] error: {}", e));
                 self.add_message(&format!("Delete error: {}", e));
             }

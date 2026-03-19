@@ -2,7 +2,8 @@
 // This module is a child of the crate root and can access crate-private items.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SortKey {
+pub enum SortKey
+{
     Name,
     Size,
     MTime,
@@ -10,7 +11,8 @@ pub enum SortKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum InternalAction {
+pub(crate) enum InternalAction
+{
     Quit,
     Sort(SortKey),
     ToggleSortReverse,
@@ -32,26 +34,34 @@ pub(crate) enum InternalAction {
     CloseOverlays,
 }
 
-pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
+pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction>
+{
     let low = s.trim().to_ascii_lowercase();
-    if low == "quit" || low == "q" {
+    if low == "quit" || low == "q"
+    {
         return Some(InternalAction::Quit);
     }
-    if low == "sort:reverse:toggle" || low == "sort:rev:toggle" {
+    if low == "sort:reverse:toggle" || low == "sort:rev:toggle"
+    {
         return Some(InternalAction::ToggleSortReverse);
     }
-    if low.starts_with("sort:") {
+    if low.starts_with("sort:")
+    {
         let parts: Vec<&str> = low.split(':').collect();
-        if parts.len() >= 2 {
+        if parts.len() >= 2
+        {
             return crate::enums::sort_key_from_str(parts[1])
                 .map(InternalAction::Sort);
         }
     }
     // Primary: show:* controls info display
-    if low.starts_with("show:") {
+    if low.starts_with("show:")
+    {
         let parts: Vec<&str> = low.split(':').collect();
-        if parts.len() >= 2 {
-            if parts[1] == "friendly" {
+        if parts.len() >= 2
+        {
+            if parts[1] == "friendly"
+            {
                 return Some(InternalAction::SetDisplayMode(
                     crate::app::DisplayMode::Friendly,
                 ));
@@ -60,53 +70,69 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
                 .map(InternalAction::SetInfo);
         }
     }
-    if low.starts_with("display:") {
+    if low.starts_with("display:")
+    {
         let parts: Vec<&str> = low.split(':').collect();
-        if parts.len() >= 2 {
+        if parts.len() >= 2
+        {
             return crate::enums::display_mode_from_str(parts[1])
                 .map(InternalAction::SetDisplayMode);
         }
     }
-    if low == "nav:top" || low == "top" || low == "gg" {
+    if low == "nav:top" || low == "top" || low == "gg"
+    {
         return Some(InternalAction::GoTop);
     }
-    if low == "nav:bottom" || low == "bottom" || low == "g$" {
+    if low == "nav:bottom" || low == "bottom" || low == "g$"
+    {
         return Some(InternalAction::GoBottom);
     }
-    if low == "nav:up" {
+    if low == "nav:up"
+    {
         return Some(InternalAction::NavUp);
     }
-    if low == "nav:down" {
+    if low == "nav:down"
+    {
         return Some(InternalAction::NavDown);
     }
-    if low == "nav:parent" || low == "nav:left" {
+    if low == "nav:parent" || low == "nav:left"
+    {
         return Some(InternalAction::NavParent);
     }
-    if low == "nav:enter" || low == "nav:right" {
+    if low == "nav:enter" || low == "nav:right"
+    {
         return Some(InternalAction::NavEnter);
     }
-    if low == "marks:add_wait" || low == "marks:add" {
+    if low == "marks:add_wait" || low == "marks:add"
+    {
         return Some(InternalAction::MarksAddWait);
     }
-    if low == "marks:goto_wait" || low == "marks:goto" {
+    if low == "marks:goto_wait" || low == "marks:goto"
+    {
         return Some(InternalAction::MarksGotoWait);
     }
-    if let Some(cmd) = low.strip_prefix("cmd:") {
+    if let Some(cmd) = low.strip_prefix("cmd:")
+    {
         return Some(InternalAction::RunCommand(cmd.to_string()));
     }
-    if low == "clipboard:copy" {
+    if low == "clipboard:copy"
+    {
         return Some(InternalAction::ClipboardCopy);
     }
-    if low == "clipboard:move" {
+    if low == "clipboard:move"
+    {
         return Some(InternalAction::ClipboardMove);
     }
-    if low == "clipboard:paste" {
+    if low == "clipboard:paste"
+    {
         return Some(InternalAction::ClipboardPaste);
     }
-    if low == "clipboard:clear" {
+    if low == "clipboard:clear"
+    {
         return Some(InternalAction::ClipboardClear);
     }
-    if low == "overlay:close" {
+    if low == "overlay:close"
+    {
         return Some(InternalAction::CloseOverlays);
     }
     None
@@ -115,57 +141,72 @@ pub(crate) fn parse_internal_action(s: &str) -> Option<InternalAction> {
 pub(crate) fn execute_internal_action(
     app: &mut crate::app::App,
     action: InternalAction,
-) {
-    match action {
-        InternalAction::Quit => {
+)
+{
+    match action
+    {
+        InternalAction::Quit =>
+        {
             app.should_quit = true;
         }
-        InternalAction::Sort(key) => {
+        InternalAction::Sort(key) =>
+        {
             // Reselect current item by name after resort
             let current_name = app.selected_entry().map(|e| e.name.clone());
             app.sort_key = key;
             app.refresh_lists();
-            if let Some(name) = current_name {
+            if let Some(name) = current_name
+            {
                 crate::core::selection::reselect_by_name(app, &name);
             }
             app.refresh_preview();
         }
-        InternalAction::ToggleSortReverse => {
+        InternalAction::ToggleSortReverse =>
+        {
             let current_name = app.selected_entry().map(|e| e.name.clone());
             app.sort_reverse = !app.sort_reverse;
             app.refresh_lists();
-            if let Some(name) = current_name {
+            if let Some(name) = current_name
+            {
                 crate::core::selection::reselect_by_name(app, &name);
             }
             app.refresh_preview();
         }
-        InternalAction::SetInfo(mode) => {
+        InternalAction::SetInfo(mode) =>
+        {
             app.info_mode = mode;
             app.force_full_redraw = true;
         }
-        InternalAction::SetDisplayMode(style) => {
+        InternalAction::SetDisplayMode(style) =>
+        {
             app.display_mode = style;
             // If no info is selected yet, default to Modified so date becomes
             // visible
-            if matches!(app.info_mode, crate::app::InfoMode::None) {
+            if matches!(app.info_mode, crate::app::InfoMode::None)
+            {
                 app.info_mode = crate::app::InfoMode::Modified;
             }
             app.force_full_redraw = true;
         }
-        InternalAction::GoTop => {
-            if !app.current_entries.is_empty() {
+        InternalAction::GoTop =>
+        {
+            if !app.current_entries.is_empty()
+            {
                 app.list_state.select(Some(0));
                 app.refresh_preview();
             }
         }
-        InternalAction::GoBottom => {
-            if !app.current_entries.is_empty() {
+        InternalAction::GoBottom =>
+        {
+            if !app.current_entries.is_empty()
+            {
                 let last = app.current_entries.len().saturating_sub(1);
                 app.list_state.select(Some(last));
                 app.refresh_preview();
             }
         }
-        InternalAction::NavUp => {
+        InternalAction::NavUp =>
+        {
             if let Some(sel) = app.list_state.selected()
                 && sel > 0
             {
@@ -173,33 +214,44 @@ pub(crate) fn execute_internal_action(
                 app.refresh_preview();
             }
         }
-        InternalAction::NavDown => {
-            if let Some(sel) = app.list_state.selected() {
-                if sel + 1 < app.current_entries.len() {
+        InternalAction::NavDown =>
+        {
+            if let Some(sel) = app.list_state.selected()
+            {
+                if sel + 1 < app.current_entries.len()
+                {
                     app.list_state.select(Some(sel + 1));
                     app.refresh_preview();
                 }
-            } else if !app.current_entries.is_empty() {
+            }
+            else if !app.current_entries.is_empty()
+            {
                 app.list_state.select(Some(0));
                 app.refresh_preview();
             }
         }
-        InternalAction::NavEnter => {
+        InternalAction::NavEnter =>
+        {
             if let Some(entry) = app.selected_entry()
                 && entry.is_dir
             {
                 app.cwd = entry.path.clone();
                 app.refresh_lists();
-                if app.current_entries.is_empty() {
+                if app.current_entries.is_empty()
+                {
                     app.list_state.select(None);
-                } else {
+                }
+                else
+                {
                     app.list_state.select(Some(0));
                 }
                 app.refresh_preview();
             }
         }
-        InternalAction::NavParent => {
-            if let Some(parent) = app.cwd.parent() {
+        InternalAction::NavParent =>
+        {
+            if let Some(parent) = app.cwd.parent()
+            {
                 let just_left = app
                     .cwd
                     .file_name()
@@ -215,30 +267,38 @@ pub(crate) fn execute_internal_action(
                 app.refresh_preview();
             }
         }
-        InternalAction::MarksAddWait => {
+        InternalAction::MarksAddWait =>
+        {
             // Prefer the newer prompt overlay when available.
             crate::core::overlays::open_mark_add_prompt(app);
         }
-        InternalAction::MarksGotoWait => {
+        InternalAction::MarksGotoWait =>
+        {
             app.pending_goto = true;
             app.add_message("Goto: type a letter to jump to its mark");
         }
-        InternalAction::RunCommand(cmd) => {
+        InternalAction::RunCommand(cmd) =>
+        {
             app.execute_command_line(&cmd);
         }
-        InternalAction::ClipboardCopy => {
+        InternalAction::ClipboardCopy =>
+        {
             app.copy_selection();
         }
-        InternalAction::ClipboardMove => {
+        InternalAction::ClipboardMove =>
+        {
             app.move_selection();
         }
-        InternalAction::ClipboardPaste => {
+        InternalAction::ClipboardPaste =>
+        {
             app.paste_clipboard();
         }
-        InternalAction::ClipboardClear => {
+        InternalAction::ClipboardClear =>
+        {
             app.clear_all_selected();
         }
-        InternalAction::CloseOverlays => {
+        InternalAction::CloseOverlays =>
+        {
             app.overlay = crate::app::Overlay::None;
             app.force_full_redraw = true;
         }
@@ -251,70 +311,95 @@ pub(crate) fn execute_internal_action(
 pub(crate) fn internal_effects(
     app: &crate::app::App,
     action: &InternalAction,
-) -> Option<super::effects::ActionEffects> {
+) -> Option<super::effects::ActionEffects>
+{
     use super::effects::ActionEffects;
-    match action {
-        InternalAction::Quit => {
+    match action
+    {
+        InternalAction::Quit =>
+        {
             let fx = ActionEffects { quit: true, ..Default::default() };
             Some(fx)
         }
-        InternalAction::NavUp => {
+        InternalAction::NavUp =>
+        {
             if let Some(sel) = app.list_state.selected()
                 && sel > 0
             {
-                let fx =
-                    ActionEffects { selection: Some(sel - 1), ..Default::default() };
+                let fx = ActionEffects {
+                    selection: Some(sel - 1),
+                    ..Default::default()
+                };
                 Some(fx)
-            } else {
+            }
+            else
+            {
                 Some(ActionEffects::default())
             }
         }
-        InternalAction::NavDown => {
+        InternalAction::NavDown =>
+        {
             let len = app.current_entries.len();
-            if len == 0 {
+            if len == 0
+            {
                 return Some(ActionEffects::default());
             }
-            let next = match app.list_state.selected() {
+            let next = match app.list_state.selected()
+            {
                 Some(sel) if sel + 1 < len => Some(sel + 1),
                 None => Some(0),
                 _ => None,
             };
-            if let Some(i) = next {
-                let fx = ActionEffects { selection: Some(i), ..Default::default() };
+            if let Some(i) = next
+            {
+                let fx =
+                    ActionEffects { selection: Some(i), ..Default::default() };
                 Some(fx)
-            } else {
+            }
+            else
+            {
                 Some(ActionEffects::default())
             }
         }
-        InternalAction::GoTop => {
-            if !app.current_entries.is_empty() {
+        InternalAction::GoTop =>
+        {
+            if !app.current_entries.is_empty()
+            {
                 let fx =
                     ActionEffects { selection: Some(0), ..Default::default() };
                 Some(fx)
-            } else {
+            }
+            else
+            {
                 Some(ActionEffects::default())
             }
         }
-        InternalAction::GoBottom => {
-            if !app.current_entries.is_empty() {
+        InternalAction::GoBottom =>
+        {
+            if !app.current_entries.is_empty()
+            {
                 let last = app.current_entries.len().saturating_sub(1);
                 let fx = ActionEffects {
                     selection: Some(last),
                     ..Default::default()
                 };
                 Some(fx)
-            } else {
+            }
+            else
+            {
                 Some(ActionEffects::default())
             }
         }
-        InternalAction::MarksAddWait => {
+        InternalAction::MarksAddWait =>
+        {
             let fx = ActionEffects {
                 marks: super::effects::MarksCommand::AddWait,
                 ..Default::default()
             };
             Some(fx)
         }
-        InternalAction::MarksGotoWait => {
+        InternalAction::MarksGotoWait =>
+        {
             let fx = ActionEffects {
                 marks: super::effects::MarksCommand::GotoWait,
                 ..Default::default()

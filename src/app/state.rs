@@ -84,12 +84,12 @@ pub struct LuaRuntime
 #[derive(Debug, Clone)]
 pub enum PromptKind
 {
-  AddEntry,
-  MarkAdd,
-  RenameEntry
-  {
-    from: std::path::PathBuf,
-  },
+    AddEntry,
+    MarkAdd,
+    RenameEntry
+    {
+        from: std::path::PathBuf,
+    },
     RenameMany
     {
         items: Vec<std::path::PathBuf>,

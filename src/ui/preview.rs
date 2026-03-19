@@ -41,15 +41,20 @@ pub fn draw_preview_panel(
     {
         if !sel.is_dir
         {
-            let key = (sel.path.clone(), preview_area.width, preview_area.height);
+            let key =
+                (sel.path.clone(), preview_area.width, preview_area.height);
             if app.preview.cache_key.as_ref() == Some(&key)
             {
                 dynamic_lines = app.preview.cache_lines.clone();
             }
             else
             {
-                dynamic_lines =
-                    run_previewer(app, &sel.path, preview_area, PREVIEW_LINES_LIMIT);
+                dynamic_lines = run_previewer(
+                    app,
+                    &sel.path,
+                    preview_area,
+                    PREVIEW_LINES_LIMIT,
+                );
                 app.preview.cache_key = Some(key);
                 app.preview.cache_lines = dynamic_lines.clone();
             }

@@ -1291,9 +1291,8 @@ mod runtime_rs_tests
     fn process_event_resize_returns_false()
     {
         let mut app = lsv::app::App::new().expect("app new");
-        let cont =
-            lsv::runtime::process_event(&mut app, Event::Resize(80, 24))
-                .unwrap();
+        let cont = lsv::runtime::process_event(&mut app, Event::Resize(80, 24))
+            .unwrap();
         assert!(!cont);
     }
 }

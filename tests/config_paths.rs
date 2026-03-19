@@ -1,25 +1,28 @@
 use std::env;
 
-// Environment variables are process-global and `std::env::{set_var, remove_var}`
-// are `unsafe` due to potential races across threads. Rust tests run in
-// parallel by default, so guard env mutations with a global mutex.
+// Environment variables are process-global and `std::env::{set_var,
+// remove_var}` are `unsafe` due to potential races across threads. Rust tests
+// run in parallel by default, so guard env mutations with a global mutex.
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn with_env<T>(
     k: &str,
     v: Option<&str>,
     f: impl FnOnce() -> T,
-) -> T {
+) -> T
+{
     let old = env::var(k).ok();
     unsafe {
-        match v {
+        match v
+        {
             Some(val) => env::set_var(k, val),
             None => env::remove_var(k),
         }
     }
     let out = f();
     unsafe {
-        match old {
+        match old
+        {
             Some(s) => env::set_var(k, s),
             None => env::remove_var(k),
         }
@@ -28,7 +31,8 @@ fn with_env<T>(
 }
 
 #[test]
-fn discover_config_paths_honors_lsv_config_dir() {
+fn discover_config_paths_honors_lsv_config_dir()
+{
     let _g = ENV_LOCK.lock().unwrap();
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("conf");
@@ -43,7 +47,8 @@ fn discover_config_paths_honors_lsv_config_dir() {
 
 #[test]
 #[cfg(not(windows))]
-fn discover_config_paths_uses_xdg_when_set() {
+fn discover_config_paths_uses_xdg_when_set()
+{
     let _g = ENV_LOCK.lock().unwrap();
     let tmp = tempfile::tempdir().unwrap();
     let xdg = tmp.path().join("xdg");

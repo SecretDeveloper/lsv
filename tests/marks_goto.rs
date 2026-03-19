@@ -1,7 +1,12 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{
+    KeyCode,
+    KeyEvent,
+    KeyModifiers,
+};
 
 #[test]
-fn goto_mark_moves_cwd_to_saved_directory() {
+fn goto_mark_moves_cwd_to_saved_directory()
+{
     let tmp1 = tempfile::tempdir().expect("tmp1");
     let tmp2 = tempfile::tempdir().expect("tmp2");
     let dir1 = tmp1.path().to_path_buf();
